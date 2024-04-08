@@ -1,0 +1,18 @@
+[package]
+name = "tfledge"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+env_logger = "0.11.3"
+libc = "0.2.154"
+log = "0.4.21"
+rgb = "0.8.37"
+
+[features]
+__bindgen = []
+
+[build-dependencies]
+bindgen = "0.69.4"
+
