@@ -14,7 +14,7 @@ pub enum Error {
     FailedToLoadModel,
 }
 impl Error {
-    fn from(ffi: TfLiteStatus) -> Result<(), Self> {
+    pub(crate) fn from(ffi: TfLiteStatus) -> Result<(), Self> {
         match ffi {
             TfLiteStatus::kTfLiteOk => Ok(()),
             TfLiteStatus::kTfLiteCancelled => Err(Self::Cancelled),

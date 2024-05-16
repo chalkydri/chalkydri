@@ -9,33 +9,62 @@ extern crate libcamera;
 #[cfg(feature = "mjpeg")]
 extern crate mozjpeg;
 extern crate ril;
-extern crate wgpu;
+//extern crate minint;
+#[macro_use]
+extern crate actix_web;
+extern crate utoipa as utopia;
+#[macro_use]
+extern crate serde;
 
 #[cfg(feature = "libcamera")]
 mod cameras;
-mod subsys;
+//mod subsys;
 mod config;
+mod api;
 
-//use libcamera::camera_manager::CameraManager;
-use std::error::Error;
-use if_addrs::get_if_addrs;
+use std::{error::Error, net::SocketAddr, time::Duration};
+use actix_web::{web, App, HttpServer, Responder};
+use minint::NtConn;
 use tokio::runtime::Runtime;
-use wgpu::{Backends, DeviceDescriptor, PowerPreference, RequestAdapterOptions, InstanceDescriptor};
+use utopia::OpenApi;
+//use minint::{client::{AsyncClientHandle, config::ClientConfig}, spec::topic::PublishProperties};
 
 pub trait Subsystem<'subsys> {
     fn init() -> Result<Box<Self>, Box<dyn Error>>;
     fn run(&self, rt: Runtime);
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     info!("Chalkydri starting up...");
 
+    //let ntcfg = ClientConfig::default();
+    /*
+    let nt = AsyncClientHandle::start("10.45.33.2".parse().unwrap(), ntcfg, String::from("chalkydri")).await.unwrap();
+    nt.publish_topic("/chalkydri/G3A19", , None);
+    nt.subscribe(&["/chalkydri"]).await.unwrap();
     get_if_addrs();
+    */
 
     let rt = Runtime::new().unwrap();
 
+    rt.block_on(async {
+        let mut nt = NtConn::new([127, 0, 0, 1], "jdiaudicadsicljd").await.unwrap();
+        nt.publish::<i32>("/Chalkydri/Devices/1/CameraCount").unwrap().set(9).unwrap();
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        nt.stop();
+        
+        HttpServer::new(|| {
+            App::new().service(api::info).service(api::configurations)
+        })
+        .bind(("0.0.0.0", 6942)).unwrap()
+        .run()
+        .await
+        .unwrap();
+    });
+
+    /*
     rt.block_on(async {
         let ins = wgpu::Instance::new(InstanceDescriptor::default());
         let adapter = ins
@@ -72,4 +101,7 @@ fn main() {
 
         info!("Chalkydri ready");
     });
+    */
+
+    Ok(())
 }

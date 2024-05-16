@@ -1,0 +1,20 @@
+[package]
+name = "minint"
+version = "0.1.5"
+edition = "2021"
+description = "A simple FRC NetworkTables v4 client library for Rust"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "net", "time", "macros"] }
+serde_json = "1"
+tokio-tungstenite = "0.21.0"
+serde = { version = "1", features = ["derive"] }
+log = "0.4.21"
+fastrand = "2.1.0"
+futures-util = { version = "0.3.30", features = ["tokio-io", "sink"] }
+rmp = "0.8.14"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true

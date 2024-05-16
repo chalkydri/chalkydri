@@ -3,9 +3,9 @@ use std::collections::HashMap;
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     pub version: String,
-    pub camera: HashMap<CameraConfig>,
+    pub camera: HashMap<String, CameraConfig>,
     pub tpu: Option<TpuConfig>,
-    pub backends: HashMap<Backend, BackendConfig>,
+    //pub backends: HashMap<Backend, BackendConfig>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -29,5 +29,5 @@ pub enum CameraKind {
 
 #[derive(Deserialize, Serialize)]
 pub struct TpuConfig {
-    pub kind: tfledge::CoralDeviceKind,
+    //pub kind: tfledge::CoralDeviceKind,
 }
