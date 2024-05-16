@@ -6,6 +6,15 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+  statuses: read
+  deployments: write
+  packages: write
+
 jobs:
   deploy:
     runs-on: ubuntu-20.04
@@ -22,9 +31,10 @@ jobs:
 
       - run: mdbook build ./book
 
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
-        if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Upload to pages
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./book/book
+          path: ./book/book
+
+      - name: Deploy to pages
+        uses: actions/deploy-pages@v4
