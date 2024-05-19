@@ -1,0 +1,15 @@
+[submodule "deps/libusb"]
+	path = deps/libusb
+	url = https://github.com/libusb/libusb.git
+	branch = v1.0.27
+	shallow = true
+[submodule "deps/libedgetpu"]
+	path = deps/libedgetpu
+	url = https://github.com/cocoa-xu/libedgetpu.git
+	branch = v0.1.9
+	shallow = true
+[submodule "deps/tensorflow"]
+	path = deps/tensorflow
+	url = https://github.com/tensorflow/tensorflow.git
+	branch = v2.16.1
+	shallow = true
