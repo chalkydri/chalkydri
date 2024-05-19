@@ -1,0 +1,40 @@
+name: Deploy docs
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+  statuses: read
+  deployments: write
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-20.04
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: '0.4.10'
+          # mdbook-version: 'latest'
+
+      - run: mdbook build ./book
+
+      - name: Upload to pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./book/book
+
+      - name: Deploy to pages
+        uses: actions/deploy-pages@v4
