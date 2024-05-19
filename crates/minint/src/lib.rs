@@ -1,32 +1,37 @@
-use std::collections::BTreeMap;
-use std::marker::PhantomData;
-use std::net::IpAddr;
-
-use datatype::{Data, DataType, DataWrap};
-use futures_util::{SinkExt, StreamExt};
-use rmp::decode::Bytes;
-use std::error::Error;
-use tokio::sync::mpsc;
-
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate serde;
 extern crate rmp;
+extern crate serde;
+extern crate serde_json;
 extern crate tokio;
 extern crate tokio_tungstenite;
 
 mod datatype;
 mod messages;
+
+use std::collections::BTreeMap;
+use std::error::Error;
+use std::marker::PhantomData;
+use std::net::IpAddr;
+
+use datatype::{Data, DataType, DataWrap};
 use messages::*;
-use tokio::task::AbortHandle;
-use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::http::{header, HeaderValue};
-use tokio_tungstenite::tungstenite::Message;
+
+use futures_util::{SinkExt, StreamExt};
+use rmp::decode::Bytes;
+use tokio::{
+    sync::{mpsc, Mutex},
+    task::AbortHandle,
+};
+use tokio_tungstenite::tungstenite::{
+    client::IntoClientRequest,
+    http::{header, HeaderValue},
+    Message,
+};
 
 /// A NetworkTables connection
 pub struct NtConn<'nt> {
-    next_id: i32,
+    next_id: Mutex<i32>,
     incoming_abort: AbortHandle,
     outgoing_abort: AbortHandle,
     c2s: mpsc::UnboundedSender<Message>,
@@ -55,7 +60,7 @@ impl<'nt> NtConn<'nt> {
         let (c2s_tx, mut c2s_rx) = mpsc::unbounded_channel::<Message>();
 
         // Connect to the server and split into read and write
-        let (mut sock, _) = tokio_tungstenite::connect_async(req).await.unwrap();
+        let (mut sock, _) = tokio_tungstenite::connect_async(req).await?;
         let (mut sock_wr, mut sock_rd) = sock.split();
 
         // Spawn event loop to read and process incoming messages
@@ -64,8 +69,16 @@ impl<'nt> NtConn<'nt> {
                 while let Some(buf) = sock_rd.next().await {
                     println!("recv");
                     match buf {
-                        Ok(Message::Text(json)) => println!("json: {json:?}"),
-                        Ok(Message::Binary(bin)) => println!("mpk: {bin:?}"),
+                        Ok(Message::Text(json)) => {
+                            let messages: Vec<ServerMsg> = serde_json::from_str(&json).unwrap();
+
+                            for msg in messages {
+                                println!("{msg:?}");
+                            }
+                        }
+                        Ok(Message::Binary(bin)) => {
+                            println!("{bin:?}");
+                        },
                         Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
                         Err(err) => error!("error reading incoming message: {err:?}"),
                     }
@@ -88,7 +101,7 @@ impl<'nt> NtConn<'nt> {
         .abort_handle();
 
         Ok(Self {
-            next_id: 0,
+            next_id: Mutex::const_new(0),
             c2s: c2s_tx,
             incoming_abort,
             outgoing_abort,
@@ -99,12 +112,12 @@ impl<'nt> NtConn<'nt> {
     /// Publish a topic
     ///
     /// The topic will be unpublished when the [NtTopic] is dropped.
-    pub fn publish<T: DataType>(
-        &mut self,
+    pub async fn publish<T: DataType>(
+        &self,
         name: impl Into<String>,
     ) -> Result<NtTopic<T>, Box<dyn Error>> {
-        let pubuid = self.next_id;
-        self.next_id += 1;
+        let pubuid = (*self.next_id.lock().await).clone();
+        *self.next_id.lock().await += 1;
 
         let buf = serde_json::to_string(&[ClientMsg::Publish {
             pubuid,
@@ -191,6 +204,8 @@ impl<'nt> NtConn<'nt> {
     }
 
     /// Shutdown the connection
+    ///
+    /// All [`topics`](NtTopic) must be dropped first.
     pub fn stop(self) {
         self.incoming_abort.abort();
         self.outgoing_abort.abort();
@@ -198,6 +213,8 @@ impl<'nt> NtConn<'nt> {
 }
 
 /// A NetworkTables topic
+///
+/// Automatically unpublished when dropped.
 pub struct NtTopic<'nt, T: DataType> {
     conn: &'nt NtConn<'nt>,
     uid: i32,
@@ -215,5 +232,3 @@ impl<T: DataType> Drop for NtTopic<'_, T> {
         self.conn.unpublish(self.uid).unwrap();
     }
 }
-
-

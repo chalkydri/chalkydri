@@ -1,6 +1,6 @@
 #!/bin/sh
 
-pushd deps
+pushd third_party
 
 __libusb() {
 	pushd libusb
@@ -32,4 +32,4 @@ __tflite() {
 }
 __tflite
 
-popd #deps
+popd #third_party

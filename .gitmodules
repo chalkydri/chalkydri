@@ -1,15 +1,15 @@
 [submodule "deps/libusb"]
-	path = deps/libusb
+	path = third_party/libusb
 	url = https://github.com/libusb/libusb.git
 	branch = v1.0.27
 	shallow = true
 [submodule "deps/libedgetpu"]
-	path = deps/libedgetpu
+	path = third_party/libedgetpu
 	url = https://github.com/cocoa-xu/libedgetpu.git
 	branch = v0.1.9
 	shallow = true
 [submodule "deps/tensorflow"]
-	path = deps/tensorflow
+	path = third_party/tensorflow
 	url = https://github.com/tensorflow/tensorflow.git
 	branch = v2.16.1
 	shallow = true

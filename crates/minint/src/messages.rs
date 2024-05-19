@@ -78,7 +78,7 @@ pub enum ClientMsg {
     },
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "lowercase", tag = "method", content = "params")]
 pub enum ServerMsg {
     /// Topic Announcement Message
@@ -104,7 +104,7 @@ pub enum ServerMsg {
         /// Properties
         ///
         /// Topic Properties
-        properties: BTreeMap<String, String>,
+        properties: BTreeMap<String, bool>,
     },
 
     /// Topic Removed Message
