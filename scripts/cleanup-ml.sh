@@ -1,6 +1,10 @@
-#!/bin/sh
+#!/bin/bash
 
 pushd third_party
+
+if ! command -v bazel; then
+	echo "Please install bazel first: https://github.com/bazelbuild/bazelisk/releases/latest"
+fi
 
 __libusb() {
 	pushd libusb

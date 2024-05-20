@@ -1,7 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 
 # Update and/or initialize submodules
 git submodule update --init
+
+if ! command -v bazel; then
+	echo "Please install bazel first: https://github.com/bazelbuild/bazelisk/releases/latest"
+fi
 
 pushd third_party
 
