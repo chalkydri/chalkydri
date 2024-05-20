@@ -1,8 +1,9 @@
 [package]
 name = "minint"
-version = "0.1.5"
-edition = "2021"
 description = "A simple FRC NetworkTables v4 client library for Rust"
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "net", "time", "macros"] }

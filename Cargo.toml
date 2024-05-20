@@ -1,8 +1,9 @@
 [package]
 name = "chalkydri"
+description = "A blazingly fast FRC vision system"
+license = "GPL-3.0"
 version = "0.1.0"
 edition = "2021"
-#build = "build/main.rs"
 
 [features]
 default = []
