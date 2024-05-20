@@ -3,6 +3,7 @@ use image::EncodableLayout;
 fn main() {
     //chalkydri_apriltags::simd::sobel_shi_tomasi(1, 1, 74, 89);
     let mut img = image::open("test.png").unwrap();
+    img = img.blur(2.0);
     let mut img = img.to_rgb8();
     let mut img = img.to_vec();
     let img = img.as_mut_slice();

@@ -1,8 +1,8 @@
 use std::{fs::File, io::Read, time::Instant};
 
-use tfledge::{list_devices, Interpreter, Model};
+use tfledge::{list_devices, Error, Interpreter, Model};
 
-fn main() {
+fn main() -> Result<(), Error> {
     env_logger::init();
     let m = Model::from_file("Note_Detector.tflite")?;
 
@@ -32,7 +32,7 @@ fn main() {
 
     for _ in 0..100_000 {
         let st = Instant::now();
-        int.invoke();
+        int.invoke()?;
 
         let boxes = int.output_tensor::<f32>(1).read::<4>();
         let classes = int.output_tensor::<f32>(3).read::<1>();
@@ -69,4 +69,6 @@ fn main() {
         */
         println!("{:?}", st.elapsed());
     }
+
+    Ok(())
 }

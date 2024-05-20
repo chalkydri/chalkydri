@@ -33,6 +33,11 @@ __libedgetpu() {
 	# Build it
 	make libedgetpu
 
+	pushd out
+	mv direct/*/libedgetpu.so.1.0 direct/libedgetpu.so
+	mv throttled/*/libedgetpu.so.1.0 throttled/libedgetpu.so
+	popd #out
+
 	popd #libedgetpu
 }
 __libedgetpu

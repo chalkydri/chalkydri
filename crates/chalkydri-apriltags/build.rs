@@ -1,5 +1,5 @@
-extern crate quote;
+//extern crate quote;
 
 fn main() {
-    quote! {}
+    //quote! {}
 }

@@ -11,7 +11,10 @@ log = "0.4.21"
 rgb = "0.8.37"
 
 [features]
+default = ["throttled"]
 __bindgen = []
+direct = []
+throttled = []
 
 [build-dependencies]
 bindgen = "0.69.4"
