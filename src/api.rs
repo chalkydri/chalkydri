@@ -1,8 +1,22 @@
 use std::collections::BTreeMap;
 
+use utopia::OpenApi;
 use actix_web::{Responder, web};
 
 use crate::config::CameraResolution;
+
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "Chalkydri",
+    ),
+    paths(
+        info,
+        configurations,
+        configure,
+    ),
+)]
+struct ApiDoc;
 
 #[derive(Serialize)]
 pub struct Info {

@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate log;
-#[macro_use]
 extern crate tokio;
 extern crate env_logger;
 extern crate fast_image_resize;
@@ -21,12 +20,14 @@ mod cameras;
 //mod subsys;
 mod config;
 mod api;
+mod utils;
 
-use std::{error::Error, net::SocketAddr, time::Duration};
-use actix_web::{web, App, HttpServer, Responder};
+use std::{error::Error, time::Duration};
+use actix_web::{App, HttpServer};
 use minint::NtConn;
 use tokio::runtime::Runtime;
-use utopia::OpenApi;
+
+use crate::utils::gen_team_ip;
 //use minint::{client::{AsyncClientHandle, config::ClientConfig}, spec::topic::PublishProperties};
 
 pub trait Subsystem<'subsys> {
@@ -39,20 +40,43 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Chalkydri starting up...");
 
-    //let ntcfg = ClientConfig::default();
-    /*
-    let nt = AsyncClientHandle::start("10.45.33.2".parse().unwrap(), ntcfg, String::from("chalkydri")).await.unwrap();
-    nt.publish_topic("/chalkydri/G3A19", , None);
-    nt.subscribe(&["/chalkydri"]).await.unwrap();
-    get_if_addrs();
-    */
+    let roborio_ip = gen_team_ip(4533).unwrap();
+
+    let dev_id = fastrand::u32(..);
 
     let rt = Runtime::new().unwrap();
 
     rt.block_on(async {
-        let mut nt = NtConn::new([127, 0, 0, 1], "jdiaudicadsicljd").await.unwrap();
-        nt.publish::<i32>("/Chalkydri/Devices/1/CameraCount").unwrap().set(9).unwrap();
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        let nt: NtConn;
+
+        // Attempt to connect to the NT server, retrying until successful
+
+        let mut retry = false;
+
+        loop {
+            match NtConn::new(roborio_ip, format!("chalkydri{dev_id}")).await {
+                Ok(conn) => {
+                    nt = conn;
+                    break;
+                },
+                Err(err) => {
+                    if !retry {
+                        error!("Error connecting to NT server: {err:?}");
+                        retry = true;
+                    }
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                },
+            }
+        }
+
+        {
+            let mut camera_count = nt.publish::<i32>(format!("/Chalkydri/Devices/{dev_id}/CameraCount")).await.unwrap();
+            //let mut camera_count2 = nt.publish::<i32>(format!("/Chalkydri/Devices/{dev_id}/CameraCount2")).await.unwrap();
+            //drop(camera_count2);
+
+            camera_count.set(9).await.unwrap();
+        }
+
         nt.stop();
         
         HttpServer::new(|| {

@@ -6,7 +6,6 @@ compile_error!("Can't select 'direct' and 'throttled' features");
 #[cfg(not(any(feature = "direct", feature = "throttled")))]
 compile_error!("Must select 'direct' or 'throttled' feature");
 
-
 fn main() {
     #[cfg(feature = "__bindgen")]
     {
@@ -27,13 +26,22 @@ fn main() {
     }
 
     #[cfg(feature = "direct")]
-    println!("cargo:rustc-link-search={}/../../third_party/libedgetpu/out/direct", env!("CARGO_MANIFEST_DIR"));
+    println!(
+        "cargo:rustc-link-search={}/../../third_party/libedgetpu/out/direct",
+        env!("CARGO_MANIFEST_DIR")
+    );
 
     #[cfg(feature = "throttled")]
-    println!("cargo:rustc-link-search={}/../../third_party/libedgetpu/out/throttled", env!("CARGO_MANIFEST_DIR"));
+    println!(
+        "cargo:rustc-link-search={}/../../third_party/libedgetpu/out/throttled",
+        env!("CARGO_MANIFEST_DIR")
+    );
 
     println!("cargo:rustc-link-lib=edgetpu");
 
-    println!("cargo:rustc-link-search={}/../../third_party/tensorflow/build", env!("CARGO_MANIFEST_DIR"));
+    println!(
+        "cargo:rustc-link-search={}/../../third_party/tensorflow/build",
+        env!("CARGO_MANIFEST_DIR")
+    );
     println!("cargo:rustc-link-lib=tensorflowlite_c");
 }

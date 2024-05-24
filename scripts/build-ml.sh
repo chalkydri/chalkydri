@@ -5,6 +5,35 @@ git submodule update --init
 
 if ! command -v bazel; then
 	echo "Please install bazel first: https://github.com/bazelbuild/bazelisk/releases/latest"
+
+	case "$(uname -m)" in
+		x86_64)
+			bazelisk_arch='amd64'
+			;;
+		arm64)
+			bazelisk_arch='arm64'
+			;;
+	esac
+
+	wget -O bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-${bazelisk_arch}
+
+	if test "$(whoami)" = root; then
+		chmod +x ./bazel
+		mv ./bazel /usr/local/bin
+	else 
+		if command -v sudo >/dev/null; then
+			sudo chmod +x ./bazel
+			sudo mv ./bazel /usr/local/bin
+		else
+			if command -v doas >/dev/null; then
+				doas chmod +x ./bazel
+				doas mv ./bazel /usr/local/bin
+			else
+				echo 'Failed to elevate privileges'
+				exit 1
+			fi
+		fi
+	fi
 fi
 
 pushd third_party

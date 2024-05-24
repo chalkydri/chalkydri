@@ -4,6 +4,7 @@ pushd third_party
 
 if ! command -v bazel; then
 	echo "Please install bazel first: https://github.com/bazelbuild/bazelisk/releases/latest"
+	return 1
 fi
 
 __libusb() {

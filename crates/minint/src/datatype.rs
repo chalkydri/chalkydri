@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use rmp::{decode::RmpRead, encode::RmpWrite};
 
 pub enum Data {
@@ -34,14 +36,14 @@ impl Data {
     }
 }
 
-pub trait DataWrap: Sized {
+pub trait DataWrap: Sized + Debug {
     const MSGPCK: u8;
     const STRING: &'static str;
 
     fn decode<R: RmpRead>(rd: &mut R) -> Result<Self, ()>;
     fn encode<W: RmpWrite>(wr: &mut W, val: Self) -> Result<(), ()>;
 }
-impl<T: DataType> DataWrap for T {
+impl<T: DataType + Debug> DataWrap for T {
     const MSGPCK: u8 = Self::DATATYPE_MSGPCK;
     const STRING: &'static str = Self::DATATYPE_STRING;
 
@@ -52,7 +54,7 @@ impl<T: DataType> DataWrap for T {
         Self::encode(wr, val)
     }
 }
-impl<T: DataType> DataWrap for Vec<T> {
+impl<T: DataType + Debug> DataWrap for Vec<T> {
     const MSGPCK: u8 = T::ARRAYDATATYPE_MSGPCK;
     const STRING: &'static str = T::ARRAYDATATYPE_STRING;
 

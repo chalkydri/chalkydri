@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde::{ser::SerializeMap, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
 #[serde(rename_all = "lowercase", tag = "method", content = "params")]

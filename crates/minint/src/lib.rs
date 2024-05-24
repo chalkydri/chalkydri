@@ -9,10 +9,12 @@ extern crate tokio_tungstenite;
 mod datatype;
 mod messages;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::marker::PhantomData;
 use std::net::IpAddr;
+use std::sync::Arc;
+use std::time::Duration;
 
 use datatype::{Data, DataType, DataWrap};
 use messages::*;
@@ -32,9 +34,16 @@ use tokio_tungstenite::tungstenite::{
 /// A NetworkTables connection
 pub struct NtConn<'nt> {
     next_id: Mutex<i32>,
+
     incoming_abort: AbortHandle,
     outgoing_abort: AbortHandle,
+
     c2s: mpsc::UnboundedSender<Message>,
+
+    topics: Arc<Mutex<HashMap<i32, String>>>,
+    topic_pubuids: Arc<Mutex<HashMap<i32, i32>>>,
+    pubuid_topics: Arc<Mutex<HashMap<i32, i32>>>,
+
     _marker: PhantomData<&'nt ()>,
 }
 impl<'nt> NtConn<'nt> {
@@ -43,6 +52,10 @@ impl<'nt> NtConn<'nt> {
         server: impl Into<IpAddr>,
         client_ident: impl Into<String>,
     ) -> Result<Self, Box<dyn Error>> {
+        let topics = Arc::new(Mutex::new(HashMap::new()));
+        let topic_pubuids = Arc::new(Mutex::new(HashMap::new()));
+        let pubuid_topics = Arc::new(Mutex::new(HashMap::new()));
+
         // Get server and client_ident into something we can work with
         let server = server.into();
         let client_ident = client_ident.into();
@@ -60,40 +73,81 @@ impl<'nt> NtConn<'nt> {
         let (c2s_tx, mut c2s_rx) = mpsc::unbounded_channel::<Message>();
 
         // Connect to the server and split into read and write
-        let (mut sock, _) = tokio_tungstenite::connect_async(req).await?;
+        let (sock, _) = tokio_tungstenite::connect_async(req).await?;
         let (mut sock_wr, mut sock_rd) = sock.split();
 
         // Spawn event loop to read and process incoming messages
-        let incoming_abort = tokio::spawn(async move {
-            loop {
-                while let Some(buf) = sock_rd.next().await {
-                    println!("recv");
-                    match buf {
-                        Ok(Message::Text(json)) => {
-                            let messages: Vec<ServerMsg> = serde_json::from_str(&json).unwrap();
 
-                            for msg in messages {
-                                println!("{msg:?}");
+        let incoming_abort = {
+            let topics = topics.clone();
+            let topic_pubuids = topic_pubuids.clone();
+            let pubuid_topics = pubuid_topics.clone();
+
+            tokio::spawn(async move {
+                loop {
+                    while let Some(buf) = sock_rd.next().await {
+                        match buf {
+                            Ok(Message::Text(json)) => {
+                                let messages: Vec<ServerMsg> = serde_json::from_str(&json).unwrap();
+
+                                for msg in messages {
+                                    match msg {
+                                        ServerMsg::Announce { name, id, r#type, pubuid, .. } => {
+                                            (*topics.lock().await).insert(id, name.clone());
+
+                                            if let Some(pubuid) = pubuid {
+                                                let mut pubuid_topics = pubuid_topics.lock().await;
+                                                let mut topic_pubuids = topic_pubuids.lock().await;
+
+                                                (*pubuid_topics).insert(pubuid, id);
+                                                (*topic_pubuids).insert(id, pubuid);
+
+                                                drop(pubuid_topics);
+                                                drop(topic_pubuids);
+
+                                                debug!("{name} ({type}): published successfully with topic id {id}");
+                                            } else {
+                                                debug!("{name} ({type}): announced with topic id {id}");
+                                            }
+                                        }
+                                        ServerMsg::Unannounce { name, id } => {
+                                            let mut topics = topics.lock().await;
+                                            let topic_pubuids = topic_pubuids.lock().await;
+                                            let mut pubuid_topics = pubuid_topics.lock().await;
+
+                                            (*topics).remove(&id);
+                                            if let Some(pubuid) = (*topic_pubuids).get(&id) {
+                                                (*pubuid_topics).remove(pubuid);
+                                            }
+
+                                            drop(pubuid_topics);
+                                            drop(topic_pubuids);
+                                            drop(topics);
+
+                                            debug!("{name}: unannounced");
+                                        }
+                                        _ => unimplemented!()
+                                    }
+                                }
                             }
+                            Ok(Message::Binary(bin)) => {
+                                println!("{bin:?}");
+                            },
+                            Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
+                            Err(err) => error!("error reading incoming message: {err:?}"),
                         }
-                        Ok(Message::Binary(bin)) => {
-                            println!("{bin:?}");
-                        },
-                        Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
-                        Err(err) => error!("error reading incoming message: {err:?}"),
                     }
+                    tokio::task::yield_now().await;
                 }
-                tokio::task::yield_now().await;
-            }
-        })
-        .abort_handle();
+            })
+            .abort_handle()
+        };
 
         // Spawn event loop to send outgoing messages
         let outgoing_abort = tokio::spawn(async move {
             loop {
                 while let Some(outgoing) = c2s_rx.recv().await {
                     sock_wr.send(outgoing).await.unwrap();
-                    println!("sent");
                 }
                 tokio::task::yield_now().await;
             }
@@ -103,10 +157,24 @@ impl<'nt> NtConn<'nt> {
         Ok(Self {
             next_id: Mutex::const_new(0),
             c2s: c2s_tx,
+
+            topics,
+            topic_pubuids,
+            pubuid_topics,
+
             incoming_abort,
             outgoing_abort,
+
             _marker: PhantomData,
         })
+    }
+
+    async fn next_id(&self) -> i32 {
+        let next = &mut *self.next_id.lock().await;
+        let curr = (*next).clone();
+        *next += 1;
+
+        curr
     }
 
     /// Publish a topic
@@ -116,12 +184,12 @@ impl<'nt> NtConn<'nt> {
         &self,
         name: impl Into<String>,
     ) -> Result<NtTopic<T>, Box<dyn Error>> {
-        let pubuid = (*self.next_id.lock().await).clone();
-        *self.next_id.lock().await += 1;
+        let pubuid = self.next_id().await;
+        let name = name.into();
 
         let buf = serde_json::to_string(&[ClientMsg::Publish {
             pubuid,
-            name: name.into(),
+            name: name.clone(),
             r#type: T::DATATYPE_STRING.to_string(),
             properties: Some(PublishProps {
                 persistent: Some(true),
@@ -131,9 +199,18 @@ impl<'nt> NtConn<'nt> {
 
         self.c2s.send(Message::Text(buf)).unwrap();
 
+        debug!(
+            "{name} ({data_type}): publishing with pubuid {pubuid}",
+            data_type = T::DATATYPE_STRING.to_string()
+        );
+
+        while !(*self.pubuid_topics.lock().await).contains_key(&pubuid) {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
         Ok(NtTopic {
             conn: &*self,
-            uid: pubuid,
+            pubuid,
             _marker: PhantomData,
         })
     }
@@ -147,8 +224,8 @@ impl<'nt> NtConn<'nt> {
     }
 
     /// Subscribe to topic(s)
-    pub fn subscribe(&mut self, topics: &[&str]) -> Result<(), Box<dyn Error>> {
-        let subuid = fastrand::i32(..);
+    pub async fn subscribe(&mut self, topics: &[&str]) -> Result<(), Box<dyn Error>> {
+        let subuid = self.next_id().await;
 
         let buf = serde_json::to_string(&[ClientMsg::Subscribe {
             topics: topics.into_iter().map(|x| x.to_string()).collect(),
@@ -198,7 +275,7 @@ impl<'nt> NtConn<'nt> {
         rmp::encode::write_u8(&mut buf, T::MSGPCK)?;
         T::encode(&mut buf, value).map_err(|_| std::io::Error::other("i don't fucking know"))?;
 
-        self.c2s.send(Message::binary(buf))?;
+        self.c2s.send(Message::Binary(buf))?;
 
         Ok(())
     }
@@ -217,18 +294,27 @@ impl<'nt> NtConn<'nt> {
 /// Automatically unpublished when dropped.
 pub struct NtTopic<'nt, T: DataType> {
     conn: &'nt NtConn<'nt>,
-    uid: i32,
+    pubuid: i32,
     _marker: PhantomData<T>,
 }
-impl<T: DataType> NtTopic<'_, T> {
-    pub fn set(&mut self, val: T) -> Result<(), Box<dyn Error>> {
-        (*self.conn).write_bin_frame(self.uid, 0, val)?;
+impl<T: DataType + std::fmt::Debug> NtTopic<'_, T> {
+    pub async fn set(&mut self, val: T) -> Result<(), Box<dyn Error>> {
+        if let Some(id) = (*self.conn.pubuid_topics.lock().await).get(&self.pubuid) {
+            if let Some(name) = (*self.conn.topics.lock().await).get(&id) {
+                debug!(
+                    "{name} ({data_type}): set to {val:?}",
+                    data_type = T::DATATYPE_STRING.to_string()
+                );
+            }
+        }
+
+        (*self.conn).write_bin_frame(self.pubuid, 0, val)?;
 
         Ok(())
     }
 }
 impl<T: DataType> Drop for NtTopic<'_, T> {
     fn drop(&mut self) {
-        self.conn.unpublish(self.uid).unwrap();
+        self.conn.unpublish(self.pubuid).unwrap();
     }
 }
