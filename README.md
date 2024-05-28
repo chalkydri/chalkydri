@@ -1,14 +1,8 @@
 
-# Chalkydri
 
-A blazingly fast FRC vision solution
+![A phoenix with a Pi camera module v3 wide for an eye, wielding a Raspberry Pi 5 and a Coral edge TPU](./assets/banner.png)
 
----
+Chalkydri is a *blazingly fast* vision system for FRC.
 
-Chalkydri ~~has~~ will have support for:
-
- - Arbitrary TFLite models (with first-class support for the Coral Edge TPU!)
- - AprilTags (via a faster, hardware-accelerated algorithm)
- - Custom Python code (for experimentation and advanced users)
- - and more soon probably
+To learn more or get started, see [our documentation](https://frc4533-lincoln.github.io/chalkydri/).
 
