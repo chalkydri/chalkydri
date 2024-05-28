@@ -4,5 +4,5 @@
 
 Chalkydri is a *blazingly fast* vision system for FRC.
 
-To learn more or get started, see [our documentation](https://frc4533-lincoln.github.io/chalkydri/).
+To learn more or get started, see [our documentation](https://vision.waterga.me/).
 
