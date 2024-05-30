@@ -1,9 +1,8 @@
 //!
-//! **Small** utility functions
+//! Small utility functions
 //!
 
-
-/// Get the team IP
+/// Generate the team IP
 ///
 /// Let's say you're on team number 12345 (just like all of my passwords).
 /// Here's how you'd do that:

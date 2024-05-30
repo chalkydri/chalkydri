@@ -12,4 +12,5 @@
   - [Dev environment](./maintenance/devenv.md)
   - [Platforms](./maintenance/platforms.md)
   - [Releasing](./maintenance/releasing.md)
+  - [AprilTags](./maintenance/apriltags.md)
 

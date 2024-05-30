@@ -1,3 +1,7 @@
+//!
+//! Chalkydri core
+//!
+
 #[macro_use]
 extern crate log;
 extern crate tokio;
@@ -8,12 +12,18 @@ extern crate libcamera;
 #[cfg(feature = "mjpeg")]
 extern crate mozjpeg;
 extern crate ril;
-//extern crate minint;
+extern crate minint;
 #[macro_use]
 extern crate actix_web;
 extern crate utoipa as utopia;
 #[macro_use]
 extern crate serde;
+#[cfg(feature = "apriltags")]
+extern crate chalkydri_apriltags;
+#[cfg(feature = "ml")]
+extern crate tfledge;
+#[cfg(feature = "python")]
+extern crate pyo3;
 
 #[cfg(feature = "libcamera")]
 mod cameras;
@@ -23,12 +33,10 @@ mod api;
 mod utils;
 
 use std::{error::Error, time::Duration};
-use actix_web::{App, HttpServer};
 use minint::NtConn;
 use tokio::runtime::Runtime;
 
-use crate::utils::gen_team_ip;
-//use minint::{client::{AsyncClientHandle, config::ClientConfig}, spec::topic::PublishProperties};
+use crate::{api::run_api, utils::gen_team_ip};
 
 pub trait Subsystem<'subsys> {
     fn init() -> Result<Box<Self>, Box<dyn Error>>;
@@ -41,15 +49,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("Chalkydri starting up...");
 
     let roborio_ip = gen_team_ip(4533).unwrap();
-
     let dev_id = fastrand::u32(..);
 
+    // Build a tokio runtime
     let rt = Runtime::new().unwrap();
 
+    // Enter the tokio rt
     rt.block_on(async {
-        let nt: NtConn;
-
         // Attempt to connect to the NT server, retrying until successful
+
+        let nt: NtConn;
 
         let mut retry = false;
 
@@ -69,63 +78,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
 
+        info!("Connected to NT server at {roborio_ip:?} successfully!");
+
+        // Have to let NT topics get dropped before calling nt.stop()
         {
-            let mut camera_count = nt.publish::<i32>(format!("/Chalkydri/Devices/{dev_id}/CameraCount")).await.unwrap();
-            //let mut camera_count2 = nt.publish::<i32>(format!("/Chalkydri/Devices/{dev_id}/CameraCount2")).await.unwrap();
-            //drop(camera_count2);
-
-            camera_count.set(9).await.unwrap();
+            run_api(nt.clone()).await;
         }
 
+        // Shut down NT connection
         nt.stop();
-        
-        HttpServer::new(|| {
-            App::new().service(api::info).service(api::configurations)
-        })
-        .bind(("0.0.0.0", 6942)).unwrap()
-        .run()
-        .await
-        .unwrap();
     });
-
-    /*
-    rt.block_on(async {
-        let ins = wgpu::Instance::new(InstanceDescriptor::default());
-        let adapter = ins
-            .request_adapter(&RequestAdapterOptions {
-                power_preference: PowerPreference::HighPerformance,
-                ..Default::default()
-            })
-            .await
-            .unwrap();
-
-        let (dev, queue) = adapter
-            .request_device(&DeviceDescriptor::default(), None)
-            .await
-            .unwrap();
-
-        info!("acquired gpu: {}", adapter.get_info().name);
-
-        //let cam = ;
-
-        fn start<'a, S: Subsystem<'a>>(rt: Runtime) {
-            info!("initializing...");
-            let s = S::init().unwrap();
-            info!("running...");
-            s.run(rt);
-        }
-
-        //start::<subsys::ml::MlSubsys>(rt);
-
-        info!("Connecting to NT...");
-        info!("Connected to NT at {ip}", ip = "10.45.33.2");
-
-        info!("Starting ML...");
-        info!("Ready for inference");
-
-        info!("Chalkydri ready");
-    });
-    */
 
     Ok(())
 }

@@ -1,10 +1,17 @@
 #!/bin/bash
 
+# This script goes through the process of bootstrapping the build junk, then building third-party C++ libs for machine learning.
+#
+# I tried to comment things decent, but Linux experience is recommended.
+# This works with yash or similar, but not with minimal shells like dash.
+# pushd/popd is nice.
+
 # Update and/or initialize submodules
 git submodule update --init
 
+# If Bazel isn't installed, go through the entire process to download/bootstrap it w/ Bazelisk :/
 if ! command -v bazel; then
-	echo "Please install bazel first: https://github.com/bazelbuild/bazelisk/releases/latest"
+	#echo "Please install bazel first: https://github.com/bazelbuild/bazelisk/releases/latest"
 
 	case "$(uname -m)" in
 		x86_64)

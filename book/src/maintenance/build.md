@@ -1,14 +1,28 @@
 
-Images are based on Alpine Linux and built using [their tooling](https://wiki.alpinelinux.org/wiki/How_to_make_a_custom_ISO_image_with_mkimage).
-Alpine's image creation tooling is implemented as a set of shell scripts.
+Images are based on Alpine Linux and built using a little custom tooling.
 
+Alpine is a very solid option, as they don't pull in GNU and systemd stuff by default.
+
+An Alpine host is required to build images.
 We're using a Docker container to simplify the build process.
 
 ```shell
 # (In the Chalkydri repo)
 
 cd build/
-
-./build.sh
+docker build -t chalkydri-builder:latest
+docker run --rm chalkydri-builder:latest
 ```
+
+Then wait...
+
+It might take a while
+
+Go get some water
+
+Maybe a snack
+
+...
+
+Ok, it's done!
 

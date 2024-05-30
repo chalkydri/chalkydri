@@ -9,10 +9,12 @@ extern crate tokio_tungstenite;
 mod datatype;
 mod messages;
 
+use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::marker::PhantomData;
 use std::net::IpAddr;
+use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -32,21 +34,20 @@ use tokio_tungstenite::tungstenite::{
 };
 
 /// A NetworkTables connection
-pub struct NtConn<'nt> {
-    next_id: Mutex<i32>,
+pub struct NtConn {
+    next_id: Arc<Mutex<i32>>,
 
-    incoming_abort: AbortHandle,
-    outgoing_abort: AbortHandle,
+    incoming_abort: Option<AbortHandle>,
+    outgoing_abort: Option<AbortHandle>,
 
     c2s: mpsc::UnboundedSender<Message>,
 
     topics: Arc<Mutex<HashMap<i32, String>>>,
     topic_pubuids: Arc<Mutex<HashMap<i32, i32>>>,
     pubuid_topics: Arc<Mutex<HashMap<i32, i32>>>,
-
-    _marker: PhantomData<&'nt ()>,
+    values: Arc<Mutex<HashMap<i32, Data>>>,
 }
-impl<'nt> NtConn<'nt> {
+impl NtConn {
     /// Connect to a NetworkTables server
     pub async fn new(
         server: impl Into<IpAddr>,
@@ -55,6 +56,7 @@ impl<'nt> NtConn<'nt> {
         let topics = Arc::new(Mutex::new(HashMap::new()));
         let topic_pubuids = Arc::new(Mutex::new(HashMap::new()));
         let pubuid_topics = Arc::new(Mutex::new(HashMap::new()));
+        let values = Arc::new(Mutex::new(HashMap::new()));
 
         // Get server and client_ident into something we can work with
         let server = server.into();
@@ -78,7 +80,7 @@ impl<'nt> NtConn<'nt> {
 
         // Spawn event loop to read and process incoming messages
 
-        let incoming_abort = {
+        let incoming_abort = Some({
             let topics = topics.clone();
             let topic_pubuids = topic_pubuids.clone();
             let pubuid_topics = pubuid_topics.clone();
@@ -131,7 +133,7 @@ impl<'nt> NtConn<'nt> {
                                 }
                             }
                             Ok(Message::Binary(bin)) => {
-                                println!("{bin:?}");
+                                Self::read_bin_frame(bin).unwrap();
                             },
                             Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
                             Err(err) => error!("error reading incoming message: {err:?}"),
@@ -141,31 +143,32 @@ impl<'nt> NtConn<'nt> {
                 }
             })
             .abort_handle()
-        };
+        });
 
         // Spawn event loop to send outgoing messages
-        let outgoing_abort = tokio::spawn(async move {
-            loop {
-                while let Some(outgoing) = c2s_rx.recv().await {
-                    sock_wr.send(outgoing).await.unwrap();
+        let outgoing_abort = Some(
+            tokio::spawn(async move {
+                loop {
+                    while let Some(outgoing) = c2s_rx.recv().await {
+                        sock_wr.send(outgoing).await.unwrap();
+                    }
+                    tokio::task::yield_now().await;
                 }
-                tokio::task::yield_now().await;
-            }
-        })
-        .abort_handle();
+            })
+            .abort_handle(),
+        );
 
         Ok(Self {
-            next_id: Mutex::const_new(0),
+            next_id: Arc::new(Mutex::const_new(0)),
             c2s: c2s_tx,
 
             topics,
             topic_pubuids,
             pubuid_topics,
+            values,
 
             incoming_abort,
             outgoing_abort,
-
-            _marker: PhantomData,
         })
     }
 
@@ -223,28 +226,34 @@ impl<'nt> NtConn<'nt> {
         Ok(())
     }
 
-    /// Subscribe to topic(s)
-    pub async fn subscribe(&mut self, topics: &[&str]) -> Result<(), Box<dyn Error>> {
+    /// Subscribe to a topic
+    pub async fn subscribe(&self, topic: &str) -> Result<NtSubscription, Box<dyn Error>> {
         let subuid = self.next_id().await;
 
         let buf = serde_json::to_string(&[ClientMsg::Subscribe {
-            topics: topics.into_iter().map(|x| x.to_string()).collect(),
+            topics: vec![topic.to_string()],
             subuid,
             options: BTreeMap::new(),
         }])?;
         self.c2s.send(Message::Text(buf))?;
 
-        Ok(())
+        Ok(NtSubscription {
+            conn: &*self,
+            subuid,
+        })
     }
 
     /// Unsubscribe from topic(s)
-    pub fn unsubscribe(&mut self, subuid: i32) -> Result<(), Box<dyn Error>> {
+    fn unsubscribe(&self, subuid: i32) -> Result<(), Box<dyn Error>> {
         let buf = serde_json::to_string(&[ClientMsg::Unsubscribe { subuid }])?;
         self.c2s.send(Message::Text(buf))?;
 
         Ok(())
     }
 
+    /// Read/parse a binary frame
+    ///
+    /// Returns `(uid, timestamp, data)`
     fn read_bin_frame(buf: Vec<u8>) -> Result<(u64, u64, Data), ()> {
         let mut bytes = Bytes::new(&buf);
         let len = rmp::decode::read_array_len(&mut bytes).map_err(|_| ())?;
@@ -261,6 +270,7 @@ impl<'nt> NtConn<'nt> {
         }
     }
 
+    /// Write a binary frame
     fn write_bin_frame<T: DataWrap>(
         &self,
         uid: i32,
@@ -284,16 +294,36 @@ impl<'nt> NtConn<'nt> {
     ///
     /// All [`topics`](NtTopic) must be dropped first.
     pub fn stop(self) {
-        self.incoming_abort.abort();
-        self.outgoing_abort.abort();
+        // Attempt to unwrap and use incoming and outgoing abort handles
+
+        if let Some(ah) = self.incoming_abort {
+            ah.abort();
+        }
+        if let Some(ah) = self.outgoing_abort {
+            ah.abort();
+        }
+    }
+}
+impl Clone for NtConn {
+    fn clone(&self) -> Self {
+        Self {
+            next_id: self.next_id.clone(),
+            incoming_abort: None,
+            outgoing_abort: None,
+            c2s: self.c2s.clone(),
+            topics: self.topics.clone(),
+            topic_pubuids: self.topic_pubuids.clone(),
+            pubuid_topics: self.pubuid_topics.clone(),
+            values: self.values.clone(),
+        }
     }
 }
 
 /// A NetworkTables topic
 ///
-/// Automatically unpublished when dropped.
+/// Automatically unpublishes when dropped.
 pub struct NtTopic<'nt, T: DataType> {
-    conn: &'nt NtConn<'nt>,
+    conn: &'nt NtConn,
     pubuid: i32,
     _marker: PhantomData<T>,
 }
@@ -316,5 +346,21 @@ impl<T: DataType + std::fmt::Debug> NtTopic<'_, T> {
 impl<T: DataType> Drop for NtTopic<'_, T> {
     fn drop(&mut self) {
         self.conn.unpublish(self.pubuid).unwrap();
+    }
+}
+
+/// A NetworkTables subscription
+///
+/// Automatically unsubscribes when dropped.
+pub struct NtSubscription<'nt> {
+    conn: &'nt NtConn,
+    subuid: i32,
+}
+impl NtSubscription<'_> {
+    //
+}
+impl Drop for NtSubscription<'_> {
+    fn drop(&mut self) {
+        self.conn.unsubscribe(self.subuid).unwrap();
     }
 }

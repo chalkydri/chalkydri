@@ -49,6 +49,31 @@ fn grayscale(data: &[u8]) -> u8 {
     }
 }
 
+/// Turns p1, p2, p3... into an approximate angle
+#[rustfmt::skip]
+#[inline(always)]
+fn fast_angle(p: u8) -> f32 {
+    match p {
+        1  =>   0.0,
+        2  =>  22.5,
+        3  =>  45.0,
+        4  =>  67.5,
+        5  =>  90.0,
+        6  => 112.5,
+        7  => 135.0,
+        8  => 157.5,
+        9  => 180.0,
+        10 => 202.5,
+        11 => 225.0,
+        12 => 247.5,
+        13 => 270.0,
+        14 => 292.5,
+        15 => 315.0,
+        16 => 337.5,
+        _ => panic!("invalid FAST point")
+    }
+}
+
 struct Buffer {
     inner: UnsafeCell<*mut bool>,
 }

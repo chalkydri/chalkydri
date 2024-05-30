@@ -1,7 +1,10 @@
-use std::collections::BTreeMap;
+//!
+//! JSON API used by the web UI and possibly third-party applications
+//!
 
+use minint::NtConn;
 use utopia::OpenApi;
-use actix_web::{Responder, web};
+use actix_web::{web::{self, Data}, App, HttpServer, Responder};
 
 use crate::config::CameraResolution;
 
@@ -16,7 +19,19 @@ use crate::config::CameraResolution;
         configure,
     ),
 )]
+#[allow(dead_code)]
 struct ApiDoc;
+ 
+pub async fn run_api<'nt>(nt: NtConn) {
+    HttpServer::new(move || {
+        App::new().app_data(Data::new(nt.clone())).service(info).service(configurations)
+    })
+    .bind(("0.0.0.0", 6942)).unwrap()
+    .run()
+    .await
+    .unwrap();
+}
+
 
 #[derive(Serialize)]
 pub struct Info {
