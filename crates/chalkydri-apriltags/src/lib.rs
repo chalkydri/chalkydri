@@ -13,7 +13,7 @@ use std::{
 };
 
 //mod detector;
-pub mod otsu;
+//pub mod otsu;
 //pub mod simd;
 pub mod myalgo;
 
