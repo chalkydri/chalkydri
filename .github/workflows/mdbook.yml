@@ -24,8 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Install cargo
-        run: sudo apt install cargo
+      - name: Install rust nightly
+        run: rustup update nightly && rustup default nightly
 
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v2
