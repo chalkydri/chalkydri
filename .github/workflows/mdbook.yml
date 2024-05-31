@@ -35,7 +35,7 @@ jobs:
       - run: mdbook build ./book
 
       - name: Run rustdoc
-        run: cargo doc --workspace --document-private-items
+        run: cargo doc --workspace --document-private-items --no-deps
 
       - name: Copy rustdoc
         run: mv target/doc book/book
