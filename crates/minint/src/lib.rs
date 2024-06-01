@@ -1,3 +1,13 @@
+//!
+//! # MiniNT
+//!
+//! A simple NetworkTables library implemented in Rust
+//!
+//! NetworkTables is a pub-sub messaging system used for FRC.
+//!
+//! The entrypoint is [NtConn].
+//!
+
 #[macro_use]
 extern crate log;
 extern crate rmp;
@@ -9,12 +19,10 @@ extern crate tokio_tungstenite;
 mod datatype;
 mod messages;
 
-use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::marker::PhantomData;
 use std::net::IpAddr;
-use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -35,11 +43,15 @@ use tokio_tungstenite::tungstenite::{
 
 /// A NetworkTables connection
 pub struct NtConn {
+    /// Next sequential ID
     next_id: Arc<Mutex<i32>>,
 
+    /// Incoming request receiver event loop abort handle
     incoming_abort: Option<AbortHandle>,
+    /// Outgoing request sender event loop abort handle
     outgoing_abort: Option<AbortHandle>,
 
+    /// Outgoing client-to-server message queue
     c2s: mpsc::UnboundedSender<Message>,
 
     topics: Arc<Mutex<HashMap<i32, String>>>,
@@ -49,6 +61,25 @@ pub struct NtConn {
 }
 impl NtConn {
     /// Connect to a NetworkTables server
+    ///
+    /// # Arguments
+    ///
+    /// * `server` - The IP address of the NetworkTables server.
+    /// * `client_ident` - The client identifier to use for this connection.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minint::NtConn;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     // Connect to the NetworkTables server at 10.0.0.2
+    ///     let conn = NtConn::new("10.0.0.2", "my_client").await.unwrap();
+    ///
+    ///     // ...
+    /// }
+    /// ```
     pub async fn new(
         server: impl Into<IpAddr>,
         client_ident: impl Into<String>,
@@ -183,6 +214,31 @@ impl NtConn {
     /// Publish a topic
     ///
     /// The topic will be unpublished when the [NtTopic] is dropped.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the topic to publish.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type of data to be published on the topic. Must implement the `DataType` trait.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minint::{NtConn, datatype::DataType};
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     // Connect to the NetworkTables server
+    ///     let conn = NtConn::new("10.0.0.2", "my_client").await.unwrap();
+    ///
+    ///     // Publish a new topic named "my_topic" with data type f64
+    ///     let mut topic = conn.publish::<f64>("my_topic").await.unwrap();
+    ///
+    ///     // ...
+    /// }
+    /// ```
     pub async fn publish<T: DataType>(
         &self,
         name: impl Into<String>,
@@ -219,6 +275,8 @@ impl NtConn {
     }
 
     /// Unpublish topic
+    ///
+    /// This method is typically called when an `NtTopic` is dropped.
     fn unpublish(&self, pubuid: i32) -> Result<(), Box<dyn Error>> {
         let buf = serde_json::to_string(&[ClientMsg::Unpublish { pubuid }])?;
         self.c2s.send(Message::Text(buf))?;
@@ -227,6 +285,27 @@ impl NtConn {
     }
 
     /// Subscribe to a topic
+    ///
+    /// # Arguments
+    ///
+    /// * `topic` - The name of the topic to subscribe to.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minint::NtConn;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     // Connect to the NetworkTables server
+    ///     let conn = NtConn::new("10.0.0.2", "my_client").await.unwrap();
+    ///
+    ///     // Subscribe to the topic named "my_topic"
+    ///     let subscription = conn.subscribe("my_topic").await.unwrap();
+    ///
+    ///     // ...
+    /// }
+    /// ```
     pub async fn subscribe(&self, topic: &str) -> Result<NtSubscription, Box<dyn Error>> {
         let subuid = self.next_id().await;
 
@@ -244,6 +323,8 @@ impl NtConn {
     }
 
     /// Unsubscribe from topic(s)
+    ///
+    /// This method is typically called when an `NtSubscription` is dropped.
     fn unsubscribe(&self, subuid: i32) -> Result<(), Box<dyn Error>> {
         let buf = serde_json::to_string(&[ClientMsg::Unsubscribe { subuid }])?;
         self.c2s.send(Message::Text(buf))?;
@@ -252,6 +333,8 @@ impl NtConn {
     }
 
     /// Read/parse a binary frame
+    ///
+    /// This method is used internally to process incoming data values for subscribed topics.
     ///
     /// Returns `(uid, timestamp, data)`
     fn read_bin_frame(buf: Vec<u8>) -> Result<(u64, u64, Data), ()> {
@@ -271,6 +354,8 @@ impl NtConn {
     }
 
     /// Write a binary frame
+    ///
+    /// This method is used internally to send data values to the NetworkTables server.
     fn write_bin_frame<T: DataWrap>(
         &self,
         uid: i32,
@@ -292,7 +377,8 @@ impl NtConn {
 
     /// Shutdown the connection
     ///
-    /// All [`topics`](NtTopic) must be dropped first.
+    /// This method stops the event loops for sending and receiving messages. All `NtTopic`
+    /// instances associated with this connection must be dropped before calling this method.
     pub fn stop(self) {
         // Attempt to unwrap and use incoming and outgoing abort handles
 
@@ -321,13 +407,39 @@ impl Clone for NtConn {
 
 /// A NetworkTables topic
 ///
-/// Automatically unpublishes when dropped.
+/// This structure represents a published topic on the NetworkTables server. It allows you to set
+/// the value of the topic. The topic is automatically unpublished when this structure is dropped.
 pub struct NtTopic<'nt, T: DataType> {
     conn: &'nt NtConn,
     pubuid: i32,
     _marker: PhantomData<T>,
 }
 impl<T: DataType + std::fmt::Debug> NtTopic<'_, T> {
+    /// Set the value of the topic.
+    ///
+    /// # Arguments
+    ///
+    /// * `val` - The new value to set the topic to.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minint::{NtConn, datatype::DataType};
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     // Connect to the NetworkTables server
+    ///     let conn = NtConn::new("10.0.0.2", "my_client").await.unwrap();
+    ///
+    ///     // Publish a new topic
+    ///     let mut topic = conn.publish::<f64>("my_topic").await.unwrap();
+    ///
+    ///     // Set the value of the topic
+    ///     topic.set(3.14159).await.unwrap();
+    ///
+    ///     // ...
+    /// }
+    /// ```
     pub async fn set(&mut self, val: T) -> Result<(), Box<dyn Error>> {
         if let Some(id) = (*self.conn.pubuid_topics.lock().await).get(&self.pubuid) {
             if let Some(name) = (*self.conn.topics.lock().await).get(&id) {
@@ -351,7 +463,8 @@ impl<T: DataType> Drop for NtTopic<'_, T> {
 
 /// A NetworkTables subscription
 ///
-/// Automatically unsubscribes when dropped.
+/// This structure represents a subscription to a topic on the NetworkTables server. It is
+/// automatically unsubscribed when this structure is dropped.
 pub struct NtSubscription<'nt> {
     conn: &'nt NtConn,
     subuid: i32,

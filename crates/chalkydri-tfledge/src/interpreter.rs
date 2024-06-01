@@ -9,16 +9,40 @@ use crate::ffi::*;
 
 /// The core structure for making inferences with TFLite
 ///
-/// ```
-/// let mut int = Interpreter::new(model, device)?;
+/// # Examples
 ///
-/// int.invoke()?;
+/// ```
+/// # use tfledge::{Interpreter, Model, Error, list_devices};
+/// # fn main() -> Result<(), Error> {
+/// // Load the TFLite model
+/// let model = Model::from_file("model.tflite")?;
+///
+/// // Get a Coral device
+/// let device = list_devices().next().unwrap();
+///
+/// // Create a new interpreter
+/// let mut interpreter = Interpreter::new(model, device)?;
+///
+/// // ... perform inference ...
+///
+/// # Ok(())
+/// # }
 /// ```
 pub struct Interpreter {
     ptr: *mut TfLiteInterpreter,
 }
 impl Interpreter {
     /// Create a new [Interpreter] and allocate tensors for a given [Model]
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The TensorFlow Lite model to use for inference.
+    /// * `dev` - The Coral device to use for acceleration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the interpreter cannot be created or if the tensors cannot be
+    /// allocated.
     pub fn new(model: Model, dev: CoralDevice) -> Result<Self, Error> {
         unsafe {
             // Build the interpreter options
@@ -40,6 +64,9 @@ impl Interpreter {
     }
 
     /// Allocate tensors for the interpreter
+    ///
+    /// This method is called by [`Interpreter::new`] to allocate the tensors required by the
+    /// model.
     fn allocate_tensors(&mut self) -> Result<(), Error> {
         unsafe {
             let ret = TfLiteInterpreterAllocateTensors(self.ptr);
@@ -48,6 +75,14 @@ impl Interpreter {
     }
 
     /// Get an input tensor
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The index of the input tensor to get.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The data type of the tensor. Must implement [`InnerTensorData`].
     pub fn input_tensor<T: InnerTensorData>(&self, id: u32) -> Tensor<Input, T> {
         unsafe {
             let ptr = TfLiteInterpreterGetInputTensor(self.ptr, id as i32);
@@ -60,6 +95,14 @@ impl Interpreter {
     }
 
     /// Get an output tensor
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The index of the output tensor to get.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The data type of the tensor. Must implement [`InnerTensorData`].
     pub fn output_tensor<T: InnerTensorData>(&self, id: u32) -> Tensor<Output, T> {
         unsafe {
             let ptr = TfLiteInterpreterGetOutputTensor(self.ptr, id as i32);
@@ -75,6 +118,10 @@ impl Interpreter {
     ///
     /// This basically just processes data from the input tensors, using the model, into the ourput
     /// tensors.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if inference fails.
     pub fn invoke(&mut self) -> Result<(), Error> {
         unsafe {
             let ret = TfLiteInterpreterInvoke(self.ptr);

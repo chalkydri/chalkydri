@@ -8,14 +8,38 @@ use core::marker::PhantomData;
 
 use crate::ffi::*;
 
+/// Marker trait for tensor input/output types
 pub(crate) trait TensorInputOrOutput {}
 
+/// Marker struct for input tensors
 pub struct Input;
 impl TensorInputOrOutput for Input {}
 
+/// Marker struct for output tensors
 pub struct Output;
 impl TensorInputOrOutput for Output {}
 
+/// A TensorFlow Lite tensor
+///
+/// This structure represents a tensor in a TensorFlow Lite model. It can be either an input
+/// tensor or an output tensor, depending on the type parameter `IO`.
+///
+/// # Examples
+///
+/// ```
+/// # use tfledge::{Interpreter, Model, Error, list_devices, Tensor};
+/// # fn main() -> Result<(), Error> {
+/// # let model = Model::from_file("model.tflite")?;
+/// # let device = list_devices().next().unwrap();
+/// # let mut interpreter = Interpreter::new(model, device)?;
+/// // Get the first input tensor as a tensor of f32 values
+/// let input_tensor: Tensor<Input, f32> = interpreter.input_tensor(0);
+///
+/// // Check the data type of the tensor
+/// assert_eq!(input_tensor.kind(), crate::ffi::TfLiteType::kTfLiteFloat32);
+/// # Ok(())
+/// # }
+/// ```
 pub struct Tensor<IO, T>
 where
     IO: TensorInputOrOutput,
@@ -51,6 +75,15 @@ where
 // read is lower cost than write
 // TODO: Need to specify that here somewhere
 impl<T: InnerTensorData> Tensor<Input, T> {
+    /// Write data to the tensor.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The data to write to the tensor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data cannot be written to the tensor.
     pub fn write(&mut self, data: &[u8]) -> Result<(), Error> {
         unsafe {
             let ret = TfLiteTensorCopyFromBuffer(self.ptr, data.as_ptr() as *const _, data.len());
@@ -60,15 +93,21 @@ impl<T: InnerTensorData> Tensor<Input, T> {
     }
 }
 impl<T: InnerTensorData> Tensor<Output, T> {
-    // TODO: types other than f32 are possible
+    /// Read data from the tensor.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `const N: usize` - The number of elements to read from the tensor at a time. For
+    ///   example, if `N` is 4, then the method will return a vector of 4-element arrays.
     pub fn read<const N: usize>(&self) -> Vec<[T; N]> {
         unsafe {
+            // Calculate the number of chunks to read from the tensor
             let ct = TfLiteTensorByteSize(self.ptr) / size_of::<[T; N]>();
 
+            // Get a pointer to the tensor data
             let ptr = TfLiteTensorData(self.ptr);
 
-            // dim id 1 is a mobilenet-specific thing i think
-            // TODO: come back and fix this
+            // Read the data from the tensor
             core::slice::from_raw_parts::<[T; N]>(ptr as *const _, ct).to_vec()
         }
     }
@@ -116,6 +155,11 @@ pub struct TensorData<T: InnerTensorData> {
     ptr: *mut T,
 }
 impl<T: InnerTensorData> TensorData<T> {
+    /// Create a new [`TensorData`] buffer
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - The size of the buffer in bytes.
     pub fn new(size: usize) -> Self {
         unsafe {
             let ptr = alloc(Layout::array::<T>(size).unwrap()) as *mut T;
@@ -123,8 +167,8 @@ impl<T: InnerTensorData> TensorData<T> {
             Self { ptr, size }
         }
     }
-    /// Tensor data as raw bytes
-    pub fn as_bytes(&self) -> &[T] {
+    /// Tensor data as a raw slice
+    pub fn as_slice(&self) -> &[T] {
         unsafe { core::slice::from_raw_parts(self.ptr.cast_const(), self.size) }
     }
 }

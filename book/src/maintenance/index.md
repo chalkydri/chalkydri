@@ -9,4 +9,5 @@ Being a fairly advanced project as FRC goes, it's harder to just pick up and wor
 This is the incomplete guide to maintaining it, how the internals work, and the best learning resources.
 
  - [Setting up your development environment](./devenv.md)
+ - [API documentation](/doc/chalkydri)
 
