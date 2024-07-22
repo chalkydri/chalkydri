@@ -35,7 +35,7 @@ mod subsys;
 mod config;
 mod api;
 mod utils;
-mod logger;
+//mod logger;
 
 use std::{error::Error, time::Duration};
 use minint::NtConn;
