@@ -14,16 +14,16 @@ impl Model {
     /// Load a model from a byte slice
     ///
     /// # Arguments
-    /// 
+    ///
     /// * `bytes` - A byte slice containing the raw model data.
-    /// 
+    ///
     /// # Errors
-    /// 
-    /// Returns an error if the model cannot be loaded from the provided byte slice. This 
+    ///
+    /// Returns an error if the model cannot be loaded from the provided byte slice. This
     /// usually means the data is invalid or corrupted.
     ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// # use tfledge::{Model, Error};
     /// # fn main() -> Result<(), Error> {
@@ -53,16 +53,16 @@ impl Model {
     /// Load a model from a file
     ///
     /// # Arguments
-    /// 
+    ///
     /// * `path` - A string slice representing the path to the model file.
-    /// 
+    ///
     /// # Errors
-    /// 
-    /// Returns an error if the model cannot be loaded from the provided file path. This could 
+    ///
+    /// Returns an error if the model cannot be loaded from the provided file path. This could
     /// be due to a file not being found, invalid permissions, or a corrupted model file.
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// # use tfledge::{Model, Error};
     /// # fn main() -> Result<(), Error> {

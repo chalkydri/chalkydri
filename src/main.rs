@@ -2,6 +2,10 @@
 //! Chalkydri core
 //!
 
+// Unsafe code is NOT allowed in Chalkydri core.
+// If unsafe code is required, it should be part of a different crate.
+#![forbid(unsafe_code)]
+
 #[macro_use]
 extern crate log;
 extern crate tokio;
@@ -27,10 +31,11 @@ extern crate pyo3;
 
 #[cfg(feature = "libcamera")]
 mod cameras;
-//mod subsys;
+mod subsys;
 mod config;
 mod api;
 mod utils;
+mod logger;
 
 use std::{error::Error, time::Duration};
 use minint::NtConn;
@@ -38,17 +43,33 @@ use tokio::runtime::Runtime;
 
 use crate::{api::run_api, utils::gen_team_ip};
 
-pub trait Subsystem<'subsys> {
-    fn init() -> Result<Box<Self>, Box<dyn Error>>;
-    fn run(&self, rt: Runtime);
+/// A processing subsystem
+///
+/// Subsystems implement different computer vision tasks, such as AprilTags or object detection.
+///
+/// A subsystem should be generic, not something that is only used for some specific aspect of a
+/// game.
+/// For example, note detection for the 2024 game, Crescendo, would go under the object detection
+/// subsystem, rather than a brand new subsystem.
+///
+/// Make sure to pay attention to and respect each subsystem's documentation and structure.
+pub trait Subsystem: Sized {
+    /// Initialize the subsystem
+    async fn init() -> Result<Self, Box<dyn Error>>;
+    /// Run the subsystem
+    async fn run(&self);
+    /// Shutdown the subsystem
+    async fn shutdown(self);
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Initialize logger
     env_logger::init();
 
     info!("Chalkydri starting up...");
 
-    let roborio_ip = gen_team_ip(4533).unwrap();
+    let roborio_ip = gen_team_ip(4533).expect("failed to generate team ip");
+    // Generate a random device id
     let dev_id = fastrand::u32(..);
 
     // Build a tokio runtime

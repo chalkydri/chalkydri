@@ -13,3 +13,6 @@
 	url = https://github.com/tensorflow/tensorflow.git
 	branch = v2.16.1
 	shallow = true
+[submodule "third_party/libcamera"]
+	path = third_party/libcamera
+	url = https://git.libcamera.org/libcamera/libcamera.git

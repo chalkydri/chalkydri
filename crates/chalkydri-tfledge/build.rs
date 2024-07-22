@@ -18,6 +18,9 @@ fn main() {
             "edgetpu_c.h",
             "tensorflow/lite/core/c/c_api.h",
             "tensorflow/lite/core/c/common.h",
+            "tensorflow/lite/core/async/c/async_kernel.h",
+            "tensorflow/lite/core/async/c/task.h",
+            "tensorflow/lite/core/async/c/async_signature_runner.h",
             "/usr/include/stdio.h",
         ] {
             b = b.header(h);

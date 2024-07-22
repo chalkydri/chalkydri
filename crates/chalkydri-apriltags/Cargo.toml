@@ -5,17 +5,16 @@ license = "GPL-3.0"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 bumpalo = { version = "3.16.0", features = ["collections", "std"] }
-#futures = "0.3.30"
-#futures-core = "0.3.30"
 image = { version = "0.25.1", default-features = false, features = ["png"] }
 libm = "0.2.8"
 nalgebra = { version = "0.32.5", features = ["sparse"] }
-quote = "1.0.36"
 rayon = "1.10.0"
-#simsimd = "4.3.1"
-#simba = "0.8.1"
-#wgpu = "0.19.3"
+rerun = { version = "0.17.0", optional = true, default-features = false, features = ["sdk", "server"] }
+ril = { version = "0.10.1", features = ["png"] }
+
+[features]
+default = ["rerun"]
+rerun = ["dep:rerun"]
+

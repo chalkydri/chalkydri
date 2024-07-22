@@ -22,10 +22,10 @@ impl CoralDeviceKind {
 }
 
 /// Represents a Coral Edge TPU device.
-/// 
+///
 /// This struct provides information about a detected Coral device, including its type and system path.
 /// You'll primarily use this struct to:
-/// 
+///
 /// - Identify the type of Coral device connected (USB or PCI).
 /// - Retrieve the system path to the device, which can be used for further interactions with the device.
 ///
@@ -35,10 +35,10 @@ impl CoralDeviceKind {
 /// use tfledge::{list_devices, CoralDeviceKind};
 ///
 /// let devices = list_devices();
-/// 
+///
 /// for device in devices {
 ///     // Print the path of the device
-///     println!("Device path: {}", device.path()); 
+///     println!("Device path: {}", device.path());
 ///     
 ///     // Check the kind of device
 ///     match device.kind() {
@@ -48,7 +48,7 @@ impl CoralDeviceKind {
 /// }
 /// ```
 pub struct CoralDevice {
-    ptr: edgetpu_device, 
+    ptr: edgetpu_device,
 }
 
 impl CoralDevice {
@@ -60,7 +60,7 @@ impl CoralDevice {
     pub fn kind(&self) -> CoralDeviceKind {
         CoralDeviceKind::from(self.ptr.type_)
     }
-    
+
     /// Returns the system path of the Coral device.
     ///
     /// # Examples
@@ -71,7 +71,7 @@ impl CoralDevice {
     }
 
     /// Creates a new `TfLiteDelegate` for this device.
-    /// 
+    ///
     /// This method is used internally to set up the Coral device for use with a TensorFlow Lite interpreter.
     pub(crate) fn create_delegate(&self) -> *mut TfLiteDelegate {
         unsafe {
@@ -79,12 +79,12 @@ impl CoralDevice {
             let opts: *mut edgetpu_option = null_mut();
 
             // Create the delegate using the FFI function
-            let ptr = edgetpu_create_delegate(self.ptr.type_, self.ptr.path, opts, 0); 
+            let ptr = edgetpu_create_delegate(self.ptr.type_, self.ptr.path, opts, 0);
 
             // Panic if the delegate creation fails.
             // In a real application, you'd want to handle this error gracefully.
             if ptr.is_null() {
-                panic!("Failed to create Edge TPU delegate."); 
+                panic!("Failed to create Edge TPU delegate.");
             }
 
             ptr
@@ -93,16 +93,16 @@ impl CoralDevice {
 }
 
 /// An iterator over available Coral Edge TPU devices.
-/// 
+///
 /// This struct is returned by the [`list_devices()`] function and lets you iterate over all
 /// detected Coral devices. You can use this iterator to find a specific device or to list
 /// all available devices.
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use tfledge::{list_devices, CoralDeviceKind};
-/// 
+///
 /// // Iterate over each detected Coral device
 /// for device in list_devices() {
 ///     println!("Found Coral device: {}", device.path());
@@ -130,8 +130,8 @@ impl Iterator for CoralDeviceList {
             // Increment the counter to the next device
             self.curr += 1;
 
-            // Construct and return a `CoralDevice` from the raw pointer. 
-            Some(CoralDevice { ptr: *device }) 
+            // Construct and return a `CoralDevice` from the raw pointer.
+            Some(CoralDevice { ptr: *device })
         }
     }
 }
@@ -146,15 +146,15 @@ impl Drop for CoralDeviceList {
 }
 
 /// Lists all available Coral Edge TPU devices.
-/// 
+///
 /// This function returns a [`CoralDeviceList`], which can be used to iterate over all detected
 /// Coral devices.
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use tfledge::list_devices;
-/// 
+///
 /// for device in list_devices() {
 ///     println!("Found Coral device: {}", device.path());
 /// }
@@ -166,7 +166,7 @@ pub fn list_devices() -> CoralDeviceList {
         // Get a pointer to the list of devices and the number of devices
         let ptr = edgetpu_list_devices(&mut ct);
 
-        // Construct and return the CoralDeviceList 
-        CoralDeviceList { ptr, ct, curr: 0 } 
+        // Construct and return the CoralDeviceList
+        CoralDeviceList { ptr, ct, curr: 0 }
     }
 }

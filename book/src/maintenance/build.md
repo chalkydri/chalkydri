@@ -1,9 +1,9 @@
 
-Images are based on Alpine Linux and built using a little custom tooling.
+Because we use a lot of platform-specific libraries, building the codebase is a little complicated.
 
-Alpine is a very solid option, as they don't pull in GNU and systemd stuff by default.
+Only Alpine Linux is officially supported, being our distro of choice for pre-built images.
+Alpine is a very solid option for Chalkydri: lightweight (no hard dependency on GNU and systemd stuff), stable, and fast.
 
-An Alpine host is required to build images.
 We're using a Docker container to simplify the build process.
 
 ```shell

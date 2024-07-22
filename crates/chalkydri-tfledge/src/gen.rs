@@ -431,6 +431,7 @@ pub enum TfLiteType {
     kTfLiteUInt32 = 16,
     kTfLiteUInt16 = 17,
     kTfLiteInt4 = 18,
+    kTfLiteBFloat16 = 19,
 }
 #[doc = " Legacy. Will be deprecated in favor of `TfLiteAffineQuantization`.\n If per-layer quantization is specified this field will still be populated in\n addition to `TfLiteAffineQuantization`.\n Parameters for asymmetric quantization. Quantized values can be converted\n back to float using: `real_value = scale * (quantized_value - zero_point)`"]
 #[repr(C)]
@@ -796,6 +797,37 @@ fn bindgen_test_layout_TfLiteFloat16() {
         concat!(
             "Offset of field: ",
             stringify!(TfLiteFloat16),
+            "::",
+            stringify!(data)
+        )
+    );
+}
+#[doc = " bfloat16 data type compatible with the Google Brain definition.\n https://cloud.google.com/tpu/docs/bfloat16.\n This provides 1 bit of sign, 8 bits of exponent, and 7 bits of mantissa."]
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct TfLiteBFloat16 {
+    pub data: u16,
+}
+#[test]
+fn bindgen_test_layout_TfLiteBFloat16() {
+    const UNINIT: ::core::mem::MaybeUninit<TfLiteBFloat16> = ::core::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::core::mem::size_of::<TfLiteBFloat16>(),
+        2usize,
+        concat!("Size of: ", stringify!(TfLiteBFloat16))
+    );
+    assert_eq!(
+        ::core::mem::align_of::<TfLiteBFloat16>(),
+        2usize,
+        concat!("Alignment of ", stringify!(TfLiteBFloat16))
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).data) as usize - ptr as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(TfLiteBFloat16),
             "::",
             stringify!(data)
         )
@@ -1362,6 +1394,12 @@ pub enum TfLiteCustomAllocationFlags {
     kTfLiteCustomAllocationFlagsNone = 0,
     #[doc = " Skips checking whether allocation.data points to an aligned buffer as\n expected by the TFLite runtime.\n NOTE: Setting this flag can cause crashes when calling Invoke().\n Use with caution."]
     kTfLiteCustomAllocationFlagsSkipAlignCheck = 1,
+}
+pub const kTfLiteNoBufferIdentifier: _bindgen_ty_2 = _bindgen_ty_2::kTfLiteNoBufferIdentifier;
+#[repr(u64)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum _bindgen_ty_2 {
+    kTfLiteNoBufferIdentifier = 18446744073709551615,
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -2379,9 +2417,10 @@ fn bindgen_test_layout_TfLiteContext() {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct TfLiteRegistrationExternal {
+pub struct TfLiteOperator {
     _unused: [u8; 0],
 }
+pub type TfLiteRegistrationExternal = TfLiteOperator;
 #[repr(u64)]
 #[doc = " The valid values of the `inplace_operator` field in `TfLiteRegistration`.\n This allow an op to signal to the runtime that the same data pointer\n may be passed as an input and output without impacting the result.\n This does not mean that the memory can safely be reused, it is up to the\n runtime to determine this, e.g. if another op consumes the same input or not\n or if an input tensor has sufficient memory allocated to store the output\n data.\n\n Setting these flags authorizes the runtime to set the data pointers of an\n input and output tensor to the same value. In such cases, the memory\n required by the output must be less than or equal to that required by the\n shared input, never greater. If kTfLiteInplaceOpDataUnmodified is set, then\n the runtime can share the same input tensor with multiple operator's\n outputs, provided that kTfLiteInplaceOpDataUnmodified is set for all of\n them. Otherwise, if an input tensor is consumed by multiple operators, it\n may only be shared with the operator which is the last to consume it.\n\n Note that this is a bitmask, so the values should be 1, 2, 4, 8, ...etc."]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -2403,7 +2442,7 @@ pub enum TfLiteInPlaceOp {
 }
 #[doc = " The number of shareable inputs supported."]
 pub const kTfLiteMaxSharableOpInputs: ::core::ffi::c_int = 3;
-#[doc = " `TfLiteRegistration` defines the implementation of an operation\n (a built-in op, custom op, or custom delegate kernel).\n\n It is a struct containing \"methods\" (C function pointers) that will be\n invoked by the TF Lite runtime to evaluate instances of the operation.\n\n See also `TfLiteRegistrationExternal` which is a more ABI-stable equivalent."]
+#[doc = " `TfLiteRegistration` defines the implementation of an operation\n (a built-in op, custom op, or custom delegate kernel).\n\n It is a struct containing \"methods\" (C function pointers) that will be\n invoked by the TF Lite runtime to evaluate instances of the operation.\n\n See also `TfLiteOperator` which is a more ABI-stable equivalent."]
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct TfLiteRegistration {
@@ -2440,8 +2479,8 @@ pub struct TfLiteRegistration {
     pub custom_name: *const ::core::ffi::c_char,
     #[doc = " The version of the op.\n Note: It is the responsibility of the registration binder to set this\n properly."]
     pub version: ::core::ffi::c_int,
-    #[doc = " The external version of `TfLiteRegistration`. Since we can't use internal\n types (such as `TfLiteContext`) for C API to maintain ABI stability.\n C API user will provide `TfLiteRegistrationExternal` to implement custom\n ops. We keep it inside of `TfLiteRegistration` and use it to route\n callbacks properly."]
-    pub registration_external: *mut TfLiteRegistrationExternal,
+    #[doc = " The external (i.e. ABI-stable) version of `TfLiteRegistration`.\n Since we can't use internal types (such as `TfLiteContext`) for C API to\n maintain ABI stability.  C API user will provide `TfLiteOperator` to\n implement custom ops.  We keep it inside of `TfLiteRegistration` and use\n it to route callbacks properly."]
+    pub registration_external: *mut TfLiteOperator,
     #[doc = " Retrieves asynchronous kernel.\n\n If the `async_kernel` field is nullptr, it means the operation described\n by this TfLiteRegistration object does not support asynchronous execution.\n Otherwise, the function that the field points to should only be called for\n delegate kernel nodes, i.e. `node` should be a delegate kernel node\n created by applying a delegate. If the function returns nullptr, that\n means that the underlying delegate does not support asynchronous execution\n for this `node`."]
     pub async_kernel: ::core::option::Option<
         unsafe extern "C" fn(
@@ -2606,7 +2645,7 @@ pub struct TfLiteRegistration_V3 {
     pub builtin_code: i32,
     pub custom_name: *const ::core::ffi::c_char,
     pub version: ::core::ffi::c_int,
-    pub registration_external: *mut TfLiteRegistrationExternal,
+    pub registration_external: *mut TfLiteOperator,
     pub async_kernel: ::core::option::Option<
         unsafe extern "C" fn(
             context: *mut TfLiteContext,
@@ -2759,7 +2798,7 @@ pub struct TfLiteRegistration_V2 {
     pub builtin_code: i32,
     pub custom_name: *const ::core::ffi::c_char,
     pub version: ::core::ffi::c_int,
-    pub registration_external: *mut TfLiteRegistrationExternal,
+    pub registration_external: *mut TfLiteOperator,
 }
 #[test]
 fn bindgen_test_layout_TfLiteRegistration_V2() {
@@ -5559,6 +5598,7 @@ pub enum TfLiteBuiltinOperator {
     kTfLiteBuiltinDilate = 203,
     kTfLiteBuiltinStablehloRngBitGenerator = 204,
     kTfLiteBuiltinReduceWindow = 205,
+    kTfLiteBuiltinStablehloComposite = 206,
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -5574,35 +5614,33 @@ pub enum TfLiteIoType {
     kTfLiteIoTypeOutput = 2,
 }
 extern "C" {
-    pub fn TfLiteRegistrationExternalCreate(
+    pub fn TfLiteOperatorCreate(
         builtin_code: TfLiteBuiltinOperator,
         custom_name: *const ::core::ffi::c_char,
         version: ::core::ffi::c_int,
-    ) -> *mut TfLiteRegistrationExternal;
+    ) -> *mut TfLiteOperator;
 }
 extern "C" {
-    pub fn TfLiteRegistrationExternalDelete(registration: *mut TfLiteRegistrationExternal);
+    pub fn TfLiteOperatorDelete(registration: *mut TfLiteOperator);
 }
 extern "C" {
-    pub fn TfLiteRegistrationExternalGetBuiltInCode(
-        registration: *const TfLiteRegistrationExternal,
+    pub fn TfLiteOperatorGetBuiltInCode(
+        registration: *const TfLiteOperator,
     ) -> TfLiteBuiltinOperator;
 }
 extern "C" {
-    #[doc = " Returns the custom name of the provided 'registration'. The returned pointer\n will be non-null iff the op is a custom op.\n\n \\warning This is an experimental API and subject to change."]
-    pub fn TfLiteRegistrationExternalGetCustomName(
-        registration: *const TfLiteRegistrationExternal,
+    #[doc = " Returns the custom name of the provided 'registration'. The returned pointer\n will be non-null iff the op is a custom op.\n"]
+    pub fn TfLiteOperatorGetCustomName(
+        registration: *const TfLiteOperator,
     ) -> *const ::core::ffi::c_char;
 }
 extern "C" {
-    #[doc = " Return the OP version of the provided external 'registration'.  Return -1\n in case of error, or if the provided address is null.\n\n \\warning This is an experimental API and subject to change."]
-    pub fn TfLiteRegistrationExternalGetVersion(
-        registration: *const TfLiteRegistrationExternal,
-    ) -> ::core::ffi::c_int;
+    #[doc = " Return the OP version of the provided external 'registration'.  Return -1\n in case of error, or if the provided address is null.\n"]
+    pub fn TfLiteOperatorGetVersion(registration: *const TfLiteOperator) -> ::core::ffi::c_int;
 }
 extern "C" {
-    pub fn TfLiteRegistrationExternalSetInit(
-        registration: *mut TfLiteRegistrationExternal,
+    pub fn TfLiteOperatorSetInit(
+        registration: *mut TfLiteOperator,
         init: ::core::option::Option<
             unsafe extern "C" fn(
                 context: *mut TfLiteOpaqueContext,
@@ -5613,16 +5651,16 @@ extern "C" {
     );
 }
 extern "C" {
-    pub fn TfLiteRegistrationExternalSetFree(
-        registration: *mut TfLiteRegistrationExternal,
+    pub fn TfLiteOperatorSetFree(
+        registration: *mut TfLiteOperator,
         free: ::core::option::Option<
             unsafe extern "C" fn(context: *mut TfLiteOpaqueContext, data: *mut ::core::ffi::c_void),
         >,
     );
 }
 extern "C" {
-    pub fn TfLiteRegistrationExternalSetPrepare(
-        registration: *mut TfLiteRegistrationExternal,
+    pub fn TfLiteOperatorSetPrepare(
+        registration: *mut TfLiteOperator,
         prepare: ::core::option::Option<
             unsafe extern "C" fn(
                 context: *mut TfLiteOpaqueContext,
@@ -5632,8 +5670,8 @@ extern "C" {
     );
 }
 extern "C" {
-    pub fn TfLiteRegistrationExternalSetInvoke(
-        registration: *mut TfLiteRegistrationExternal,
+    pub fn TfLiteOperatorSetInvoke(
+        registration: *mut TfLiteOperator,
         invoke: ::core::option::Option<
             unsafe extern "C" fn(
                 context: *mut TfLiteOpaqueContext,
@@ -5644,8 +5682,8 @@ extern "C" {
 }
 extern "C" {
     #[doc = " Sets the async kernel accessor callback for the registration.\n\n The callback is called to retrieve the async kernel if the delegate supports\n it. If the delegate does not support async execution, either this function\n should not be called, or `async_kernel` needs to be nullptr.\n `node` is the delegate TfLiteNode created by `ModifyGraphWithDelegate`.\n Please refer `async_kernel` of `TfLiteRegistration` for the detail.\n \\warning This is an experimental API and subject to change."]
-    pub fn TfLiteRegistrationExternalSetAsyncKernel(
-        registration: *mut TfLiteRegistrationExternal,
+    pub fn TfLiteOperatorSetAsyncKernel(
+        registration: *mut TfLiteOperator,
         async_kernel: ::core::option::Option<
             unsafe extern "C" fn(
                 context: *mut TfLiteOpaqueContext,
@@ -5655,9 +5693,9 @@ extern "C" {
     );
 }
 extern "C" {
-    #[doc = " Sets the inplace_operator field of the external registration.\n\n This is a bitmask. Please refer to `inplace_operator` field of\n `TfLiteRegistration` for details.\n\n \\warning This is an experimental API and subject to change."]
-    pub fn TfLiteRegistrationExternalSetInplaceOperator(
-        registration: *mut TfLiteRegistrationExternal,
+    #[doc = " Sets the inplace_operator field of the external registration.\n\n This is a bitmask. Please refer to `inplace_operator` field of\n `TfLiteRegistration` for details.\n"]
+    pub fn TfLiteOperatorSetInplaceOperator(
+        registration: *mut TfLiteOperator,
         inplace_operator: u64,
     );
 }
@@ -5780,10 +5818,10 @@ extern "C" {
     );
 }
 extern "C" {
-    #[doc = " Adds an op registration to be applied during `TfLiteInterpreter` creation.\n\n The `TfLiteRegistrationExternal` object is needed to implement custom op of\n TFLite Interpreter via C API. Calling this function ensures that any\n `TfLiteInterpreter` created with the specified `options` can execute models\n that use the custom operator specified in `registration`.\n Please refer https://www.tensorflow.org/lite/guide/ops_custom for custom op\n support.\n \\note The caller retains ownership of the TfLiteRegistrationExternal object\n and should ensure that it remains valid for the duration of any created\n interpreter's lifetime.\n \\warning This is an experimental API and subject to change."]
-    pub fn TfLiteInterpreterOptionsAddRegistrationExternal(
+    #[doc = " Adds an op registration to be applied during `TfLiteInterpreter` creation.\n\n The `TfLiteOperator` object is needed to implement custom op of\n TFLite Interpreter via C API. Calling this function ensures that any\n `TfLiteInterpreter` created with the specified `options` can execute models\n that use the custom operator specified in `registration`.\n Please refer https://www.tensorflow.org/lite/guide/ops_custom for custom op\n support.\n \\note The caller retains ownership of the TfLiteOperator object\n and should ensure that it remains valid for the duration of any created\n interpreter's lifetime.\n \\warning This is an experimental API and subject to change."]
+    pub fn TfLiteInterpreterOptionsAddOperator(
         options: *mut TfLiteInterpreterOptions,
-        registration: *mut TfLiteRegistrationExternal,
+        registration: *mut TfLiteOperator,
     );
 }
 extern "C" {
@@ -5992,6 +6030,762 @@ extern "C" {
 extern "C" {
     #[doc = " Destroys the signature runner."]
     pub fn TfLiteSignatureRunnerDelete(signature_runner: *mut TfLiteSignatureRunner);
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct TfLiteBackendBuffer {
+    _unused: [u8; 0],
+}
+extern "C" {
+    #[doc = " Creates an empty TfLiteBackendBuffer that does not contain any hardware\n buffers object.\n Returned object is owned by the caller."]
+    pub fn TfLiteBackendBufferCreate() -> *mut TfLiteBackendBuffer;
+}
+extern "C" {
+    #[doc = " Destroys a TfLiteBackendBuffer.\n Calling this function will not release the buffer object stored underneath."]
+    pub fn TfLiteBackendBufferDelete(buf: *mut TfLiteBackendBuffer);
+}
+extern "C" {
+    #[doc = " Stores a type puned buffer object to TfLiteBackendBuffer.\n `buf` will not own or control the lifecycle of `ptr`.\n Callers needs to ensure lifetime of *ptr exceeds `buf`."]
+    pub fn TfLiteBackendBufferSetPtr(buf: *mut TfLiteBackendBuffer, ptr: *mut ::core::ffi::c_void);
+}
+extern "C" {
+    #[doc = " Retrieves the buffer object from TfLiteBackendBuffer.\n Callers can use TfLiteAttributeMap buffer type name to interpret returned\n pointer."]
+    pub fn TfLiteBackendBufferGetPtr(buf: *const TfLiteBackendBuffer) -> *mut ::core::ffi::c_void;
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct TfLiteSynchronization {
+    _unused: [u8; 0],
+}
+extern "C" {
+    #[doc = " Creates an empty TfLiteSynchronization.\n Returned object is owned by the caller."]
+    pub fn TfLiteSynchronizationCreate() -> *mut TfLiteSynchronization;
+}
+extern "C" {
+    #[doc = " Destroys a TfLiteSynchronization.\n Calling this function will not release the synchronization object stored."]
+    pub fn TfLiteSynchronizationDelete(sync: *mut TfLiteSynchronization);
+}
+extern "C" {
+    #[doc = " Stores a type-punned pointer to a platform-specific synchronization object.\n `sync` will not own or control the lifecycle of `ptr`.\n Callers needs to ensure lifetime of *ptr exceeds `sync`."]
+    pub fn TfLiteSynchronizationSetPtr(
+        sync: *mut TfLiteSynchronization,
+        ptr: *mut ::core::ffi::c_void,
+    );
+}
+extern "C" {
+    #[doc = " Retrieves the sync object from TfLiteSynchronization.\n Callers can use TfLiteAttributeMap sync type name to interpret returned\n pointer."]
+    pub fn TfLiteSynchronizationGetPtr(
+        sync: *const TfLiteSynchronization,
+    ) -> *mut ::core::ffi::c_void;
+}
+#[repr(u32)]
+#[doc = " Type of the attribute map.\n An attribute map can either describe the properties of backend buffers\n or synchronizations.\n The value of the TfLiteAttrMapType determines the interpretation of\n attribute keys. See comments below."]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum TfLiteAttrMapType {
+    #[doc = " Unknown type."]
+    kTfLiteAttrMapTypeUnknown = 0,
+    #[doc = " The attributes describes a platform-specific hardware buffer object (e.g.\n AHardwareBuffer for Android).\n Keys are of TfLiteBufferAttrKey type."]
+    kTfLiteAttrMapTypeBuffer = 1,
+    #[doc = " The attributes describes a sync object (e.g. a file descriptor as sync\n fence).\n Keys are of TfLiteSynchronizationAttrKey type."]
+    kTfLiteAttrMapTypeSync = 2,
+}
+#[repr(u32)]
+#[doc = " General hardware buffer attribute keys that are recognizable by TFLite."]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum TfLiteBufferAttrKey {
+    kTfLiteBufferAttrKeyUnknown = 0,
+    #[doc = " Backing buffer resource. const char*\n e.g. \"AHardwareBuffer\"."]
+    kTfLiteBufferAttrKeyResourceTypeName = 1,
+    #[doc = " Buffer alignment, size_t"]
+    kTfLiteBufferAttrKeyAlignment = 2,
+    #[doc = " Buffer padding, size_t"]
+    kTfLiteBufferAttrKeyPadding = 3,
+    #[doc = " Buffer offset, size_t"]
+    kTfLiteBufferAttrKeyOffset = 4,
+    #[doc = " Buffer size (padded size if applicable), size_t"]
+    kTfLiteBufferAttrKeySize = 5,
+    #[doc = " Buffer current host coherency state, bool"]
+    kTfLiteBufferAttrKeyCurrentHostCoherencyState = 6,
+    #[doc = " Buffer preferred host coherency state, bool"]
+    kTfLiteBufferAttrKeyPreferredHostCoherencyState = 7,
+    #[doc = " Buffer current host cache state, bool"]
+    kTfLiteBufferAttrKeyCurrentHostCacheState = 8,
+    #[doc = " Buffer preferred cache state, bool"]
+    kTfLiteBufferAttrKeyPreferredHostCacheState = 9,
+}
+#[repr(u32)]
+#[doc = " General synchronization attribute keys that are recognizable by TFLite."]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum TfLiteSynchronizationAttrKey {
+    kTfLiteSynchronizationAttrKeyUnknown = 0,
+    #[doc = " Synchronization type name. const char*\n e.g. \"sync_fence_fd\""]
+    kTfLiteSynchronizationAttrKeyObjectTypeName = 1,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct TfLiteAttributeMap {
+    _unused: [u8; 0],
+}
+extern "C" {
+    #[doc = " Creates an attribute map.\n `type` argument determines what the attribute map is describing\n (e.g. buffer, or sync object).\n Returned object is owned by the caller."]
+    pub fn TfLiteAttributeMapCreate(type_: TfLiteAttrMapType) -> *mut TfLiteAttributeMap;
+}
+extern "C" {
+    #[doc = " Destroys the attribute map.\n Do nothing if `attrs` is nullptr."]
+    pub fn TfLiteAttributeMapDelete(attrs: *mut TfLiteAttributeMap);
+}
+extern "C" {
+    #[doc = " Returns true if `attrs` is a buffer attribute map.\n If `attrs` is nullptr, returns false."]
+    pub fn TfLiteAttributeMapIsBufferAttributeMap(attrs: *const TfLiteAttributeMap) -> bool;
+}
+extern "C" {
+    #[doc = " Returns true if `attrs` is a sync object attribute map.\n If `attrs` is nullptr, returns false."]
+    pub fn TfLiteAttributeMapIsSyncAttributeMap(attrs: *const TfLiteAttributeMap) -> bool;
+}
+extern "C" {
+    #[doc = " Copies all attributes from `src` to `dst`. Any existing attributes in `dst`\n will be cleared.\n If `src` or `dst` is null, does nothing."]
+    pub fn TfLiteAttributeMapCopy(src: *const TfLiteAttributeMap, dst: *mut TfLiteAttributeMap);
+}
+extern "C" {
+    #[doc = " Gets the int buffer attribute value for the given `key`.\n Returns false if the key is not set, `attrs` is not a buffer attribute map,\n or the value is not of type `size_t`."]
+    pub fn TfLiteAttributeMapGetSizeTBufferAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: TfLiteBufferAttrKey,
+        val: *mut usize,
+    ) -> bool;
+}
+extern "C" {
+    #[doc = " Sets the `key` buffer attribute as `val`.\n Returns false if `attrs` is not a buffer attribute map."]
+    pub fn TfLiteAttributeMapSetSizeTBufferAttr(
+        attrs: *mut TfLiteAttributeMap,
+        key: TfLiteBufferAttrKey,
+        val: usize,
+    ) -> bool;
+}
+extern "C" {
+    #[doc = " Gets the C string buffer attribute value for the given `key`.\n Returns false if the key is not set, `attrs` is not a buffer attribute map,\n or the value is not of type `size_t`.\n Returned C string's lifespan is determined by the setter of that value.\n Neither `attrs` nor the caller maintains the lifespan of the string."]
+    pub fn TfLiteAttributeMapGetStringBufferAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: TfLiteBufferAttrKey,
+        val: *mut *const ::core::ffi::c_char,
+    ) -> bool;
+}
+extern "C" {
+    #[doc = " Sets the `key` buffer attribute as `val`.\n Returns false if `attrs` is not a buffer attribute map.\n `attrs` does not own the `val` C string."]
+    pub fn TfLiteAttributeMapSetStringBufferAttr(
+        attrs: *mut TfLiteAttributeMap,
+        key: TfLiteBufferAttrKey,
+        val: *const ::core::ffi::c_char,
+    ) -> bool;
+}
+extern "C" {
+    #[doc = " Gets the bool buffer attribute value for the given `key`.\n Returns false if the key is not set, `attrs` is not a buffer attribute map,\n or the value is not of type `bool`."]
+    pub fn TfLiteAttributeMapGetBoolBufferAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: TfLiteBufferAttrKey,
+        val: *mut bool,
+    ) -> bool;
+}
+extern "C" {
+    #[doc = " Sets the `key` buffer attribute as `val`.\n Returns false if `attrs` is not a sync attribute map.\n `attrs` does not own the `val` C string."]
+    pub fn TfLiteAttributeMapSetBoolBufferAttr(
+        attrs: *mut TfLiteAttributeMap,
+        key: TfLiteBufferAttrKey,
+        val: bool,
+    ) -> bool;
+}
+extern "C" {
+    #[doc = " Gets the C string synchronization attribute value for the given `key`.\n Returns false if the key is not set, `attrs` is not a sync attribute map,\n or the value is not of type `size_t`.\n Returned C string's lifespan is determined by the setter of that value.\n Neither `attrs` nor the caller maintains the lifespan of the string."]
+    pub fn TfLiteAttributeMapGetStringSyncAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: TfLiteSynchronizationAttrKey,
+        val: *mut *const ::core::ffi::c_char,
+    ) -> bool;
+}
+extern "C" {
+    #[doc = " Sets the `key` buffer attribute as `val`.\n Returns false if `attrs` is not a sync attribute map.\n `attrs` does not own the `val` C string."]
+    pub fn TfLiteAttributeMapSetStringSyncAttr(
+        attrs: *mut TfLiteAttributeMap,
+        key: TfLiteSynchronizationAttrKey,
+        val: *const ::core::ffi::c_char,
+    ) -> bool;
+}
+extern "C" {
+    pub fn TfLiteAttributeMapGetIntAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: u32,
+        val: *mut ::core::ffi::c_int,
+    ) -> bool;
+}
+extern "C" {
+    pub fn TfLiteAttributeMapSetIntAttr(
+        attrs: *mut TfLiteAttributeMap,
+        key: u32,
+        val: ::core::ffi::c_int,
+    );
+}
+extern "C" {
+    pub fn TfLiteAttributeMapGetCustomIntAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: *const ::core::ffi::c_char,
+        val: *mut ::core::ffi::c_int,
+    ) -> bool;
+}
+extern "C" {
+    pub fn TfLiteAttributeMapSetCustomIntAttr(
+        attrs: *mut TfLiteAttributeMap,
+        key: *const ::core::ffi::c_char,
+        val: ::core::ffi::c_int,
+    );
+}
+extern "C" {
+    pub fn TfLiteAttributeMapGetSizeTAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: u32,
+        val: *mut usize,
+    ) -> bool;
+}
+extern "C" {
+    pub fn TfLiteAttributeMapSetSizeTAttr(attrs: *mut TfLiteAttributeMap, key: u32, val: usize);
+}
+extern "C" {
+    pub fn TfLiteAttributeMapGetCustomSizeTAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: *const ::core::ffi::c_char,
+        val: *mut usize,
+    ) -> bool;
+}
+extern "C" {
+    pub fn TfLiteAttributeMapSetCustomSizeTAttr(
+        attrs: *mut TfLiteAttributeMap,
+        key: *const ::core::ffi::c_char,
+        val: usize,
+    );
+}
+extern "C" {
+    pub fn TfLiteAttributeMapGetStringAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: u32,
+        val: *mut *const ::core::ffi::c_char,
+    ) -> bool;
+}
+extern "C" {
+    pub fn TfLiteAttributeMapSetStringAttr(
+        attrs: *mut TfLiteAttributeMap,
+        key: u32,
+        val: *const ::core::ffi::c_char,
+    );
+}
+extern "C" {
+    pub fn TfLiteAttributeMapGetCustomStringAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: *const ::core::ffi::c_char,
+        val: *mut *const ::core::ffi::c_char,
+    ) -> bool;
+}
+extern "C" {
+    pub fn TfLiteAttributeMapSetCustomStringAttr(
+        attrs: *mut TfLiteAttributeMap,
+        key: *const ::core::ffi::c_char,
+        val: *const ::core::ffi::c_char,
+    );
+}
+extern "C" {
+    pub fn TfLiteAttributeMapGetBoolAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: u32,
+        val: *mut bool,
+    ) -> bool;
+}
+extern "C" {
+    pub fn TfLiteAttributeMapSetBoolAttr(attrs: *mut TfLiteAttributeMap, key: u32, val: bool);
+}
+extern "C" {
+    pub fn TfLiteAttributeMapGetCustomBoolAttr(
+        attrs: *const TfLiteAttributeMap,
+        key: *const ::core::ffi::c_char,
+        val: *mut bool,
+    ) -> bool;
+}
+extern "C" {
+    pub fn TfLiteAttributeMapSetCustomBoolAttr(
+        attrs: *mut TfLiteAttributeMap,
+        key: *const ::core::ffi::c_char,
+        val: bool,
+    );
+}
+extern "C" {
+    #[doc = " Creates an async kernel to be initialized.\n `kernel_data` is the arbitrary data for identifying the async kernel itself\n and can be retrieved using `TfLiteAsyncKernelGetKernelData`.\n NOTE: TfLiteAsyncKernel does not own `kernel_data` and callers should\n ensure `kernel_data` out-lives the returned `TfLiteAsyncKernel`."]
+    pub fn TfLiteAsyncKernelCreate(kernel_data: *mut ::core::ffi::c_void)
+        -> *mut TfLiteAsyncKernel;
+}
+extern "C" {
+    #[doc = " Retrieves the kernel data for identifying the async kernel itself."]
+    pub fn TfLiteAsyncKernelGetKernelData(
+        async_kernel: *const TfLiteAsyncKernel,
+    ) -> *mut ::core::ffi::c_void;
+}
+extern "C" {
+    #[doc = " Sets the callback for registering a piece of platform-specific hardware\n buffer object.\n `kernel_data` will be the same value supplied by `TfLiteAsyncKernelCreate`.\n\n `register_buffer`:\n Registers the buffer to `handle`.\n `buffer` and `attrs` lifespan is not guaranteed after the function call\n returns.\n kernels should save the stored attributes instead of caching the\n attribute map object itself.\n `io_type` specifies whether this buffer is used as an input buffer\n or an output buffer.\n `attrs` describes the attributes of the buffer object. It's guaranteed to be\n of kTfLiteBufferAttrMap type and not null. The application must provide\n `kTfLiteBufferAttrKeyResourceTypeName` attribute. When additional attributes\n (e.g. padding, size) are provided, the backend is responsible for validating\n those attributes to be compatible.\n Once its registered, TfLite runtime will assign and populate `handle` as\n the buffer handle.\n The backend will not own the actual buffer object, but the\n backend can choose to increase the ref count if underlying implementation\n supports that."]
+    pub fn TfLiteAsyncKernelSetRegisterBuffer(
+        async_kernel: *mut TfLiteAsyncKernel,
+        register_buffer: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *mut TfLiteAsyncKernel,
+                context: *mut TfLiteOpaqueContext,
+                io_type: TfLiteIoType,
+                buffer: *const TfLiteBackendBuffer,
+                attrs: *const TfLiteAttributeMap,
+                handle: TfLiteBufferHandle,
+            ) -> TfLiteStatus,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for registering a buffer slice from previously registered\n hardware buffer object.\n\n `register_buffer_slice`:\n  Registers a buffer slice from a previously registered buffer object.\n `buffer_pool` is the handle of the buffer pool previously registered.\n `attrs` contains the information of the buffer slice.\n Once its registered, TfLite runtime will assign and populate `handle` as\n the buffer handle.\n NOTE: The backend is responsible to validate the slicing is \"valid\":\n * The slicing is not nested from another slice. (i.e. the `buffer_pool` is\n   a handle returned by `RegisterBuffer`.)\n * The attributes of the slice (e.g. size, offset) is of valid values\n   from the buffer pool."]
+    pub fn TfLiteAsyncKernelSetRegisterBufferSlice(
+        async_kernel: *mut TfLiteAsyncKernel,
+        register_buffer_slice: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *mut TfLiteAsyncKernel,
+                context: *mut TfLiteOpaqueContext,
+                buffer_pool: TfLiteBufferHandle,
+                attrs: *const TfLiteAttributeMap,
+                handle: TfLiteBufferHandle,
+            ) -> TfLiteStatus,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for unregistering a buffer handle.\n\n `unregister_buffer`:\n Unregisters a buffer or a buffer slice.\n `handle` is a buffer handle previously assigned via register_* calls.\n If the `handle` is not recognized, returns error.\n NOTE: Unregistering the buffer does not mean deallocating the buffer object.\n But the backend need to reduce the ref-count if ref counting is performed\n during buffer registration calls."]
+    pub fn TfLiteAsyncKernelSetUnregisterBuffer(
+        async_kernel: *mut TfLiteAsyncKernel,
+        unregister_buffer: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *mut TfLiteAsyncKernel,
+                context: *mut TfLiteOpaqueContext,
+                handle: TfLiteBufferHandle,
+            ) -> TfLiteStatus,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for the backend reporting supported hardware buffer object\n type names."]
+    pub fn TfLiteAsyncKernelSetSupportedBufferTypes(
+        async_kernel: *mut TfLiteAsyncKernel,
+        supported_buffer_types: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *const TfLiteAsyncKernel,
+                io_type: TfLiteIoType,
+                types: *mut *const *const ::core::ffi::c_char,
+                n_types: *mut usize,
+            ),
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for the backend reporting supported synchronization object\n type names."]
+    pub fn TfLiteAsyncKernelSetSupportedSynchronizations(
+        async_kernel: *mut TfLiteAsyncKernel,
+        supported_synchronizations: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *const TfLiteAsyncKernel,
+                io_type: TfLiteIoType,
+                types: *mut *const *const ::core::ffi::c_char,
+                n_types: *mut usize,
+            ),
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for the backend to reconcile execution environment\n attributes (e.g. buffer / synchronization object properties).\n\n `reconcile_restrictions`:\n Reconciles buffer or sync attributes for tensor at `tensor_index`.\n Fills `merged` with reconciled attributes.\n If `conflict` is provided, conflicting attributes should be provided there.\n If the type of the `user_provided_attributes` is not recognizable, returns\n error.\n If any of the attribute in the `user_provided_attributes` is not\n recognizable skip this attribute.\n Returns true if the attribute map type is recognizable and there's no\n conflicting attribute."]
+    pub fn TfLiteAsyncKernelSetReconcileRestrictions(
+        async_kernel: *mut TfLiteAsyncKernel,
+        reconcile_restrictions: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *const TfLiteAsyncKernel,
+                context: *const TfLiteOpaqueContext,
+                node: *const TfLiteOpaqueNode,
+                tensor_index: ::core::ffi::c_int,
+                user_provided_attributes: *const TfLiteAttributeMap,
+                merged: *mut TfLiteAttributeMap,
+                conflict: *mut TfLiteAttributeMap,
+            ) -> bool,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for the backend to set buffer / synchronization\n attributes.\n\n `set_attributes`:\n Sets the input / output buffer / synchronization object attributes.\n Backend kernel will check the attributes covers all the requirements.\n A typical workflow is for callers call Reconcile*Restrictions method\n above to have a merged attribute list, check all restrictions are met\n and set input / output attribute here.\n Returns kTfLiteOk if provided `attrs` covers all requirements."]
+    pub fn TfLiteAsyncKernelSetSetAttributes(
+        async_kernel: *mut TfLiteAsyncKernel,
+        set_attributes: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *mut TfLiteAsyncKernel,
+                context: *mut TfLiteOpaqueContext,
+                node: *mut TfLiteOpaqueNode,
+                tensor_index: ::core::ffi::c_int,
+                attrs: *const TfLiteAttributeMap,
+            ) -> TfLiteStatus,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for the backend to set buffer attributes.\n\n `set_buffer_attributes`:\n Sets the attributes of the buffers.\n Backend kernel will check if the provided buffer has been registered, and\n update the map in the backend, so that the callers can retrieve specific\n buffer's attributes. `attrs` should be initialized\n before calling this function and could be constructed by calling\n TfLiteAttributeMapCreate(). The attributes will be sent to backend kernels\n and stored in the map with the buffer. `buffer` and `attrs` should not be\n nullptr. The buffer needs to be registered before calling this\n function. Returns kTfLiteOk if the buffer has been registered and\n callers can successfully set the attributes for a buffer."]
+    pub fn TfLiteAsyncKernelSetSetBufferAttributes(
+        async_kernel: *mut TfLiteAsyncKernel,
+        set_buffer_attributes: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *mut TfLiteAsyncKernel,
+                buffer: *const TfLiteBackendBuffer,
+                attrs: *const TfLiteAttributeMap,
+            ) -> TfLiteStatus,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for the backend to get buffer attributes.\n\n `get_buffer_attributes`:\n Gets the attributes of the buffers.\n Backend kernel will check if the provided buffer has been registered, and\n get the corresponding attributes from the map. `attrs` should be initialized\n before calling this function and could be constructed by calling\n TfLiteAttributeMapCreate(). `attrs` will be used to store the attributes\n obtained from the backend kernel. If `attrs` is a non-empty map, it will be\n overwritten by the attributes of the buffer. `buffer` and `attrs` should not\n be nullptr. The buffer needs to be registered before calling this function.\n Returns kTfLiteOk if the buffer has been registered and callers can\n successfully get the attributes for a buffer."]
+    pub fn TfLiteAsyncKernelSetGetBufferAttributes(
+        async_kernel: *mut TfLiteAsyncKernel,
+        get_buffer_attributes: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *mut TfLiteAsyncKernel,
+                buffer: *const TfLiteBackendBuffer,
+                attrs: *mut TfLiteAttributeMap,
+            ) -> TfLiteStatus,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback to prepare the kernels using the information from\n `set_attributes` calls."]
+    pub fn TfLiteAsyncKernelSetPrepare(
+        async_kernel: *mut TfLiteAsyncKernel,
+        prepare: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *mut TfLiteAsyncKernel,
+                context: *mut TfLiteOpaqueContext,
+                node: *mut TfLiteOpaqueNode,
+            ) -> TfLiteStatus,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for the backend to schedule an execution.\n\n `eval`:\n Schedules an execution with the information provided in task.\n The application is responsible for filling out buffer and sync mappings\n to tensors.\n Backend will set the sync ptr for related tensors if requested.\n i.e. SetOutputAttributes has sync implementation requested, and\n the TfLiteSynchronization is not null for the tensor in `task`.\n\n TfLite runtime guarantees that the task is in ready state (i.e. no\n un-ended execution for this task).\n\n Input synchronizations:\n If the synchronization of a input tensor is `kTfLiteSyncTypeNoSyncObj`\n type or it's nullptr, it means the data is ready during Eval call.\n If not, data will be available when the synchronization signals and the\n backend is responsible for closing the underlying synchronization.\n The backend is responsible for dedupping the input sync.\n\n Output synchronizations:\n If the synchronization type is `kTfLiteSyncTypeNoSyncObj` or is nullptr,\n the backend does not need to provide synchronization objects to the user.\n Otherwise, the backend need to provide the sync according to the sync type\n provided. The underlying sync object will be closed by the app (or\n downstream components).\n If there are multiple non-nullptr kTfLiteSynchronization provided for\n different output tensors, the backend is responsible for duplicating the\n synchronization."]
+    pub fn TfLiteAsyncKernelSetEval(
+        async_kernel: *mut TfLiteAsyncKernel,
+        eval: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *mut TfLiteAsyncKernel,
+                context: *mut TfLiteOpaqueContext,
+                node: *mut TfLiteOpaqueNode,
+                task: *mut TfLiteExecutionTask,
+            ) -> TfLiteStatus,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for the backend to wait for a specific execution.\n\n `wait`:\n Waits on the execution scheduled using the task to finish.\n TfLite runtime guarantees that the task has an un-ended execution.\n Callers should be able to call `Wait` on the same task from multiple\n threads, and those calls should return the same status (i.e. if the backend\n failed to successfully wait on the task, all `Wait` to the task should\n return the same error before a new invocation is scheduled). Returns\n kTfLiteOk if the task is finished (w/ or w/o blocking)."]
+    pub fn TfLiteAsyncKernelSetWait(
+        async_kernel: *mut TfLiteAsyncKernel,
+        wait: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *mut TfLiteAsyncKernel,
+                context: *mut TfLiteOpaqueContext,
+                task: *mut TfLiteExecutionTask,
+            ) -> TfLiteStatus,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Sets the callback for the backend to finish an execution and release all\n intermediate resources.\n\n `finish`:\n Finishes the task and clean up allocated resources for the task.\n May block if there's pending executions.\n This function will be called once and only once for individual task.\n Returns kTfLiteOk if there's no error. The backend is responsible to\n clean up task resources regardless there's error or not."]
+    pub fn TfLiteAsyncKernelSetFinish(
+        async_kernel: *mut TfLiteAsyncKernel,
+        finish: ::core::option::Option<
+            unsafe extern "C" fn(
+                async_kernel: *mut TfLiteAsyncKernel,
+                context: *mut TfLiteOpaqueContext,
+                task: *mut TfLiteExecutionTask,
+            ) -> TfLiteStatus,
+        >,
+    );
+}
+extern "C" {
+    #[doc = " Releases `kernel`.\n Does not release `kernel_data`."]
+    pub fn TfLiteAsyncKernelDelete(kernel: *mut TfLiteAsyncKernel);
+}
+extern "C" {
+    #[doc = " Sets the buffer handle to the input / output tensor associated with\n `tensor_signature_name`.\n `task` and `tensor_signature_name` must not be nullptr.\n Returns kTfLiteError if the tensor is not found or nullptr args."]
+    pub fn TfLiteExecutionTaskSetBuffer(
+        task: *mut TfLiteExecutionTask,
+        io_type: TfLiteIoType,
+        tensor_signature_name: *const ::core::ffi::c_char,
+        handle: TfLiteBufferHandle,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Sets the buffer handle to the input / output tensor associated with the\n tensor index.\n NOTE: This method does not check tensor index is pointing to a valid tensor.\n Caller need to make sure the tensor_index points to a valid tensor by\n using the element from AsyncSignatureRunner inputs / outputs array."]
+    pub fn TfLiteExecutionTaskSetBufferByIndex(
+        task: *mut TfLiteExecutionTask,
+        tensor_index: ::core::ffi::c_int,
+        handle: TfLiteBufferHandle,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Returns the buffer handle of the input / output tensor associated with\n `tensor_signature_name`.\n `task` and `tensor_signature_name` must not be nullptr.\n Returns kTfLiteNullBufferHandle if the tensor is not found or null input."]
+    pub fn TfLiteExecutionTaskGetBufferByName(
+        task: *const TfLiteExecutionTask,
+        io_type: TfLiteIoType,
+        tensor_signature_name: *const ::core::ffi::c_char,
+    ) -> TfLiteBufferHandle;
+}
+extern "C" {
+    #[doc = " The same as `TfLiteExecutionTaskGetBufferByName` but takes tensor index\n instead of the name from signature."]
+    pub fn TfLiteExecutionTaskGetBufferByIndex(
+        task: *const TfLiteExecutionTask,
+        tensor_index: ::core::ffi::c_int,
+    ) -> TfLiteBufferHandle;
+}
+extern "C" {
+    #[doc = " Sets the opaque sync object to the input / output tensor associated with\n `tensor_signature_name`.\n `task` and `tensor_signature_name` must not be nullptr.\n A nullptr `sync` esentially means the tensor data does not need\n synchronization.\n `task` does not take the ownership of `sync`, so caller needs to release\n `sync` when destroying the `task` with AsyncSignatureRunner::Finish.\n Returns kTfLiteError if the tensor is not found."]
+    pub fn TfLiteExecutionTaskSetSync(
+        task: *mut TfLiteExecutionTask,
+        io_type: TfLiteIoType,
+        tensor_signature_name: *const ::core::ffi::c_char,
+        sync: *mut TfLiteSynchronization,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Sets the opaque sync object to the input / output tensor associated with the\n tensor index.\n NOTE: This method does not check tensor index is pointing to a\n valid tensor. Caller need to make sure the tensor_index points to a valid\n tensor by using the element from AsyncSignatureRunner inputs / outputs\n array."]
+    pub fn TfLiteExecutionTaskSetSyncByIndex(
+        task: *mut TfLiteExecutionTask,
+        tensor_index: ::core::ffi::c_int,
+        sync: *mut TfLiteSynchronization,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Returns the sync object of the input / output tensor associated with\n `tensor_signature_name`.\n `task` and `tensor_signature_name` must not be nullptr.\n Returns nullptr if the tensor is not found or null input."]
+    pub fn TfLiteExecutionTaskGetSyncByName(
+        task: *const TfLiteExecutionTask,
+        io_type: TfLiteIoType,
+        tensor_signature_name: *const ::core::ffi::c_char,
+    ) -> *mut TfLiteSynchronization;
+}
+extern "C" {
+    #[doc = " The same as `TfLiteExecutionTaskGetSyncByName` but takes tensor index\n instead of the name from signature."]
+    pub fn TfLiteExecutionTaskGetSyncByIndex(
+        task: *const TfLiteExecutionTask,
+        tensor_index: ::core::ffi::c_int,
+    ) -> *mut TfLiteSynchronization;
+}
+extern "C" {
+    #[doc = " Task execution data\n Backends may store task specific data for executions. This ease the burden\n for backends to maintain the mapping across different tasks."]
+    pub fn TfLiteExecutionTaskGetDelegateExecutionData(
+        task: *const TfLiteExecutionTask,
+        kernel: *mut TfLiteAsyncKernel,
+    ) -> *mut ::core::ffi::c_void;
+}
+extern "C" {
+    pub fn TfLiteExecutionTaskSetDelegateExecutionData(
+        task: *mut TfLiteExecutionTask,
+        kernel: *mut TfLiteAsyncKernel,
+        data: *mut ::core::ffi::c_void,
+    );
+}
+extern "C" {
+    #[doc = " Task status\n Thread safe accessors for the latest status of the task."]
+    pub fn TfLiteExecutionTaskGetStatus(task: *const TfLiteExecutionTask) -> TfLiteStatus;
+}
+extern "C" {
+    pub fn TfLiteExecutionTaskSetStatus(task: *mut TfLiteExecutionTask, status: TfLiteStatus);
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct TfLiteAsyncSignatureRunner {
+    _unused: [u8; 0],
+}
+extern "C" {
+    #[doc = " Returns a new async signature runner using the provided interpreter and\n signature key, or nullptr on failure.\n\n NOTE: `signature_key` is a null-terminated C string that must match the\n key of a signature in the interpreter's model.\n\n NOTE: The returned signature runner should be destroyed, by calling\n TfLiteAsyncSignatureRunnerDelete(), before the interpreter is destroyed.\n\n WARNING: This is an experimental API and subject to change."]
+    pub fn TfLiteInterpreterGetAsyncSignatureRunner(
+        interpreter: *const TfLiteInterpreter,
+        signature_key: *const ::core::ffi::c_char,
+    ) -> *mut TfLiteAsyncSignatureRunner;
+}
+extern "C" {
+    #[doc = " Registers a TfLiteBackendBuffer to the backend.\n `async_signature_runner`, `buffer`, `attrs` and `handle` should be non-null.\n If the hardware buffer wrapped in `buffer` is successfully registered,\n `handle` will be filled with a new buffer handle. Caller can use the buffer\n handle as input / output buffer in `TfLiteExecutionTask`.\n Returns kTfLiteError if the registration failed."]
+    pub fn TfLiteAsyncSignatureRunnerRegisterBuffer(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+        io_type: TfLiteIoType,
+        buffer: *const TfLiteBackendBuffer,
+        attrs: *const TfLiteAttributeMap,
+        handle: *mut TfLiteBufferHandle,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Registers a buffer slice from a previously registered handle `buffer_pool`.\n `async_signature_runner`, `attrs` and `handle` should be non-null.\n If the buffer slice described by `attrs` is successfully registered,\n output `handle` will be filled with a new buffer handle value.\n NOTE: `attrs` should contain the information about the buffer slice,\n e.g. offset and size of the size (if applicable).\n Returns kTfLiteError if the registration failed."]
+    pub fn TfLiteAsyncSignatureRunnerRegisterBufferSlice(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+        buffer_pool: TfLiteBufferHandle,
+        attrs: *const TfLiteAttributeMap,
+        handle: *mut TfLiteBufferHandle,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Unregisters a hardware buffer object (or buffer slice) with `handle`.\n Buffer slices should be unregistered before unregistering the buffer pool\n it belongs to.\n Returns kTfLiteError if `handle` is not recognized."]
+    pub fn TfLiteAsyncSignatureRunnerUnregisterBuffer(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+        handle: TfLiteBufferHandle,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Returns supported platform-specific hardware buffer types.\n\n Output `types` will be a array of C strings that can be used as the\n value of `kTfLiteBufferAttrKeyResourceTypeName`.\n Output `num_types` is the size of the `types` array, and can be used to\n access elements in `types`.\n\n NOTE: The lifetime of the returned array is the same as (and depends on) the\n lifetime of `signature_runner`."]
+    pub fn TfLiteAsyncSignatureRunnerGetSupportedBufferTypes(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+        io_type: TfLiteIoType,
+        types: *mut *const *const ::core::ffi::c_char,
+        num_types: *mut usize,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Returns supported platform-specific synchronization object types.\n\n Output `types` will be a array of C strings that can be used as the\n value of `kTfLiteSynchronizationAttrKeyObjectTypeName`.\n Output `num_types` is the size of the `types` array, and can be used to\n access elements in `types`.\n\n NOTE: The lifetime of the returned array is the same as (and depends on) the\n lifetime of `signature_runner`."]
+    pub fn TfLiteAsyncSignatureRunnerGetSupportedSynchronizationTypes(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+        io_type: TfLiteIoType,
+        types: *mut *const *const ::core::ffi::c_char,
+        num_types: *mut usize,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Reconciles restrictions with the backend for I/O tensor called `name`.\n The backend will read `user_provided_attributes` and tries to reconcile\n those attributes. The backend will also populate its own restrictions\n back to the caller.\n The merged attributes will be populated to `merged`. For attributes that\n the backend does not know or not care about, those will also be copied to\n `merged` attributes.\n If there's a conflicting attribute, it will be populated to `conflict` if\n it's provided.\n `user_provided_attributes` and `merged` should not be nullptr.\n Returns true if the reconcilation succeeded and there's no\n conflicting attributes."]
+    pub fn TfLiteAsyncSignatureRunnerReconcileRestrictions(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+        io_type: TfLiteIoType,
+        name: *const ::core::ffi::c_char,
+        user_provided_attributes: *const TfLiteAttributeMap,
+        merged: *mut TfLiteAttributeMap,
+        conflict: *mut TfLiteAttributeMap,
+    ) -> bool;
+}
+extern "C" {
+    #[doc = " Reconciles restrictions with the backend for I/O tensor at `tensor_index`.\n The backend will read `user_provided_attributes` and tries to reconcile\n those attributes. The backend will also populate its own restrictions\n back to the caller.\n The merged attributes will be populated to `merged`. For attributes that\n the backend does not know or not care about, those will also be copied to\n `merged` attributes.\n If there's a conflicting attribute, it will be populated to `conflict` if\n it's provided.\n `user_provided_attributes` and `merged` should not be nullptr.\n Returns true if the reconcilation succeeded and there's no\n conflicting attributes."]
+    pub fn TfLiteAsyncSignatureRunnerReconcileRestrictionsByIndex(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+        tensor_index: ::core::ffi::c_int,
+        user_provided_attributes: *const TfLiteAttributeMap,
+        merged: *mut TfLiteAttributeMap,
+        conflict: *mut TfLiteAttributeMap,
+    ) -> bool;
+}
+extern "C" {
+    #[doc = " Finalizes I/O tensor `name`'s attributes with `attrs`.\n The attributes will be forwarded to all backend kernels that depends on\n tensor. Must call `TfLiteAsyncSignatureRunnerPrepareBackends` after setting\n new attributes.\n Callers needs to ensure the lifetime of `name` and `attrs` before this\n function returns, and those may be deallocated afterwards.\n Returns true if all backends accept the `attrs`."]
+    pub fn TfLiteAsyncSignatureRunnerSetAttributes(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+        io_type: TfLiteIoType,
+        name: *const ::core::ffi::c_char,
+        attrs: *const TfLiteAttributeMap,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Finalizes I/O tensor at `tensor_index`'s attributes with `attrs`.\n The attributes will be forwarded to all backend kernels that depends on\n tensor. Must call `TfLiteAsyncSignatureRunnerPrepareBackends` after setting\n new attributes.\n Callers needs to ensure the lifetime of `name` and `attrs` before this\n function returns, and those may be deallocated afterwards.\n Returns true if all backends accept the `attrs`."]
+    pub fn TfLiteAsyncSignatureRunnerSetAttributesByIndex(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+        tensor_index: ::core::ffi::c_int,
+        attrs: *const TfLiteAttributeMap,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Prepares delegate backends for execution.\n Must be called after `TfLiteAsyncSignatureRunnerSetAttributes` and before\n `TfLiteAsyncSignatureRunnerCreateTask`."]
+    pub fn TfLiteAsyncSignatureRunnerPrepareBackends(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Creates an execution task for this signature.\n Must be called after `TfLiteAsyncSignatureRunnerPrepareBackends` otherwise\n returns nullptr.\n When creating a task, all intermediate resources will be allocated\n for this task.\n Caller owns the returned task and must release it by calling\n `TfLiteAsyncSignatureRunnerFinish`.\n Returns nullptr if the task allocation failed."]
+    pub fn TfLiteAsyncSignatureRunnerCreateTask(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+    ) -> *mut TfLiteExecutionTask;
+}
+extern "C" {
+    #[doc = " Schedules an asynchronous execution with I/O information\n provided in `task`.\n `task` should not be nullptr.\n\n NOTE: For the same `task`,\n `Wait` and `InvokeAsync` should be called in pairs, unless `Finish(task)` is\n called and `task` is freed. The application is responsible\n to call `Wait` after `InvokeAsync` even if all output tensors are associated\n with synchronizations.\n\n Returns kTfLiteError if any backend kernels failed to schedule\n the execution."]
+    pub fn TfLiteAsyncSignatureRunnerInvokeAsync(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+        task: *mut TfLiteExecutionTask,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Blocks and wait for execution tied to `task` to finish.\n `task` should not be nullptr.\n Can be called from multiple threads. All calls will block until the\n task finishes execution.\n\n NOTE: For the same `task`,\n `Wait` and `InvokeAsync` should be called in pairs, unless `Finish(task)` is\n called and `task` is freed. The application is responsible\n to call `Wait` after `InvokeAsync` even if all output tensors are associated\n with synchronizations.\n If `TfLiteAsyncSignatureRunnerWait` is called without a matching call to\n `TfLiteAsyncSignatureRunnerInvokeAsync`, returns the latest status code (by\n default `kTfLiteOk`).\n\n Returns kTfLiteError if any backends failed to finish the execution.\n If the task is currently idle, it will return its latest status code."]
+    pub fn TfLiteAsyncSignatureRunnerWait(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+        task: *mut TfLiteExecutionTask,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Finishes the task and release all intermediate resources tied to\n this task. Must be called exactly once for each `task` object.\n If there's ongoing execution, this will block wait for the execution\n to finish.\n `task` should not be nullptr and will be deleted.\n NOTE: Caller needs to ensure `Finish` is not called concurrently with\n `InvokeAsync` or `Wait`.\n Returns kTfLiteError if fails to release the task. The task will be\n destroyed regardless of error or not."]
+    pub fn TfLiteAsyncSignatureRunnerFinish(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+        task: *mut TfLiteExecutionTask,
+    ) -> TfLiteStatus;
+}
+extern "C" {
+    #[doc = " Returns the number of input tensors associated with the signature."]
+    pub fn TfLiteAsyncSignatureRunnerGetInputCount(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+    ) -> usize;
+}
+extern "C" {
+    #[doc = " Returns the (null-terminated) name of the Nth input in a signature, where N\n is specified as `input_index`.\n\n NOTE: The lifetime of the returned name is the same as (and depends on) the\n lifetime of `async_signature_runner`."]
+    pub fn TfLiteAsyncSignatureRunnerGetInputName(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+        input_index: i32,
+    ) -> *const ::core::ffi::c_char;
+}
+extern "C" {
+    #[doc = " Returns the number of output tensors associated with the signature."]
+    pub fn TfLiteAsyncSignatureRunnerGetOutputCount(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+    ) -> usize;
+}
+extern "C" {
+    #[doc = " Returns the (null-terminated) name of the Nth output in a signature, where\n N is specified as `output_index`.\n\n NOTE: The lifetime of the returned name is the same as (and depends on) the\n lifetime of `async_signature_runner`."]
+    pub fn TfLiteAsyncSignatureRunnerGetOutputName(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+        output_index: i32,
+    ) -> *const ::core::ffi::c_char;
+}
+extern "C" {
+    #[doc = " Returns the input tensor metadata identified by `input_name` in the given\n signature.\n Returns nullptr if the given name is not valid.\n\n NOTE: For AsyncSignatureRunner, tensor data are not stored within\n `TfLiteOpaqueTensors` but in platform-specific hardware buffer objects.\n This method is only used for accessing the metadata like shape and data type\n of the input tensors.\n\n NOTE: The lifetime of the returned tensor is the same as (and depends on)\n the lifetime of `async_signature_runner`."]
+    pub fn TfLiteAsyncSignatureRunnerGetInputTensor(
+        async_signature_runner: *mut TfLiteAsyncSignatureRunner,
+        input_name: *const ::core::ffi::c_char,
+    ) -> *const TfLiteOpaqueTensor;
+}
+extern "C" {
+    #[doc = " Returns the output tensor metadata identified by `output_name` in the given\n signature.\n Returns nullptr if the given name is not valid.\n\n Note: For AsyncSignatureRunner, tensor data are not stored within\n `TfLiteOpaqueTensors` but in platform-specific hardware buffer objects.\n This method is only used for accessing the metadata like shape and data type\n of the output tensors.\n\n NOTE: The lifetime of the returned tensor is the same as (and depends on)\n the lifetime of `async_signature_runner`.\n\n NOTE: The lifetime of the returned tensor is the same as (and depends on)\n the lifetime of `async_signature_runner`."]
+    pub fn TfLiteAsyncSignatureRunnerGetOutputTensor(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+        output_name: *const ::core::ffi::c_char,
+    ) -> *const TfLiteOpaqueTensor;
+}
+extern "C" {
+    #[doc = " Destroys the async signature runner."]
+    pub fn TfLiteAsyncSignatureRunnerDelete(signature_runner: *mut TfLiteAsyncSignatureRunner);
+}
+extern "C" {
+    #[doc = " Returns a pointer to an array of input tensor indices.  The length of the\n array can be obtained via a call to\n `TfLiteAsyncSignatureRunnerGetInputCount`.\n\n NOTE: The lifetime of the returned tensor is the same as (and depends on)\n the lifetime of `async_signature_runner`."]
+    pub fn TfLiteAsyncSignatureRunnerInputTensorIndices(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+    ) -> *const ::core::ffi::c_int;
+}
+extern "C" {
+    #[doc = " Returns a pointer to an array of output tensor indices.  The length of the\n array can be obtained via a call to\n `TfLiteAsyncSignatureRunnerGetOutputCount`.\n\n NOTE: The lifetime of the returned tensor is the same as (and depends on)\n the lifetime of `async_signature_runner`."]
+    pub fn TfLiteAsyncSignatureRunnerOutputTensorIndices(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+    ) -> *const ::core::ffi::c_int;
+}
+extern "C" {
+    #[doc = " Returns the tensor metadata identified by `index` in the given\n signature.\n Returns nullptr if the given index is not valid or out of bound.\n\n NOTE: For AsyncSignatureRunner, tensor data are not stored within\n `TfLiteOpaqueTensors` but in platform-specific hardware buffer objects.\n This method is only used for accessing the metadata like shape and data type\n of the input tensors.\n\n NOTE: The lifetime of the returned tensor is the same as (and depends on)\n the lifetime of `async_signature_runner`."]
+    pub fn TfLiteAsyncSignatureRunnerGetTensor(
+        async_signature_runner: *const TfLiteAsyncSignatureRunner,
+        index: ::core::ffi::c_int,
+    ) -> *const TfLiteOpaqueTensor;
 }
 #[repr(C)]
 #[derive(Copy, Clone)]

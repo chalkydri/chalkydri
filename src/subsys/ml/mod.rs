@@ -5,20 +5,24 @@
 use std::io::{Read, Write};
 
 use crate::Subsystem;
-use tfledge::Model;
+use tfledge::{Interpreter, Model};
 
-use self::model::Model;
 
-pub struct MlSubsys<'subsys> {
-    int: Interpreter<'subsys>,
+pub struct MlSubsys {
+    int: Interpreter,
 }
-impl<'subsys> Subsystem<'subsys> for MlSubsys<'subsys> {
-    fn init() -> Result<Box<Self>, Box<dyn std::error::Error>> {
-        let m = Model::from_file("Note_Detector.tflite");
+impl Subsystem for MlSubsys {
+    async fn init() -> Result<Self, Box<dyn std::error::Error>> {
+        let m = Model::from_file("Note_Detector.tflite").unwrap();
 
         let d = tfledge::list_devices().next().unwrap();
+
+        Ok(Self { int: Interpreter::new(m, d).unwrap() })
     }
-    fn run(&self, rt: tokio::runtime::Runtime) {
-        let _g = rt.enter();
+    async fn run(&self) {
+        //
+    }
+    async fn shutdown(self) {
+        //
     }
 }
