@@ -8,6 +8,27 @@ use std::{
 
 use rayon::iter::{ParallelBridge, ParallelIterator};
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Color {
+    Black,
+    White,
+    Other,
+}
+impl Color {
+    #[inline(always)]
+    pub fn is_black(&self) -> bool {
+        *self == Color::Black
+    }
+    #[inline(always)]
+    pub fn is_white(&self) -> bool {
+        *self == Color::White
+    }
+    #[inline(always)]
+    pub fn is_good(&self) -> bool {
+        *self != Color::Other
+    }
+}
+
 /// Calculate buffer index for an x and y, given an image width
 ///
 /// # Safety
@@ -60,7 +81,7 @@ fn fast_angle(p: u8) -> f32 {
 }
 
 struct DetectorBufs {
-    buf: *mut bool,
+    buf: *mut Color,
     points: *mut (usize, usize),
 }
 unsafe impl Send for DetectorBufs {}
@@ -78,7 +99,7 @@ impl Detector {
     // Initialize a new detector for the specified dimensions
     pub fn new(width: usize, height: usize) -> Self {
         unsafe {
-            let buf: *mut bool = alloc(Layout::array::<bool>(width * height).unwrap()).cast();
+            let buf: *mut Color = alloc(Layout::array::<Color>(width * height).unwrap()).cast();
             let points: *mut (usize, usize) =
                 alloc(Layout::array::<(usize, usize)>(width * height).unwrap()).cast();
             let points_len = AtomicUsize::new(0);
@@ -123,6 +144,7 @@ impl Detector {
             self.thresh(input);
         }
         self.points_len.store(0, Ordering::SeqCst);
+        self.lines.clear();
 
         //for x in 3..=self.width - 3 {
         //    for y in 3..=self.height - 3 {
@@ -140,10 +162,8 @@ impl Detector {
             }
         });
 
-        dbg!(self.points_len.load(Ordering::SeqCst));
-
         self.find_quads();
-        self.draw();
+        //self.draw();
     }
 
     /// Threshold an input RGB buffer
@@ -159,7 +179,13 @@ impl Detector {
             let gray = grayscale(input.get_unchecked((i * 3)..(i * 3) + 3));
 
             // 60 is a "kinda works" value because I haven't implemented the algorithm
-            *self.bufs.buf.add(i) = gray < 60;
+            if gray < 60 {
+                *self.bufs.buf.add(i) = Color::Black;
+            } else if gray > 160 {
+                *self.bufs.buf.add(i) = Color::White;
+            } else {
+                *self.bufs.buf.add(i) = Color::Other;
+            }
         }
     }
 
@@ -180,7 +206,7 @@ impl Detector {
         // Get binary value of pixel at (x,y)
         let p = *buf.add(px(x, y, width));
 
-        if p {
+        if p == Color::Black {
             let (up_left, up_right, down_left, down_right) = (
                 *buf.add(px(x - 1, y - 1, width)),
                 *buf.add(px(x + 1, y - 1, width)),
@@ -188,7 +214,7 @@ impl Detector {
                 *buf.add(px(x + 1, y + 1, width)),
             );
 
-            let clean = up_left ^ up_right ^ down_left ^ down_right;
+            let clean = up_left.is_black() ^ up_right.is_black() ^ down_left.is_black() ^ down_right.is_black();
 
             if clean {
                 // Furthest top right
@@ -200,7 +226,7 @@ impl Detector {
                 // Furthest top left
                 let p15 = *buf.add(px(x - 3, y - 3, width));
 
-                if p3 ^ p7 ^ p11 ^ p15 {
+                if (p3.is_good() && p7.is_good() && p11.is_good() && p15.is_good()) && (p3.is_black() ^ p7.is_black() ^ p11.is_black() ^ p15.is_black()) {
                     // Furthest top center
                     let p1 = *buf.add(px(x, y - 3, width));
                     // Furthest middle right
@@ -210,16 +236,10 @@ impl Detector {
                     // Furthest middle left
                     let p13 = *buf.add(px(x - 3, y, width));
 
-                    if (p1 && p5 && p3 && !p7 && !p11 && !p15)
-                        || (p5 && p9 && !p3 && p7 && !p11 && !p15)
-                        || (p9 && p13 && !p3 && !p7 && p11 && !p15)
-                        || (p13 && p1 && !p3 && !p7 && !p11 && p15)
-                    {
-                        *self
-                            .bufs
-                            .points
-                            .add(self.points_len.fetch_add(1, Ordering::SeqCst)) = (x, y);
-                    }
+                    *self
+                        .bufs
+                        .points
+                        .add(self.points_len.fetch_add(1, Ordering::SeqCst)) = (x, y);
                 }
             }
         }
@@ -243,19 +263,15 @@ impl Detector {
                         (x2 as f32 - x1 as f32).powf(2.0) + (y2 as f32 - y1 as f32).powf(2.0),
                     );
                     if distance > 0.0 {
-                        //lines.push(distance as u32);
                         if !self.lines.contains(&(x2, y2, x1, y1)) {
                             self.lines.push((x1, y1, x2, y2).clone());
                         }
-                        //println!("({x1}, {y1}) ({x2}, {y2}) => {distance}");
                     }
                 }
             }
         }
 
         self.lines.sort();
-
-        //println!("{:#?} {}", self.lines, self.lines.len());
     }
 
     fn draw(&self) {

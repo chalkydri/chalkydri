@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use image::EncodableLayout;
 
@@ -14,11 +14,13 @@ fn main() {
     let mut det = chalkydri_apriltags::myalgo::Detector::new(1080, 720);
     println!("{:?}", st.elapsed());
 
-    for _ in 0..1 {
+    let mut total = Duration::default();
+    for _ in 0..1_000 {
         let st = Instant::now();
         det.process_frame(img);
-        println!("{:?}", st.elapsed());
+        total += st.elapsed();
     }
+    println!("{:?}", total / 1_000);
 
     drop(det);
 
