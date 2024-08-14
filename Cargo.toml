@@ -33,7 +33,7 @@ serde_json = "1"
 fastrand = "2.1.0"
 
 [workspace]
-members = ["crates/chalkydri-apriltags", "crates/chalkydri-calibration", "crates/chalkydri-core", "crates/chalkydri-dbscan", "crates/chalkydri-tfledge", "crates/minint"]
+members = ["crates/chalkydri-apriltags", "crates/chalkydri-tfledge", "crates/minint"]
 
 [profile.dev.package.'*']
 opt-level = 3

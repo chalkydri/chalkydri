@@ -121,11 +121,6 @@ impl Detector {
         }
     }
 
-    pub fn calc_bradley(&mut self, input: &[u8]) {
-        const CTX_SIZE: usize = 9;
-        for i in 0..CTX_SIZE - 1 {}
-    }
-
     /// Calculate otsu value
     pub fn calc_otsu(&mut self, input: &[u8]) {
         let mut i = 0usize;
@@ -281,10 +276,8 @@ impl Detector {
             )
         };
 
-        let mut quads: Vec<Vec<(usize, usize)>> = Vec::new();
         let mut hull: Vec<(usize, usize)> = PresentWrapper::find_convex_hull(points);
-        //
-        //println!("{hull:?}");
+
         for p in hull {
             self.lines.push((p.0, p.1, p.0, p.1));
         }
