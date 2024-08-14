@@ -1,12 +1,15 @@
-use ril::{Line, Rgb};
+use ril::{gradient::RadialGradientFill, Line, RadialGradient, Rgb};
 use std::{
     alloc::{alloc, dealloc, Layout},
     ops::RangeBounds,
+    simd::usizex4,
     sync::atomic::{AtomicUsize, Ordering},
     time::Instant,
 };
 
 use rayon::iter::{ParallelBridge, ParallelIterator};
+
+use crate::utils::PresentWrapper;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Color {
@@ -15,14 +18,17 @@ pub enum Color {
     Other,
 }
 impl Color {
+    /// Whether the color is black (like the tag markings)
     #[inline(always)]
     pub fn is_black(&self) -> bool {
         *self == Color::Black
     }
+    /// Whether the color is white (like the paper)
     #[inline(always)]
     pub fn is_white(&self) -> bool {
         *self == Color::White
     }
+    /// Whether the color is relevant to tag detection
     #[inline(always)]
     pub fn is_good(&self) -> bool {
         *self != Color::Other
@@ -99,6 +105,7 @@ impl Detector {
     // Initialize a new detector for the specified dimensions
     pub fn new(width: usize, height: usize) -> Self {
         unsafe {
+            // Allocate
             let buf: *mut Color = alloc(Layout::array::<Color>(width * height).unwrap()).cast();
             let points: *mut (usize, usize) =
                 alloc(Layout::array::<(usize, usize)>(width * height).unwrap()).cast();
@@ -114,22 +121,38 @@ impl Detector {
         }
     }
 
+    pub fn calc_bradley(&mut self, input: &[u8]) {
+        const CTX_SIZE: usize = 9;
+        for i in 0..CTX_SIZE - 1 {}
+    }
+
     /// Calculate otsu value
-    pub fn calc_otsu(&mut self, buf: &[u8]) {
-        let end = buf.len() - 1;
+    pub fn calc_otsu(&mut self, input: &[u8]) {
         let mut i = 0usize;
         let mut hist = [0usize; 256];
-        let st = Instant::now();
 
-        while i < end {
+        // Calculate histogram
+        for i in 0..self.width * self.height {
             unsafe {
-                let pix = hist.get_unchecked_mut(*buf.get_unchecked(i) as usize);
+                // Red, green, and blue are each represent with 1 byte
+                let gray = grayscale(input.get_unchecked((i * 3)..(i * 3) + 3));
+
+                let pix = hist.get_unchecked_mut(*input.get_unchecked(i) as usize);
                 *pix = (*pix).unchecked_add(1);
-                i = i.unchecked_add(3);
             }
         }
 
-        println!("{:?} {i}", st.elapsed());
+        let mut sum = 0u32;
+        let mut sum_b = 0u32;
+        let mut var_max = 0f64;
+        let mut thresh = 0u8;
+
+        //for t in 0..256 {
+        //    sum += t as u32 * hist[t];
+
+        //    let w_b =
+
+        //println!("{:?} {i}", st.elapsed());
     }
 
     /// Process an RGB frame
@@ -169,7 +192,6 @@ impl Detector {
     /// Threshold an input RGB buffer
     ///
     /// # Safety
-    ///
     /// `input` is treated as an RGB buffer, even if it isn't.
     /// The caller should check that `input` is an RGB buffer.
     #[inline(always)]
@@ -195,7 +217,6 @@ impl Detector {
     /// times for each frame.
     ///
     /// # Safety
-    ///
     /// (`x`, `y`) is assumed to be a valid pixel coord.
     /// The caller should make sure of this.
     #[inline(always)]
@@ -206,7 +227,7 @@ impl Detector {
         // Get binary value of pixel at (x,y)
         let p = *buf.add(px(x, y, width));
 
-        if p == Color::Black {
+        if p.is_black() {
             let (up_left, up_right, down_left, down_right) = (
                 *buf.add(px(x - 1, y - 1, width)),
                 *buf.add(px(x + 1, y - 1, width)),
@@ -214,7 +235,10 @@ impl Detector {
                 *buf.add(px(x + 1, y + 1, width)),
             );
 
-            let clean = up_left.is_black() ^ up_right.is_black() ^ down_left.is_black() ^ down_right.is_black();
+            let clean = up_left.is_black()
+                ^ up_right.is_black()
+                ^ down_left.is_black()
+                ^ down_right.is_black();
 
             if clean {
                 // Furthest top right
@@ -226,7 +250,9 @@ impl Detector {
                 // Furthest top left
                 let p15 = *buf.add(px(x - 3, y - 3, width));
 
-                if (p3.is_good() && p7.is_good() && p11.is_good() && p15.is_good()) && (p3.is_black() ^ p7.is_black() ^ p11.is_black() ^ p15.is_black()) {
+                if (p3.is_good() && p7.is_good() && p11.is_good() && p15.is_good())
+                    && (p3.is_black() ^ p7.is_black() ^ p11.is_black() ^ p15.is_black())
+                {
                     // Furthest top center
                     let p1 = *buf.add(px(x, y - 3, width));
                     // Furthest middle right
@@ -246,6 +272,7 @@ impl Detector {
     }
 
     /// Find quadrilaterals
+    #[inline(always)]
     fn find_quads(&mut self) {
         let points = unsafe {
             core::slice::from_raw_parts(
@@ -254,29 +281,19 @@ impl Detector {
             )
         };
 
-        for &(x1, y1) in points {
-            for &(x2, y2) in points.into_iter().filter(|(x2, y2)| x1 != *x2 && y1 != *y2) {
-                if (x1 as i32 - 200..=x1 as i32 + 200).contains(&(x2 as i32))
-                    ^ (y1 as i32 - 200..=y1 as i32 + 200).contains(&(y2 as i32))
-                {
-                    let distance = libm::sqrtf(
-                        (x2 as f32 - x1 as f32).powf(2.0) + (y2 as f32 - y1 as f32).powf(2.0),
-                    );
-                    if distance > 0.0 {
-                        if !self.lines.contains(&(x2, y2, x1, y1)) {
-                            self.lines.push((x1, y1, x2, y2).clone());
-                        }
-                    }
-                }
-            }
+        let mut quads: Vec<Vec<(usize, usize)>> = Vec::new();
+        let mut hull: Vec<(usize, usize)> = PresentWrapper::find_convex_hull(points);
+        //
+        //println!("{hull:?}");
+        for p in hull {
+            self.lines.push((p.0, p.1, p.0, p.1));
         }
-
-        self.lines.sort();
     }
 
     fn draw(&self) {
         let mut img = ril::Image::new(self.width as u32, self.height as u32, Rgb::black());
         for (x1, y1, x2, y2) in self.lines.clone() {
+            img.draw(&ril::draw::Ellipse::circle(x1 as u32, y1 as u32, 1).with_fill(Rgb::white()));
             img.draw(&Line::new(
                 (x1 as u32, y1 as u32),
                 (x2 as u32, y2 as u32),
