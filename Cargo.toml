@@ -19,7 +19,7 @@ fast_image_resize = "4"
 log = "0.4.21"
 mozjpeg = { version = "0.10.7", optional = true, features = ["with_simd", "nasm_simd"] }
 tfledge = { version = "*", path = "crates/chalkydri-tfledge", optional = true }
-pyo3 = { version = "0.20.3", optional = true, features = ["generate-import-lib"] }
+pyo3 = { version = "0.22.2", optional = true, features = ["generate-import-lib"] }
 ril = { version = "0.10.1", default-features = false, features = ["quantize", "resize"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 chalkydri-apriltags = { version = "*", optional = true, path = "crates/chalkydri-apriltags" }
