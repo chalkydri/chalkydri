@@ -6,7 +6,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["ml"]
+default = ["apriltags"]
 apriltags = ["dep:chalkydri-apriltags"]
 ml = ["dep:tfledge"]
 python = ["dep:pyo3"]
@@ -31,6 +31,7 @@ minint = { version = "0.1.0", path = "crates/minint" }
 utoipa = { version = "4.2.3", features = ["actix_extras"] }
 serde_json = "1"
 fastrand = "2.1.0"
+actix = "0.13.5"
 
 [workspace]
 members = ["crates/chalkydri-apriltags", "crates/chalkydri-tfledge", "crates/minint"]

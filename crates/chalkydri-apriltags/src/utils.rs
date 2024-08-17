@@ -96,14 +96,12 @@ pub fn orientation(
             } else {
                 Orientation::Counterclockwise
             }
-        }
-        //}
+        } //}
     }
 }
 
 /// My gift wrapping implementation
-pub struct PresentWrapper {
-}
+pub struct PresentWrapper {}
 impl PresentWrapper {
     // IDEA: I can take advantage of triangles for the early termination feature.
     // After drawing two lines, I can find the hypotenuse using Pythag theorem.

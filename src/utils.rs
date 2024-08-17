@@ -23,4 +23,3 @@ pub fn gen_team_ip(team_number: u16) -> Option<[u8; 4]> {
         Some([10, (team_number / 100) as u8, (team_number % 100) as u8, 2])
     }
 }
-

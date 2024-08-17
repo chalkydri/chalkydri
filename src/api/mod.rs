@@ -2,36 +2,36 @@
 //! JSON API used by the web UI and possibly third-party applications
 //!
 
+use actix_web::{
+    web::{self, Data},
+    App, HttpServer, Responder,
+};
 use minint::NtConn;
 use utopia::OpenApi;
-use actix_web::{web::{self, Data}, App, HttpServer, Responder};
 
 use crate::config::CameraResolution;
 
 #[derive(OpenApi)]
 #[openapi(
-    info(
-        title = "Chalkydri Manager API",
-    ),
-    paths(
-        info,
-        configurations,
-        configure,
-    ),
+    info(title = "Chalkydri Manager API",),
+    paths(info, configurations, configure,)
 )]
 #[allow(dead_code)]
 struct ApiDoc;
- 
+
 pub async fn run_api<'nt>(nt: NtConn) {
     HttpServer::new(move || {
-        App::new().app_data(Data::new(nt.clone())).service(info).service(configurations)
+        App::new()
+            .app_data(Data::new(nt.clone()))
+            .service(info)
+            .service(configurations)
     })
-    .bind(("0.0.0.0", 6942)).unwrap()
+    .bind(("0.0.0.0", 6942))
+    .unwrap()
     .run()
     .await
     .unwrap();
 }
-
 
 #[derive(Serialize)]
 pub struct Info {
@@ -64,7 +64,6 @@ pub struct Configurations {
     cfgs: Vec<Configuration>,
 }
 
-
 /// List possible configurations
 #[utopia::path(
     responses(
@@ -73,9 +72,7 @@ pub struct Configurations {
 )]
 #[get("/api/configurations")]
 pub(super) async fn configurations() -> impl Responder {
-    web::Json(Configurations {
-        cfgs: Vec::new()
-    })
+    web::Json(Configurations { cfgs: Vec::new() })
 }
 
 /// Set configuration
