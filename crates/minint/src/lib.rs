@@ -8,6 +8,8 @@
 //! The entrypoint is [NtConn].
 //!
 
+// TODO: this needs some cleanup
+
 #[macro_use]
 extern crate log;
 extern crate rmp;

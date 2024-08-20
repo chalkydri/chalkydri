@@ -40,11 +40,16 @@ apriltag = { version = "0.4.0", optional = true }
 [workspace]
 members = ["crates/chalkydri-apriltags", "crates/chalkydri-tfledge", "crates/minint"]
 
+# Compile dependencies with optimization level 3 even when in debug mode
 [profile.dev.package.'*']
 opt-level = 3
 
+# Compile everything with extreme optimizations when in release mode
 [profile.release]
 opt-level = 3
+# Link Time Optimization
 lto = true
+# Strip extra symbols (used for debugging and such)
 strip = true
+# Code generation-- only 1 worker generates more optimized code in theory
 codegen-units = 1

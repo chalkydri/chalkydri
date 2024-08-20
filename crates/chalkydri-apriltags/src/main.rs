@@ -11,7 +11,7 @@ fn main() {
     let img = img.as_mut_slice();
 
     let st = Instant::now();
-    let mut det = chalkydri_apriltags::myalgo::Detector::new(1080, 720);
+    let mut det = chalkydri_apriltags::Detector::new(1080, 720);
     println!("{:?}", st.elapsed());
 
     let mut total = Duration::default();
