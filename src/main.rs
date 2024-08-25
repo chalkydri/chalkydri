@@ -8,15 +8,16 @@
 
 #[macro_use]
 extern crate log;
-extern crate tokio;
+extern crate actix;
 extern crate env_logger;
 extern crate fast_image_resize;
 #[cfg(feature = "libcamera")]
 extern crate libcamera;
+extern crate minint;
 #[cfg(feature = "mjpeg")]
 extern crate mozjpeg;
 extern crate ril;
-extern crate minint;
+extern crate tokio;
 #[macro_use]
 extern crate actix_web;
 extern crate utoipa as utopia;
@@ -24,22 +25,23 @@ extern crate utoipa as utopia;
 extern crate serde;
 #[cfg(feature = "apriltags")]
 extern crate chalkydri_apriltags;
-#[cfg(feature = "ml")]
-extern crate tfledge;
 #[cfg(feature = "python")]
 extern crate pyo3;
+#[cfg(feature = "ml")]
+extern crate tfledge;
 
-#[cfg(feature = "libcamera")]
-mod cameras;
-mod subsys;
-mod config;
+//#[cfg(feature = "libcamera")]
+//mod cameras;
 mod api;
+mod config;
+mod subsys;
 mod utils;
 //mod logger;
 
-use std::{error::Error, time::Duration};
+use actix::prelude::*;
 use minint::NtConn;
-use tokio::runtime::Runtime;
+use std::{error::Error, marker::PhantomData, time::Duration};
+use subsys::apriltags::{Apriltags, ApriltagsConfig};
 
 use crate::{api::run_api, utils::gen_team_ip};
 
@@ -53,18 +55,44 @@ use crate::{api::run_api, utils::gen_team_ip};
 /// subsystem, rather than a brand new subsystem.
 ///
 /// Make sure to pay attention to and respect each subsystem's documentation and structure.
-pub trait Subsystem: Sized {
+pub(crate) trait Subsystem<'fr, O>
+where
+    Self: Sized,
+    O: Sized + 'static,
+{
+    /// The actual frame processing [Actor]
+    ///
+    /// May be `Self`
+    type Processor: Actor + Handler<ProcessFrame<'fr, O>>;
+    /// The subsystem's configuration type
+    type Config;
+
     /// Initialize the subsystem
+    ///
+    /// This should initialize the subsystem actor, but not start it.
     async fn init() -> Result<Self, Box<dyn Error>>;
     /// Run the subsystem
-    async fn run(&self);
-    /// Shutdown the subsystem
-    async fn shutdown(self);
+    ///
+    /// This should return the [Addr] of a frame processing actor.
+    async fn run(self, cfg: Self::Config) -> Addr<Self::Processor>;
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+/// Actix message for sending a frame to a subsystem for processing
+pub(crate) struct ProcessFrame<'fr, R> {
+    buf: &'fr [u8],
+    _marker: PhantomData<R>,
+}
+impl<'fr, R: 'static> Message for ProcessFrame<'fr, R> {
+    type Result = Result<R, Box<dyn Error>>;
+}
+
+#[actix::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize logger
     env_logger::init();
+
+    //// Create a new SystemRunner for Actix
+    //let sys = System::with_tokio_rt(|| Runtime::new().unwrap());
 
     info!("Chalkydri starting up...");
 
@@ -72,43 +100,43 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Generate a random device id
     let dev_id = fastrand::u32(..);
 
-    // Build a tokio runtime
-    let rt = Runtime::new().unwrap();
+    // Attempt to connect to the NT server, retrying until successful
 
-    // Enter the tokio rt
-    rt.block_on(async {
-        // Attempt to connect to the NT server, retrying until successful
+    let nt: NtConn;
 
-        let nt: NtConn;
+    let mut retry = false;
 
-        let mut retry = false;
-
-        loop {
-            match NtConn::new(roborio_ip, format!("chalkydri{dev_id}")).await {
-                Ok(conn) => {
-                    nt = conn;
-                    break;
-                },
-                Err(err) => {
-                    if !retry {
-                        error!("Error connecting to NT server: {err:?}");
-                        retry = true;
-                    }
-                    tokio::time::sleep(Duration::from_millis(5)).await;
-                },
+    loop {
+        match NtConn::new(roborio_ip, format!("chalkydri{dev_id}")).await {
+            Ok(conn) => {
+                nt = conn;
+                break;
+            }
+            Err(err) => {
+                if !retry {
+                    error!("Error connecting to NT server: {err:?}");
+                    retry = true;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
             }
         }
+    }
 
-        info!("Connected to NT server at {roborio_ip:?} successfully!");
+    info!("Connected to NT server at {roborio_ip:?} successfully!");
 
-        // Have to let NT topics get dropped before calling nt.stop()
-        {
-            run_api(nt.clone()).await;
-        }
+    let apriltags_subsys = Apriltags::init().await?;
+    //let ml_subsys = MlSubsys::init().await?;
 
-        // Shut down NT connection
-        nt.stop();
-    });
+    let apriltags = apriltags_subsys.run(ApriltagsConfig { workers: 4 }).await;
+    //let ml = ml_subsys.run(MlSubsysCfg { model_path: String::from("test.tflite") }).await;
+
+    // Have to let NT topics get dropped before calling nt.stop()
+    {
+        run_api(nt.clone()).await;
+    }
+
+    // Shut down NT connection
+    nt.stop();
 
     Ok(())
 }

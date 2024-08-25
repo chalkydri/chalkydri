@@ -2,204 +2,334 @@
     portable_simd,
     alloc_layout_extra,
     slice_as_chunks,
-    unchecked_math,
     sync_unsafe_cell,
     array_chunks
 )]
 
+pub mod utils;
+
+use ril::{Line, Rgb};
 use std::{
-    fs::File,
-    io::{Read, Write},
+    alloc::{alloc, dealloc, Layout},
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
-//mod detector;
-//pub mod otsu;
-//pub mod simd;
-pub mod myalgo;
+use rayon::iter::{ParallelBridge, ParallelIterator};
 
-/*
-use wgpu::{
-    include_wgsl, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
-    BindGroupLayoutEntry, BindingResource, BindingType, BlendState, ColorTargetState, ColorWrites,
-    CommandEncoderDescriptor, Device, Extent3d, FragmentState, FrontFace, ImageCopyTexture,
-    ImageDataLayout, Origin3d, PipelineLayoutDescriptor, PowerPreference, PrimitiveState,
-    PrimitiveTopology, Queue, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
-    RequestAdapterOptions, SamplerBindingType, ShaderModuleDescriptor, ShaderStages,
-    StorageTextureAccess, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureSampleType, TextureUsages, TextureViewDimension, VertexState, BufferBindingType,
-};
+use crate::utils::PresentWrapper;
 
-pub fn det(dev: Device, queue: Queue) {
-    //dev.create_shader_module(ShaderModuleDescriptor { label: Some(", source: () })
-
-    dev.start_capture();
-
-    let texture_size = Extent3d {
-        width: 300,
-        height: 300,
-        depth_or_array_layers: 1,
-    };
-
-    // we need to store this for later
-let u32_size = std::mem::size_of::<u32>() as u32;
-
-let output_buffer_size = (u32_size * 300 * 300) as wgpu::BufferAddress;
-let output_buffer_desc = wgpu::BufferDescriptor {
-    size: output_buffer_size,
-    usage: wgpu::BufferUsages::COPY_DST
-        // this tells wpgu that we want to read this buffer from the cpu
-        | wgpu::BufferUsages::MAP_READ,
-    label: None,
-    mapped_at_creation: false,
-};
-let output_buffer = dev.create_buffer(&output_buffer_desc);
-
-
-    let texture = dev.create_texture(&TextureDescriptor {
-        size: Extent3d {
-            width: 300,
-            height: 300,
-            depth_or_array_layers: 1,
-        },
-        format: TextureFormat::Rgba8UnormSrgb,
-        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-        label: Some("texture"),
-        view_formats: &[],
-        dimension: TextureDimension::D2,
-        mip_level_count: 1,
-        sample_count: 1,
-    });
-
-    queue.write_texture(
-        ImageCopyTexture {
-            texture: &texture,
-            mip_level: 0,
-            origin: Origin3d::ZERO,
-            aspect: TextureAspect::All,
-        },
-        image::open("test.png").unwrap().to_rgba8().to_vec().as_slice(),
-        ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(4 * 300),
-            rows_per_image: Some(300),
-        },
-        texture_size,
-    );
-
-    let vert_shader = dev.create_shader_module(include_wgsl!("../shaders/vs.wgsl"));
-    let sobel_shader = dev.create_shader_module(include_wgsl!("../shaders/sobel_shi_tomasi.wgsl"));
-
-    let bind_group_layout = dev.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("sobel_bind_group_layout"),
-        entries: &[
-            BindGroupLayoutEntry {
-                ty: BindingType::Buffer { ty: BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
-                binding: 0,
-                visibility: ShaderStages::VERTEX,
-                count: None,
-            },
-        ],
-    });
-
-    let render_pipeline_layout = dev.create_pipeline_layout(&PipelineLayoutDescriptor {
-        label: Some("Sobel Shi-Tomasi Pipline Layout"),
-        bind_group_layouts: &[&bind_group_layout],
-        push_constant_ranges: &[],
-        //flags: PipelineLayoutFlags::TEST,
-    });
-
-    let render_pipeline = dev.create_render_pipeline(&RenderPipelineDescriptor {
-        label: Some("Sobel Shi-Tomasi"),
-        layout: Some(&render_pipeline_layout),
-        vertex: VertexState {
-            module: &vert_shader,
-            entry_point: "vs_main",
-            buffers: &[],
-        },
-        fragment: Some(FragmentState {
-            module: &sobel_shader,
-            entry_point: "fs_main",
-            targets: &[Some(ColorTargetState {
-                format: TextureFormat::Rgba8UnormSrgb,
-                blend: Some(BlendState::REPLACE),
-                write_mask: ColorWrites::ALL,
-            })],
-        }),
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList, // 1.
-            strip_index_format: None,
-            front_face: wgpu::FrontFace::Ccw, // 2.
-            cull_mode: Some(wgpu::Face::Back),
-            // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-            polygon_mode: wgpu::PolygonMode::Fill,
-            // Requires Features::DEPTH_CLIP_CONTROL
-            unclipped_depth: false,
-            // Requires Features::CONSERVATIVE_RASTERIZATION
-            conservative: false,
-        },
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview: None,
-    });
-
-    let mut enc = dev.create_command_encoder(&CommandEncoderDescriptor {
-        label: Some("Cmd enc"),
-    });
-    {
-        let mut pass = enc.begin_render_pass(&RenderPassDescriptor {
-            label: Some("Sobel Shi-Tomasi Render Pass"),
-            color_attachments: &[],
-            depth_stencil_attachment: None,
-            occlusion_query_set: None,
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&render_pipeline);
-        //pass.draw_indexed(indices, base_vertex, instances)
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Color {
+    Black,
+    White,
+    Other,
+}
+impl Color {
+    /// Whether the color is black (like the tag markings)
+    #[inline(always)]
+    pub fn is_black(&self) -> bool {
+        *self == Color::Black
     }
-
-    enc.copy_texture_to_buffer(
-    wgpu::ImageCopyTexture {
-        aspect: wgpu::TextureAspect::All,
-                texture: &texture,
-        mip_level: 0,
-        origin: wgpu::Origin3d::ZERO,
-    },
-    wgpu::ImageCopyBuffer {
-        buffer: &output_buffer,
-        layout: wgpu::ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(u32_size * texture_size.height),
-            rows_per_image: Some(texture_size.width),
-        },
-    },
-    texture_size,
-);
-
-
-    queue.submit(&mut [enc.finish()].into_iter());
-
-    image::save_buffer("out.png", &output_buffer.slice(..).get_mapped_range(), texture_size.width, texture_size.height, image::ColorType::Rgba8).unwrap();
-
-    dev.stop_capture();
-
-    //File::options().create(true).truncate(true).write(true).open("out.rgb").unwrap().write_all(texture.as_image_c);
-
-    /*
-    dev.create_pipeline_layout(wgpu::PipelineLayoutDescriptor { label: Some("apriltags-rs"), bind_group_layouts: &[], push_constant_ranges: () })
-    let bind_group = dev.create_bind_group(&BindGroupDescriptor {
-        label: Some("apriltags-rs"),
-        entries: &[
-            BindGroupEntry {
-                binding: 0,
-                resource: BindingResource::
-        ],
-    });
-    */
+    /// Whether the color is white (like the paper)
+    #[inline(always)]
+    pub fn is_white(&self) -> bool {
+        *self == Color::White
+    }
+    /// Whether the color is relevant to tag detection
+    #[inline(always)]
+    pub fn is_good(&self) -> bool {
+        *self != Color::Other
+    }
 }
 
+/// Calculate buffer index for an x and y, given an image width
+///
+/// # Safety
+/// `y` should be within the vertical bounds.
+#[inline(always)]
+const unsafe fn px(x: usize, y: usize, width: usize) -> usize {
+    y.unchecked_mul(width).unchecked_add(x)
+}
 
-*/
+/// Convert a 24-bit RGB (color) value to a 8-bit luma/brightness (grayscale) value
+#[inline(always)]
+fn grayscale(data: &[u8]) -> u8 {
+    if let &[r, g, b] = data {
+        // Somebody else's ideal RGB conversion values:
+        // (r as f32).mul_add(0.3, (g as f32).mul_add(0.59, (b as f32) * 0.11)) as u8
+
+        // My "works I guess" RGB conversion values:
+        // (r as f32).mul_add(0.2, (g as f32).mul_add(0.69, (b as f32) * 0.11)) as u8
+
+        // An equal mix of R, G, and B is good here, because black is the absence of light.
+        (r as f32).mul_add(0.33, (g as f32).mul_add(0.33, (b as f32) * 0.33)) as u8
+    } else {
+        panic!();
+    }
+}
+
+/// Turns p1, p2, p3... into an approximate angle
+#[rustfmt::skip]
+#[inline(always)]
+fn fast_angle(p: u8) -> f32 {
+    match p {
+        1  =>   0.0,
+        2  =>  22.5,
+        3  =>  45.0,
+        4  =>  67.5,
+        5  =>  90.0,
+        6  => 112.5,
+        7  => 135.0,
+        8  => 157.5,
+        9  => 180.0,
+        10 => 202.5,
+        11 => 225.0,
+        12 => 247.5,
+        13 => 270.0,
+        14 => 292.5,
+        15 => 315.0,
+        16 => 337.5,
+        _ => panic!("invalid FAST point")
+    }
+}
+
+struct DetectorBufs {
+    buf: *mut Color,
+    points: *mut (usize, usize),
+}
+unsafe impl Send for DetectorBufs {}
+unsafe impl Sync for DetectorBufs {}
+
+/// AprilTag detector
+pub struct Detector {
+    bufs: DetectorBufs,
+    points_len: AtomicUsize,
+    lines: Vec<(usize, usize, usize, usize)>,
+    width: usize,
+    height: usize,
+}
+impl Detector {
+    // Initialize a new detector for the specified dimensions
+    pub fn new(width: usize, height: usize) -> Self {
+        unsafe {
+            // Allocate
+            let buf: *mut Color = alloc(Layout::array::<Color>(width * height).unwrap()).cast();
+            let points: *mut (usize, usize) =
+                alloc(Layout::array::<(usize, usize)>(width * height).unwrap()).cast();
+            let points_len = AtomicUsize::new(0);
+
+            Self {
+                bufs: DetectorBufs { buf, points },
+                points_len,
+                lines: Vec::new(),
+                width,
+                height,
+            }
+        }
+    }
+
+    /// Calculate otsu value
+    ///
+    /// [Otsu's method](https://en.wikipedia.org/wiki/Otsu%27s_method) is an adaptive thresholding
+    /// algorithm. In English: it turns a grayscale image into binary (foreground/background,
+    /// black/white).
+    ///
+    /// We should investigate combining the variations for unbalanced images and triclass
+    /// thresholding.
+    pub fn calc_otsu(&mut self, input: &[u8]) {
+        let mut i = 0usize;
+        // Histogram
+        let mut hist = [0usize; 256];
+
+        // Calculate histogram
+        for i in 0..self.width * self.height {
+            unsafe {
+                // Red, green, and blue are each represent with 1 byte
+                let gray = grayscale(input.get_unchecked((i * 3)..(i * 3) + 3));
+
+                let pix = hist.get_unchecked_mut(*input.get_unchecked(i) as usize);
+                *pix = (*pix).unchecked_add(1);
+            }
+        }
+
+        let mut sum = 0u32;
+        let mut sum_b = 0u32;
+        let mut var_max = 0f64;
+        let mut thresh = 0u8;
+
+        //for t in 0..256 {
+        //    sum += t as u32 * hist[t];
+
+        //    let w_b =
+
+        //println!("{:?} {i}", st.elapsed());
+    }
+
+    /// Process an RGB frame
+    ///
+    /// FAST needs a 3x3 circle around each pixel, so we only process pixels within a 3x3 pixel
+    /// padding.
+    pub fn process_frame(&mut self, input: &[u8]) {
+        // Check that the input is RGB
+        assert_eq!(input.len(), self.width * self.height * 3);
+
+        unsafe {
+            self.thresh(input);
+        }
+        // Reset points_len to 0
+        self.points_len.store(0, Ordering::SeqCst);
+        // Clear the lines Vec
+        self.lines.clear();
+
+        //for x in 3..=self.width - 3 {
+        //    for y in 3..=self.height - 3 {
+        //        unsafe {
+        //            self.process_pixel(x, y);
+        //        }
+        //    }
+        //}
+
+        (3..=self.width - 3).par_bridge().for_each(|x| {
+            for y in 3..=self.height - 3 {
+                unsafe {
+                    self.process_pixel(x, y);
+                }
+            }
+        });
+
+        self.find_quads();
+        //self.draw();
+    }
+
+    /// Threshold an input RGB buffer
+    ///
+    /// TODO: This needs to use [Self::calc_otsu].
+    ///
+    /// # Safety
+    /// `input` is treated as an RGB buffer, even if it isn't.
+    /// The caller should check that `input` is an RGB buffer.
+    #[inline(always)]
+    unsafe fn thresh(&self, input: &[u8]) {
+        for i in 0..self.width * self.height {
+            // Red, green, and blue are each represent with 1 byte
+            let gray = grayscale(input.get_unchecked((i * 3)..(i * 3) + 3));
+
+            // 60 is a "kinda works" value because I haven't implemented the algorithm
+            if gray < 60 {
+                *self.bufs.buf.add(i) = Color::Black;
+            } else if gray > 160 {
+                *self.bufs.buf.add(i) = Color::White;
+            } else {
+                *self.bufs.buf.add(i) = Color::Other;
+            }
+        }
+    }
+
+    /// Process a pixel
+    ///
+    /// This should have as little overhead as possible, as it must be run hundreds of thousands of
+    /// times for each frame.
+    ///
+    /// # Safety
+    /// (`x`, `y`) is assumed to be a valid pixel coord.
+    /// The caller should make sure of this.
+    #[inline(always)]
+    unsafe fn process_pixel(&self, x: usize, y: usize) {
+        let width = self.width;
+        let buf = self.bufs.buf;
+
+        // Get binary value of pixel at (x,y)
+        let p = *buf.add(px(x, y, width));
+
+        if p.is_black() {
+            // Get pixels that are diagonal neighbors of p
+            let (up_left, up_right, down_left, down_right) = (
+                *buf.add(px(x - 1, y - 1, width)),
+                *buf.add(px(x + 1, y - 1, width)),
+                *buf.add(px(x - 1, y + 1, width)),
+                *buf.add(px(x + 1, y + 1, width)),
+            );
+
+            // Only one can be black
+            // The carrot is Rust's exclusive or (XOR) operation
+            let clean = up_left.is_black()
+                ^ up_right.is_black()
+                ^ down_left.is_black()
+                ^ down_right.is_black();
+
+            if clean {
+                // Furthest top right
+                let p3 = *buf.add(px(x + 3, y - 3, width));
+                // Furthest bottom right
+                let p7 = *buf.add(px(x + 3, y + 3, width));
+                // Furthest bottom left
+                let p11 = *buf.add(px(x - 3, y + 3, width));
+                // Furthest top left
+                let p15 = *buf.add(px(x - 3, y - 3, width));
+
+                if (p3.is_good() && p7.is_good() && p11.is_good() && p15.is_good())
+                    && (p3.is_black() ^ p7.is_black() ^ p11.is_black() ^ p15.is_black())
+                {
+                    // Furthest top center
+                    let p1 = *buf.add(px(x, y - 3, width));
+                    // Furthest middle right
+                    let p5 = *buf.add(px(x + 3, y, width));
+                    // Furthest bottom center
+                    let p9 = *buf.add(px(x, y + 3, width));
+                    // Furthest middle left
+                    let p13 = *buf.add(px(x - 3, y, width));
+
+                    // Add p to the corner buffer
+                    *self
+                        .bufs
+                        .points
+                        .add(self.points_len.fetch_add(1, Ordering::SeqCst)) = (x, y);
+                }
+            }
+        }
+    }
+
+    /// Find quadrilaterals
+    #[inline(always)]
+    fn find_quads(&mut self) {
+        let points = unsafe {
+            core::slice::from_raw_parts(
+                self.bufs.points as *const _,
+                self.points_len.load(Ordering::SeqCst),
+            )
+        };
+
+        let mut hull: Vec<(usize, usize)> = PresentWrapper::find_convex_hull(points);
+
+        for p in hull {
+            self.lines.push((p.0, p.1, p.0, p.1));
+        }
+    }
+
+    fn draw(&self) {
+        let mut img = ril::Image::new(self.width as u32, self.height as u32, Rgb::black());
+        for (x1, y1, x2, y2) in self.lines.clone() {
+            img.draw(&ril::draw::Ellipse::circle(x1 as u32, y1 as u32, 1).with_fill(Rgb::white()));
+            img.draw(&Line::new(
+                (x1 as u32, y1 as u32),
+                (x2 as u32, y2 as u32),
+                Rgb::white(),
+            ));
+        }
+        img.save_inferred("lines.png").unwrap();
+    }
+}
+impl Drop for Detector {
+    fn drop(&mut self) {
+        unsafe {
+            dealloc(
+                self.bufs.buf as *mut _,
+                Layout::array::<bool>(self.width * self.height).unwrap(),
+            );
+            dealloc(
+                self.bufs.points as *mut _,
+                Layout::array::<(usize, usize)>(self.width * self.height).unwrap(),
+            );
+        }
+    }
+}

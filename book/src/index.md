@@ -15,9 +15,16 @@ Chalkydri is a *blazingly fast* vision system for FRC written in Rust.
 
 Chalkydri was created by and is managed by FRC Team 4533 (Phoenix).
 
-It was inspired by the popular [PhotonVision]() vision system.
+We're trying to make vision less of a black box, so *all* FRC teams can use it, no matter their size.
+We also want it to be easier to use effectively with less hassle.
+
+Chalkydri has been built from the ground up for performance on popular FRC vision hardware and uses less CPU and memory than existing solutions.
 
 ## Credits
 
- - [Lincoln](https://github.com/frc4533-lincoln)
+ - [PhotonVision](https://github.com/PhotonVision/photonvision)
+   - Main inspiration for the design of Chalkydri
+
+ - [Lincoln](https://github.com/frc4533-lincoln) (Student, 4533)
+   - Phoenix vision code lead
 

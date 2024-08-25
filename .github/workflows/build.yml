@@ -1,0 +1,11 @@
+name: Build Chalkydri
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: alpine
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build

@@ -6,15 +6,31 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bumpalo = { version = "3.16.0", features = ["collections", "std"] }
+cam-geom = "0.15.0"
 image = { version = "0.25.1", default-features = false, features = ["png"] }
 libm = "0.2.8"
-nalgebra = { version = "0.32.5", features = ["sparse"] }
+nalgebra = { version = "0.33.0", features = ["sparse"] }
 rayon = "1.10.0"
-rerun = { version = "0.17.0", optional = true, default-features = false, features = ["sdk", "server"] }
+rerun = { version = "0.18.0", optional = true, default-features = false, features = ["sdk", "server"] }
 ril = { version = "0.10.1", features = ["png"] }
 
 [features]
-default = ["rerun"]
+default = []
 rerun = ["dep:rerun"]
+
+[[bench]]
+name = "main"
+path = "bench.rs"
+harness = false
+
+[dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+
+[profile.bench]
+inherits = "release"
 
