@@ -1,0 +1,37 @@
+# Google containment
+FROM docker.io/library/ubuntu:latest as build
+
+# Install required packages
+RUN apt update
+RUN apt install -y build-essential git bash make libcamera-dev libcamera-tools \
+        cmake autoconf automake g++ binutils libtool bazel-bootstrap
+
+WORKDIR /build
+# Clone non-Rust dependencies
+RUN git clone https://github.com/libusb/libusb.git && \
+        git clone https://github.com/cocoa-xu/libedgetpu.git && \
+        git clone https://github.com/tensorflow/tensorflow.git && \
+        git clone https://git.libcamera.org/libcamera/libcamera.git
+
+# Build non-Rust machine learning deps
+COPY ./scripts/build-ml.sh .
+RUN chmod +x ./build-ml.sh && ./build-ml.sh
+
+# Now the actual image, based on glorious Alpine
+FROM docker.io/library/rust:alpine
+
+# Copy over build artifacts from the TFLite dumpster fire
+COPY --from=build /build/tensorflow/build/tensorflow-lite/libtensorflowlite_c.a /usr/local/lib
+
+# Install required packages
+RUN apk add git bash make python3 py3-pip libcamera-dev libcamera-tools
+
+# Set command line shell
+SHELL [ "/bin/bash", "-c" ]
+
+# Install required Rust toolchains
+RUN rustup target add x86_64-unknown-linux-musl
+RUN rustup target add aarch64-unknown-linux-musl
+
+WORKDIR /src
+RUN git clone https://github.com/chalkydri/chalkydri.git .

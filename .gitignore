@@ -1,6 +1,4 @@
 target/
 Cargo.lock
 
-build/
-
 book/book/
