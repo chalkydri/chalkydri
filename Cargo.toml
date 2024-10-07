@@ -18,7 +18,7 @@ capriltags = ["dep:apriltag"]
 
 [dependencies]
 env_logger = "0.11.2"
-fast_image_resize = "4"
+fast_image_resize = "5"
 log = "0.4.21"
 mozjpeg = { version = "0.10.7", optional = true, features = ["with_simd", "nasm_simd"] }
 tfledge = { version = "*", path = "crates/chalkydri-tfledge", optional = true }
