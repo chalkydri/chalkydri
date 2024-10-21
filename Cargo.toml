@@ -31,7 +31,7 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8.12"
 actix-web = "4.5.1"
 minint = { version = "0.1.0", path = "crates/minint" }
-utoipa = { version = "4.2.3", features = ["actix_extras"] }
+utoipa = { version = "5.1.1", features = ["actix_extras"] }
 serde_json = "1"
 fastrand = "2.1.0"
 actix = "0.13.5"
