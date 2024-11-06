@@ -5,121 +5,78 @@
     sync_unsafe_cell,
     array_chunks
 )]
+#![warn(clippy::infinite_loop)]
 
+#[cfg(feature = "multi-thread")]
+extern crate rayon;
+
+mod decode;
+mod pose_estimation;
 pub mod utils;
 
+use cam_geom::IntrinsicParametersPerspective;
+use pose_estimation::pose_estimation;
 use ril::{Line, Rgb};
+// TODO: ideally we'd use alloc here and only pull in libstd for sync::atomic when the multi-thread feature is enabled
 use std::{
-    alloc::{alloc, dealloc, Layout},
+    alloc::{alloc_zeroed, dealloc, Layout},
     sync::atomic::{AtomicUsize, Ordering},
 };
 
+#[cfg(feature = "multi-thread")]
 use rayon::iter::{ParallelBridge, ParallelIterator};
 
-use crate::utils::PresentWrapper;
+use crate::utils::*;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Color {
-    Black,
-    White,
-    Other,
-}
-impl Color {
-    /// Whether the color is black (like the tag markings)
-    #[inline(always)]
-    pub fn is_black(&self) -> bool {
-        *self == Color::Black
-    }
-    /// Whether the color is white (like the paper)
-    #[inline(always)]
-    pub fn is_white(&self) -> bool {
-        *self == Color::White
-    }
-    /// Whether the color is relevant to tag detection
-    #[inline(always)]
-    pub fn is_good(&self) -> bool {
-        *self != Color::Other
-    }
-}
-
-/// Calculate buffer index for an x and y, given an image width
+/// Raw buffers used by a [`detector`](Detector)
 ///
-/// # Safety
-/// `y` should be within the vertical bounds.
-#[inline(always)]
-const unsafe fn px(x: usize, y: usize, width: usize) -> usize {
-    y.unchecked_mul(width).unchecked_add(x)
-}
-
-/// Convert a 24-bit RGB (color) value to a 8-bit luma/brightness (grayscale) value
-#[inline(always)]
-fn grayscale(data: &[u8]) -> u8 {
-    if let &[r, g, b] = data {
-        // Somebody else's ideal RGB conversion values:
-        // (r as f32).mul_add(0.3, (g as f32).mul_add(0.59, (b as f32) * 0.11)) as u8
-
-        // My "works I guess" RGB conversion values:
-        // (r as f32).mul_add(0.2, (g as f32).mul_add(0.69, (b as f32) * 0.11)) as u8
-
-        // An equal mix of R, G, and B is good here, because black is the absence of light.
-        (r as f32).mul_add(0.33, (g as f32).mul_add(0.33, (b as f32) * 0.33)) as u8
-    } else {
-        panic!();
-    }
-}
-
-/// Turns p1, p2, p3... into an approximate angle
-#[rustfmt::skip]
-#[inline(always)]
-fn fast_angle(p: u8) -> f32 {
-    match p {
-        1  =>   0.0,
-        2  =>  22.5,
-        3  =>  45.0,
-        4  =>  67.5,
-        5  =>  90.0,
-        6  => 112.5,
-        7  => 135.0,
-        8  => 157.5,
-        9  => 180.0,
-        10 => 202.5,
-        11 => 225.0,
-        12 => 247.5,
-        13 => 270.0,
-        14 => 292.5,
-        15 => 315.0,
-        16 => 337.5,
-        _ => panic!("invalid FAST point")
-    }
-}
-
+/// We need a separate struct for this so the compiler will treat them as thread-safe.
+/// Interacting with raw buffers is typically lower overhead, but unsafe.
 struct DetectorBufs {
+    /// The thresholded image buffer
     buf: *mut Color,
+    /// Detected corners
     points: *mut (usize, usize),
 }
 unsafe impl Send for DetectorBufs {}
 unsafe impl Sync for DetectorBufs {}
 
-/// AprilTag detector
+/// An AprilTag detector
+///
+/// This is the main entrypoint.
 pub struct Detector {
+    /// Raw buffers used by the detector
     bufs: DetectorBufs,
+    valid_tags: &'static [usize],
     points_len: AtomicUsize,
+    /// Checked edges (x1, y1, x2, y2)
     lines: Vec<(usize, usize, usize, usize)>,
+    /// Width of input frames
     width: usize,
+    /// Height of input frames
     height: usize,
 }
 impl Detector {
-    // Initialize a new detector for the specified dimensions
-    pub fn new(width: usize, height: usize) -> Self {
+    /// Initialize a new detector for the specified dimensions
+    ///
+    /// `valid_tags` is required for optimization and error resistance.
+    pub fn new(
+        width: usize,
+        height: usize,
+        valid_tags: &'static [usize],
+        intrinsics: IntrinsicParametersPerspective<f32>,
+    ) -> Self {
         unsafe {
-            // Allocate
-            let buf: *mut Color = alloc(Layout::array::<Color>(width * height).unwrap()).cast();
+            // Allocate raw buffers
+            let buf: *mut Color =
+                alloc_zeroed(Layout::array::<Color>(width * height).unwrap()).cast();
             let points: *mut (usize, usize) =
-                alloc(Layout::array::<(usize, usize)>(width * height).unwrap()).cast();
+                alloc_zeroed(Layout::array::<(usize, usize)>(width * height).unwrap()).cast();
             let points_len = AtomicUsize::new(0);
 
             Self {
                 bufs: DetectorBufs { buf, points },
+                valid_tags,
                 points_len,
                 lines: Vec::new(),
                 width,
@@ -181,14 +138,26 @@ impl Detector {
         // Clear the lines Vec
         self.lines.clear();
 
-        //for x in 3..=self.width - 3 {
-        //    for y in 3..=self.height - 3 {
-        //        unsafe {
-        //            self.process_pixel(x, y);
-        //        }
-        //    }
-        //}
+        self.detect_corners();
 
+        self.check_edges();
+
+        pose_estimation(intrinsics);
+    }
+
+    /// Run corner detection
+    #[inline(always)]
+    pub fn detect_corners(&mut self) {
+        #[cfg(not(feature = "multi-thread"))]
+        for x in 3..=self.width - 3 {
+            for y in 3..=self.height - 3 {
+                unsafe {
+                    self.process_pixel(x, y);
+                }
+            }
+        }
+
+        #[cfg(feature = "multi-thread")]
         (3..=self.width - 3).par_bridge().for_each(|x| {
             for y in 3..=self.height - 3 {
                 unsafe {
@@ -196,9 +165,6 @@ impl Detector {
                 }
             }
         });
-
-        self.find_quads();
-        //self.draw();
     }
 
     /// Threshold an input RGB buffer
@@ -209,7 +175,8 @@ impl Detector {
     /// `input` is treated as an RGB buffer, even if it isn't.
     /// The caller should check that `input` is an RGB buffer.
     #[inline(always)]
-    unsafe fn thresh(&self, input: &[u8]) {
+    pub unsafe fn thresh(&self, input: &[u8]) {
+        // This is mainly memory-bound, so multi-threading probably isn't worth it.
         for i in 0..self.width * self.height {
             // Red, green, and blue are each represent with 1 byte
             let gray = grayscale(input.get_unchecked((i * 3)..(i * 3) + 3));
@@ -232,9 +199,11 @@ impl Detector {
     ///
     /// # Safety
     /// (`x`, `y`) is assumed to be a valid pixel coord.
-    /// The caller should make sure of this.
+    /// The caller must make sure of this.
     #[inline(always)]
     unsafe fn process_pixel(&self, x: usize, y: usize) {
+        // Pull out frame width and frame buffer for cleaner looking code
+        // TODO: is this optimized down into a noop?
         let width = self.width;
         let buf = self.bufs.buf;
 
@@ -289,9 +258,86 @@ impl Detector {
         }
     }
 
-    /// Find quadrilaterals
+    /// Check a single edge (imaginary line between two corners)
+    ///
+    /// See [Self::check_edges].
+    ///
+    /// # Safety
+    /// (`x1`, `y1`) and (`x2`, `y2`) are assumed to be a valid pixel coords.
+    /// The caller must make sure of this.
+    unsafe fn check_edge(&mut self, x1: usize, y1: usize, x2: usize, y2: usize) {
+        // idk how to describe this one
+        const CHECK_OFFSET: usize = 5;
+        let width = self.width;
+        let buf = self.bufs.buf;
+
+        // calculate & store midpoint
+        let midpoint_x = (x1 + x2) / 2;
+        let midpoint_y = (y1 + y2) / 2;
+
+        // Figure out if edge is closer to horizontal/vertical
+        let (xdiff, ydiff) = (x1.max(x2) - x1.min(x2), y1.max(y2) - y1.min(y2));
+        let is_vertical_line = x1 == x2 || xdiff < ydiff;
+        let is_horizontal_line = y1 == y2 || ydiff < xdiff;
+
+        // Calculate and store the coords for the midway points
+        let (mw1x, mw1y) = ((midpoint_x + x1) / 2, (midpoint_y + y1) / 2);
+        let (mw2x, mw2y) = ((midpoint_x + x2) / 2, (midpoint_y + y2) / 2);
+
+        if is_vertical_line {
+            // edge is closer to a vertical line instead of a diagonal
+            let mw1right = *buf.add(px(mw1x + CHECK_OFFSET, mw1y, width));
+            let mw2right = *buf.add(px(mw2x + CHECK_OFFSET, mw2y, width));
+
+            let mw1left = *buf.add(px(mw1x - CHECK_OFFSET, mw1y, width));
+            let mw2left = *buf.add(px(mw2x - CHECK_OFFSET, mw2y, width));
+
+            // Check that all of the checking points are valid
+            if mw1left.is_good() && mw2left.is_good() && mw1right.is_good() && mw2right.is_good() {
+                // Check that only one side of the edge is black (the other should be white)
+                if (mw1left.is_black() ^ mw2right.is_black())
+                    && (mw2left.is_black() ^ mw1right.is_black())
+                    && (mw1left == mw2left)
+                {
+                    // midway one has black pixels on both sides
+                    self.lines.push((x1, y1, x2, y2));
+                }
+            }
+        }
+
+        if is_horizontal_line {
+            // edge is closer to a horizontal line instead of a diagonal
+
+            // XXX: Checking midway 1 then midway 2 *might* have marginally better performance,
+            // but likely not worth it for the more complex code.
+
+            // create the point to the right of the two midways
+            let mw1top = *buf.add(px(mw1x, mw1y - CHECK_OFFSET, width));
+            let mw2top = *buf.add(px(mw2x, mw2y - CHECK_OFFSET, width));
+
+            // create the point ot the left of the two midways
+            let mw1bottom = *buf.add(px(mw1x, mw1y + CHECK_OFFSET, width));
+            let mw2bottom = *buf.add(px(mw2x, mw2y + CHECK_OFFSET, width));
+
+            // check if the midways are black pixels,
+            // and if the pixels to the right and left of these midways are black pixels as well.
+
+            if mw1top.is_good() && mw2top.is_good() && mw1bottom.is_good() && mw2bottom.is_good() {
+                if (mw1top.is_black() ^ mw2bottom.is_black())
+                    && (mw2top.is_black() ^ mw1bottom.is_black())
+                    && (mw1top == mw2top)
+                {
+                    // midway one has black pixels on both sides
+                    self.lines.push((x1, y1, x2, y2));
+                }
+            }
+        }
+    }
+
+    /// Perform edge checking on all detected corners
     #[inline(always)]
-    fn find_quads(&mut self) {
+    pub fn check_edges(&mut self) {
+        // Turn the raw buffer into a Rust slice
         let points = unsafe {
             core::slice::from_raw_parts(
                 self.bufs.points as *const _,
@@ -299,24 +345,41 @@ impl Detector {
             )
         };
 
-        let mut hull: Vec<(usize, usize)> = PresentWrapper::find_convex_hull(points);
-
-        for p in hull {
-            self.lines.push((p.0, p.1, p.0, p.1));
+        // Iterate over every detected corner
+        // TODO: this might benefit from multi-threading
+        for &(x1, y1) in points.iter() {
+            // Iterate over every detected corner in reverse, checking for edges
+            for &(x2, y2) in points.iter().rev() {
+                unsafe {
+                    self.check_edge(x1, y1, x2, y2);
+                }
+            }
         }
     }
 
-    fn draw(&self) {
+    pub fn draw(&self) {
         let mut img = ril::Image::new(self.width as u32, self.height as u32, Rgb::black());
         for (x1, y1, x2, y2) in self.lines.clone() {
-            img.draw(&ril::draw::Ellipse::circle(x1 as u32, y1 as u32, 1).with_fill(Rgb::white()));
+            img.draw(
+                &ril::draw::Ellipse::circle(x1 as u32, y1 as u32, 2)
+                    .with_fill(Rgb::from_hex("ffa500").unwrap()),
+            );
+            img.draw(
+                &ril::draw::Ellipse::circle(x2 as u32, y2 as u32, 2)
+                    .with_fill(Rgb::from_hex("ff0000").unwrap()),
+            );
             img.draw(&Line::new(
                 (x1 as u32, y1 as u32),
                 (x2 as u32, y2 as u32),
                 Rgb::white(),
             ));
         }
-        img.save_inferred("lines.png").unwrap();
+        img.save(ril::ImageFormat::Png, "lines.png").unwrap();
+    }
+}
+impl Clone for Detector {
+    fn clone(&self) -> Self {
+        Self::new(self.width, self.height, &[])
     }
 }
 impl Drop for Detector {
