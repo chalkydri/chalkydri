@@ -1,0 +1,37 @@
+name: Build Chalkydri Containers
+
+on:
+  push:
+    paths:
+      - build
+  workflow_run:
+
+permissions:
+  contents: write
+
+jobs:
+  dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push dev image
+        uses: docker/build-push-action@v6
+        with:
+          platforms: linux/amd64,linux/arm64
+          push: true
+          context: build
+          file: Containerfile
+          tags: |
+            ghcr.io/chalkydri/chalkydri:dev
