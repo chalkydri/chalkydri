@@ -14,7 +14,7 @@ RUN git clone https://github.com/libusb/libusb.git && \
         git clone https://git.libcamera.org/libcamera/libcamera.git
 
 # Build non-Rust machine learning deps
-COPY ./scripts/build-ml.sh .
+COPY ./build-ml.sh .
 RUN chmod +x ./build-ml.sh && ./build-ml.sh
 
 # Now the actual image, based on glorious Alpine
