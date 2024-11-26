@@ -18,7 +18,7 @@ COPY ./build-ml.sh .
 RUN chmod +x ./build-ml.sh && ./build-ml.sh
 
 # Now the actual image, based on glorious Alpine
-FROM docker.io/library/rust:alpine
+FROM docker.io/library/rust:alpine as final
 
 # Copy over build artifacts from the TFLite dumpster fire
 COPY --from=build /build/tensorflow/build/tensorflow-lite/libtensorflowlite_c.a /usr/local/lib
