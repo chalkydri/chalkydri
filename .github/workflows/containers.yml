@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - build
-  workflow_run:
+  workflow_dispatch:
 
 permissions:
   contents: write
