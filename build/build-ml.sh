@@ -70,7 +70,7 @@ __libusb() {
 	
 	popd #libusb
 }
-__libusb
+#__libusb
 
 __libedgetpu() {
 	pushd libedgetpu
@@ -86,8 +86,7 @@ __libedgetpu() {
 
 	popd #libedgetpu
 }
-# Broken
-#__libedgetpu
+__libedgetpu
 
 __tflite() {
 	pushd tensorflow
