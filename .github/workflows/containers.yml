@@ -36,6 +36,6 @@ jobs:
           platforms: linux/amd64
           push: true
           context: build
-          file: build/Dockerfile
+          file: build/Containerfile
           tags: |
             ghcr.io/chalkydri/chalkydri:dev
