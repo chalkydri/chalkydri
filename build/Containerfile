@@ -21,7 +21,7 @@ RUN chmod +x ./build-ml.sh && ./build-ml.sh
 FROM docker.io/library/rust:alpine as final
 
 # Copy over build artifacts from the TFLite dumpster fire
-COPY --from=build /build /build
+COPY --from=build /build/tensorflow/build/tensorflow-lite/libtensorflowlite-c.a /build
 
 # Install required packages
 RUN apk add git bash make python3 py3-pip libcamera-dev libcamera-tools
