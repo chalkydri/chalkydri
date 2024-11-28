@@ -70,7 +70,7 @@ __libusb() {
 	
 	popd #libusb
 }
-#__libusb
+__libusb
 
 __libedgetpu() {
 	pushd libedgetpu
