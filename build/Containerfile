@@ -3,16 +3,15 @@ FROM docker.io/library/ubuntu:latest as build
 
 # Install required packages
 RUN apt update
-RUN apt install -y build-essential git bash make libcamera-dev libcamera-tools \
+RUN apt install -y build-essential git bash make \
         cmake autoconf automake g++ binutils libtool bazel-bootstrap \
-        libabsl-dev libflatbuffers-dev xxd libusb-1.0-0-dev
+        libabsl-dev libflatbuffers-dev xxd
 
 WORKDIR /build
 # Clone non-Rust dependencies
 RUN git clone https://github.com/libusb/libusb.git && \
         git clone https://github.com/feranick/libedgetpu.git && \
-        git clone https://github.com/tensorflow/tensorflow.git && \
-        git clone https://git.libcamera.org/libcamera/libcamera.git
+        git clone https://github.com/tensorflow/tensorflow.git
 
 # Build non-Rust machine learning deps
 COPY ./build-ml.sh .
@@ -22,7 +21,7 @@ RUN chmod +x ./build-ml.sh && ./build-ml.sh
 FROM docker.io/library/rust:alpine as final
 
 # Copy over build artifacts from the TFLite dumpster fire
-COPY --from=build /build/tensorflow/build/tensorflow-lite/libtensorflowlite-c.a /build
+COPY --from=build /build/install-prefix /build
 
 # Install required packages
 RUN apk add git bash make python3 py3-pip libcamera-dev libcamera-tools
