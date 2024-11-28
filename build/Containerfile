@@ -10,7 +10,7 @@ RUN apt install -y build-essential git bash make libcamera-dev libcamera-tools \
 WORKDIR /build
 # Clone non-Rust dependencies
 RUN git clone https://github.com/libusb/libusb.git && \
-        git clone https://github.com/cocoa-xu/libedgetpu.git && \
+        git clone https://github.com/feranick/libedgetpu.git && \
         git clone https://github.com/tensorflow/tensorflow.git && \
         git clone https://git.libcamera.org/libcamera/libcamera.git
 
