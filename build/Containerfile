@@ -4,8 +4,8 @@ FROM docker.io/library/ubuntu:latest as build
 # Install required packages
 RUN apt update
 RUN apt install -y build-essential git bash make libcamera-dev libcamera-tools \
-        cmake autoconf automake g++ binutils libtool bazel-bootstrap libusb-dev \
-        libabsl-dev libflatbuffers-dev xxd
+        cmake autoconf automake g++ binutils libtool bazel-bootstrap \
+        libabsl-dev libflatbuffers-dev xxd libusb-1.0-0-dev
 
 WORKDIR /build
 # Clone non-Rust dependencies
