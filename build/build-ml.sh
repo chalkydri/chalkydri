@@ -77,7 +77,7 @@ __libedgetpu() {
 	git checkout $libedgetpu_version
 
 	# Build it
-	make libedgetpu
+	make -f makefile_build/Makefile libedgetpu
 
 	pushd out
 	mv direct/*/libedgetpu.so.1.0 direct/libedgetpu.so
