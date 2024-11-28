@@ -14,42 +14,42 @@ tensorflow_version='v2.16.1'
 
 install_prefix='/build/install-prefix'
 
-# If Bazel isn't installed, go through the entire process to download/bootstrap it w/ Bazelisk :/
-if ! command -v bazel; then
-	#echo "Please install bazel first: https://github.com/bazelbuild/bazelisk/releases/latest"
+# # If Bazel isn't installed, go through the entire process to download/bootstrap it w/ Bazelisk :/
+# if ! command -v bazel; then
+# 	#echo "Please install bazel first: https://github.com/bazelbuild/bazelisk/releases/latest"
 
-	# Pick the correct CPU architecture for the current system
-	case "$(uname -m)" in
-		x86_64)
-			bazelisk_arch='amd64'
-			;;
-		arm64)
-			bazelisk_arch='arm64'
-			;;
-	esac
+# 	# Pick the correct CPU architecture for the current system
+# 	case "$(uname -m)" in
+# 		x86_64)
+# 			bazelisk_arch='amd64'
+# 			;;
+# 		arm64)
+# 			bazelisk_arch='arm64'
+# 			;;
+# 	esac
 
-	# Download bazelisk
-	wget -O bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-${bazelisk_arch}
+# 	# Download bazelisk
+# 	wget -O bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-${bazelisk_arch}
 
-	# Try to get root somehow and install it
-	if test "$(whoami)" = root; then
-		chmod +x ./bazel
-		mv ./bazel /usr/local/bin
-	else 
-		if command -v sudo >/dev/null; then
-			sudo chmod +x ./bazel
-			sudo mv ./bazel /usr/local/bin
-		else
-			if command -v doas >/dev/null; then
-				doas chmod +x ./bazel
-				doas mv ./bazel /usr/local/bin
-			else
-				echo 'Failed to elevate privileges'
-				exit 1
-			fi
-		fi
-	fi
-fi
+# 	# Try to get root somehow and install it
+# 	if test "$(whoami)" = root; then
+# 		chmod +x ./bazel
+# 		mv ./bazel /usr/local/bin
+# 	else 
+# 		if command -v sudo >/dev/null; then
+# 			sudo chmod +x ./bazel
+# 			sudo mv ./bazel /usr/local/bin
+# 		else
+# 			if command -v doas >/dev/null; then
+# 				doas chmod +x ./bazel
+# 				doas mv ./bazel /usr/local/bin
+# 			else
+# 				echo 'Failed to elevate privileges'
+# 				exit 1
+# 			fi
+# 		fi
+# 	fi
+# fi
 
 __tflite() {
 	pushd tensorflow
@@ -94,7 +94,7 @@ __libedgetpu() {
 	git checkout $libedgetpu_version
 
 	# Build it
-	make -f makefile_build/Makefile libedgetpu
+	PREFIX="/build/install-prefix" make -f makefile_build/Makefile libedgetpu
 
 	pushd out
 	mv direct/*/libedgetpu.so.1.0 direct/libedgetpu.so
