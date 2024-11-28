@@ -12,6 +12,8 @@ libusb_version='v1.0.27'
 libedgetpu_version='v0.1.9'
 tensorflow_version='v2.16.1'
 
+install_prefix='/build/install-prefix'
+
 # If Bazel isn't installed, go through the entire process to download/bootstrap it w/ Bazelisk :/
 if ! command -v bazel; then
 	#echo "Please install bazel first: https://github.com/bazelbuild/bazelisk/releases/latest"
@@ -49,6 +51,21 @@ if ! command -v bazel; then
 	fi
 fi
 
+__tflite() {
+	pushd tensorflow
+	git checkout $tensorflow_version
+	mkdir -p build
+	pushd build
+
+	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE ../tensorflow/lite/c/
+	make
+ 	cmake --install --prefix "$install_prefix"
+
+	popd #build
+	popd #tensorflow
+}
+__tflite
+
 __libusb() {
 	pushd libusb
 	git checkout $libusb_version
@@ -59,14 +76,14 @@ __libusb() {
 	# -fPIC: Position Independent Code (tells the linker to not use specific locations)
 	# --enable-{shared,static}: Enables building the library's statically- and dynamically-linked versions
 	# --disable-udev: 
-	CFLAGS="-fPIC" ./configure --enable-static --enable-shared --disable-udev --prefix="$(pwd)/build"
+	CFLAGS="-fPIC" ./configure --enable-static --enable-shared --disable-udev --prefix="$install_prefix"
 
 	make
 	make install
 
 	# Set the pkgconfig search path
 	# pkgconfig is a common utility for finding and configuring libraries to link to on Linux
-	export PKG_CONFIG_PATH="$(pwd)/build/lib/pkgconfig"
+	export PKG_CONFIG_PATH="$install_prefix/lib/pkgconfig"
 	
 	popd #libusb
 }
@@ -87,17 +104,3 @@ __libedgetpu() {
 	popd #libedgetpu
 }
 __libedgetpu
-
-__tflite() {
-	pushd tensorflow
-	git checkout $tensorflow_version
-	mkdir -p build
-	pushd build
-
-	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=FALSE ../tensorflow/lite/c/
-	make
-
-	popd #build
-	popd #tensorflow
-}
-__tflite
