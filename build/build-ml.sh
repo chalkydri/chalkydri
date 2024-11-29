@@ -98,7 +98,7 @@ __libedgetpu() {
 	git checkout $libedgetpu_version
 
 	# Build it
-	make -f makefile_build/Makefile libedgetpu
+	TF_ROOT=/build/tensorflow make -f makefile_build/Makefile libedgetpu
 
 	pushd out
 	mv direct/*/libedgetpu.so.1.0 direct/libedgetpu.so
