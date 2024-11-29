@@ -51,8 +51,6 @@ install_prefix='/build/install-prefix'
 # 	fi
 # fi
 
-mkdir -p $install_prefix
-
 __tflite() {
 	pushd tensorflow
 	git checkout $tensorflow_version
@@ -64,8 +62,9 @@ __tflite() {
 
 	popd #build
 
+	mkdir -p $install_prefix/include $install_prefix/lib
  	find . -name '*.h' -exec cp --parents '{}' $install_prefix/include \;
-  	cp build/tensorflow-lite/libtensorflowlite-c.a $install_prefix
+  	cp build/tensorflow-lite/libtensorflowlite-c.a $install_prefix/lib
   
 	popd #tensorflow
 }
