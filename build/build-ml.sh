@@ -51,6 +51,8 @@ install_prefix='/build/install-prefix'
 # 	fi
 # fi
 
+mkdir -p $install_prefix
+
 __tflite() {
 	pushd tensorflow
 	git checkout $tensorflow_version
