@@ -62,9 +62,10 @@ __tflite() {
 
 	popd #build
 
-	mkdir -p $install_prefix/include $install_prefix/lib
+	mkdir -p $install_prefix/include $install_prefix/lib /usr/local/lib/include
+ 	find . -name 'tensorflow/lite/*.h' -exec cp --parents '{}' /usr/local/lib/include \;
  	find . -name 'tensorflow/lite/*.h' -exec cp --parents '{}' $install_prefix/include \;
-  	cp build/tensorflow-lite/libtensorflowlite_c.so $install_prefix/lib
+  	cp build/libtensorflowlite_c.so build/tensorflow-lite/libtensorflow-lite.a $install_prefix/lib
   
 	popd #tensorflow
 }
@@ -80,14 +81,14 @@ __libusb() {
 	# -fPIC: Position Independent Code (tells the linker to not use specific locations)
 	# --enable-{shared,static}: Enables building the library's statically- and dynamically-linked versions
 	# --disable-udev: 
-	CFLAGS="-fPIC" ./configure --enable-static --enable-shared --disable-udev --prefix="$install_prefix"
+	CFLAGS="-fPIC" ./configure --enable-static --enable-shared --disable-udev
 
 	make
 	make install
 
 	# Set the pkgconfig search path
 	# pkgconfig is a common utility for finding and configuring libraries to link to on Linux
-	export PKG_CONFIG_PATH="$install_prefix/lib/pkgconfig"
+	#export PKG_CONFIG_PATH="$install_prefix/lib/pkgconfig"
 	
 	popd #libusb
 }
@@ -98,7 +99,7 @@ __libedgetpu() {
 	git checkout $libedgetpu_version
 
 	# Build it
-	TF_ROOT=/build/tensorflow/ PREFIX=$install_prefix LD_LIBRARY_PATH=/build/install-prefix/lib make -f makefile_build/Makefile libedgetpu
+	make -f makefile_build/Makefile libedgetpu
 
 	pushd out
 	mv direct/*/libedgetpu.so.1.0 direct/libedgetpu.so
