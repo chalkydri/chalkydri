@@ -63,7 +63,7 @@ __tflite() {
 	popd #build
 
 	mkdir -p $install_prefix/include $install_prefix/lib
- 	find . -name '*.h' -exec cp --parents '{}' $install_prefix/include \;
+ 	find . -name 'tensorflow/lite/*.h' -exec cp --parents '{}' $install_prefix/include \;
   	cp build/tensorflow-lite/libtensorflowlite-c.a $install_prefix/lib
   
 	popd #tensorflow
@@ -98,7 +98,7 @@ __libedgetpu() {
 	git checkout $libedgetpu_version
 
 	# Build it
-	TF_ROOT=/build/tensorflow make -f makefile_build/Makefile libedgetpu
+	TF_ROOT=/build/tensorflow/ LD_LIBRARY_PATH=/build/install-prefix/lib make -f makefile_build/Makefile libedgetpu
 
 	pushd out
 	mv direct/*/libedgetpu.so.1.0 direct/libedgetpu.so
