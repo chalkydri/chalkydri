@@ -80,7 +80,8 @@ __tflite() {
 
 	mkdir -p $install_prefix/include $install_prefix/lib
  	find . -name 'tensorflow/lite/*.h' -exec cp --parents '{}' $install_prefix/include \;
-  	cp build/libtensorflowlite_c.so build/tensorflow-lite/libtensorflow-lite.a $install_prefix/lib
+  	find . -name 'build/*.a' -exec cp '{}' $install_prefix/lib \;
+   	find . -name 'build/*.a' -exec cp '{}' $install_prefix/lib \;
   
 	popd #tensorflow
 }
