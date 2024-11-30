@@ -119,7 +119,6 @@ __libedgetpu() {
 	export CXXFLAGS="-L/build/install-prefix/lib -I/build/install-prefix/include"
  	export LDFLAGS="-L/build/install-prefix/lib"
   	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/build/install-prefix/lib/ make -f makefile_build/Makefile libedgetpu
-   	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/usr/local/lib/ make -f makefile_build/Makefile libedgetpu
 
 	pushd out
 	mv direct/*/libedgetpu.so.1.0 direct/libedgetpu.so
