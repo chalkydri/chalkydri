@@ -5,13 +5,14 @@ FROM docker.io/library/ubuntu:latest as build
 RUN apt update
 RUN apt install -y build-essential git bash make \
         cmake autoconf automake g++ binutils libtool \
-        libabsl-dev libflatbuffers-dev xxd
+        libabsl-dev xxd
 
 WORKDIR /build
 # Clone non-Rust dependencies
-RUN git clone https://github.com/libusb/libusb.git && \
-        git clone https://github.com/feranick/libedgetpu.git && \
-        git clone https://github.com/tensorflow/tensorflow.git
+RUN git clone https://github.com/google/flatbuffers.git && \
+        git clone https://github.com/tensorflow/tensorflow.git && \
+        git clone https://github.com/libusb/libusb.git && \
+        git clone https://github.com/feranick/libedgetpu.git
 
 # Build non-Rust machine learning deps
 COPY ./build-ml.sh .
