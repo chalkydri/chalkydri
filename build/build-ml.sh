@@ -98,7 +98,10 @@ __libedgetpu() {
 	git checkout $libedgetpu_version
 
 	# Build it
-	CFLAGS="-L/build/install-prefix/lib -I/build/install-prefix/include" LDFLAGS="-L/build/install-prefix/lib" make -f makefile_build/Makefile libedgetpu
+	export CFLAGS="-L/build/install-prefix/lib -I/build/install-prefix/include"
+	export CXXFLAGS="-L/build/install-prefix/lib -I/build/install-prefix/include"
+ 	export LDFLAGS="-L/build/install-prefix/lib"
+  	make -f makefile_build/Makefile libedgetpu
 
 	pushd out
 	mv direct/*/libedgetpu.so.1.0 direct/libedgetpu.so
