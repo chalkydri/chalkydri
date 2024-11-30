@@ -8,6 +8,7 @@
 
 # I have to use three different joke build systems to use Google's trash.
 
+flatbuffers_version='v23.5.26'
 libusb_version='v1.0.27'
 libedgetpu_version='v0.1.9'
 tensorflow_version='v2.16.1'
@@ -51,13 +52,28 @@ install_prefix='/build/install-prefix'
 # 	fi
 # fi
 
+__flatbuffers() {
+	pushd flatbuffers
+ 	git checkout $flatbuffers_version
+	mkdir -p build
+ 	pushd build
+  
+	cmake -DFLATBUFFERS_BUILD_SHAREDLIB=ON -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_INSTALL_PREFIX=/usr
+	make
+	make install
+
+ 	popd #build
+  	popd #flatbuffers
+}
+__flatbuffers
+
 __tflite() {
 	pushd tensorflow
 	git checkout $tensorflow_version
 	mkdir -p build
 	pushd build
 
-	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE ../tensorflow/lite/c/
+	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release ../tensorflow/lite/c/
 	make
 
 	popd #build
