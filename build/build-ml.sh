@@ -96,7 +96,7 @@ __libusb() {
 	# -fPIC: Position Independent Code (tells the linker to not use specific locations)
 	# --enable-{shared,static}: Enables building the library's statically- and dynamically-linked versions
 	# --disable-udev: 
-	CFLAGS="-fPIC" ./configure --enable-static --enable-shared --disable-udev
+	CFLAGS="-fPIC" ./configure --enable-static --enable-shared --disable-udev --prefix="/build/install-prefix"
 
 	make
 	make install
