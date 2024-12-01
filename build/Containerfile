@@ -25,7 +25,7 @@ FROM docker.io/library/rust:alpine as final
 COPY --from=build /deps /deps
 
 # Install required packages
-RUN apk add git bash make python3 py3-pip libcamera-dev libcamera-tools
+RUN apk add musl-dev curl git bash make python3 py3-pip libcamera-dev libcamera-tools
 
 # Set command line shell
 SHELL [ "/bin/bash", "-c" ]
