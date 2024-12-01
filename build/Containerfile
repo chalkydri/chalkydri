@@ -5,7 +5,7 @@ FROM docker.io/library/alpine:latest as build
 RUN apk update
 RUN apk add musl-dev curl git bash make \
         cmake autoconf automake g++ gcompat clang-dev binutils libtool \
-        libstdc++-dev xxd linux-headers abseil-cpp-dev libusb-dev
+        libstdc++-dev xxd linux-headers abseil-cpp-dev libusb-dev flatbuffers-dev
 
 WORKDIR /build
 # Clone non-Rust dependencies
@@ -28,7 +28,7 @@ RUN apk update
 RUN apk add musl-dev curl git bash make \
         cmake autoconf automake clang-dev binutils libtool \
         libstdc++-dev xxd linux-headers gcompat abseil-cpp-dev libusb-dev \
-        python3 py3-pip libcamera-dev libcamera-tools
+        python3 py3-pip libcamera-dev libcamera-tools flatbuffers-dev
 
 # Set command line shell
 SHELL [ "/bin/bash", "-c" ]
