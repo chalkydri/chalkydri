@@ -137,6 +137,12 @@ __libedgetpu() {
  	export LDFLAGS="-L/deps/lib -L/usr/lib/x86_64-linux-gnu"
   	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/deps/lib/ make -f makefile_build/Makefile libedgetpu
 
+	pushd tflite
+ 	pushd public
+  	find . -type f -name '*.h' -exec cp --parents '{}' /deps/include \;
+	popd #public
+ 	popd #tflite
+    	
 	pushd out
 	cp direct/*/libedgetpu.so.1.0 /deps/lib
 	#mv throttled/*/libedgetpu.so.1.0 throttled/libedgetpu.so
