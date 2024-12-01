@@ -5,7 +5,8 @@ FROM docker.io/library/alpine:latest as build
 RUN apk update
 RUN apk add musl-dev curl git bash make mold \
         cmake autoconf automake g++ gcompat clang-dev binutils libtool \
-        libstdc++-dev xxd linux-headers abseil-cpp-dev libusb-dev flatbuffers-dev
+        libstdc++-dev xxd linux-headers abseil-cpp-dev libusb-dev flatbuffers-dev \
+        python3 py3-pip
 
 WORKDIR /build
 # Clone non-Rust dependencies
