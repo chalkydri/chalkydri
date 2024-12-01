@@ -73,7 +73,7 @@ __tflite() {
 	mkdir -p build
 	pushd build
 
-	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release -DTFLI ../tensorflow/lite/c/
+	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release ../tensorflow/lite/c/
 	make
 
 	popd #build
@@ -112,11 +112,17 @@ __libusb() {
 }
 __libusb
 
-# __abseil_is_bs() {
-# 	git clone https://github.com/abseil/abseil-cpp.git
-# 	pushd abseil-cpp
+__abseil_is_bs() {
+	git clone https://github.com/abseil/abseil-cpp.git
+	pushd abseil-cpp
+	mkdir -p build
+	pushd build
 
-#   	cmake 
+	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release ../
+	make
+ 	make install
+}
+__abseil_is_bs
 
 __libedgetpu() {
 	pushd libedgetpu
