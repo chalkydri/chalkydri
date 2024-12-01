@@ -4,7 +4,7 @@ FROM docker.io/library/alpine:latest as build
 # Install required packages
 RUN apk update
 RUN apk add musl-dev curl git bash make \
-        cmake autoconf automake clang-dev binutils libtool \
+        cmake autoconf automake g++ gcompat clang-dev binutils libtool \
         libstdc++-dev xxd linux-headers
 
 WORKDIR /build
@@ -28,7 +28,7 @@ COPY --from=build /deps /deps
 RUN apk update
 RUN apk add musl-dev curl git bash make \
         cmake autoconf automake clang-dev binutils libtool \
-        libstdc++-dev xxd linux-headers \
+        libstdc++-dev xxd linux-headers gcompat \
         python3 py3-pip libcamera-dev libcamera-tools
 
 # Set command line shell
