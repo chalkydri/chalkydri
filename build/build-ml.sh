@@ -73,7 +73,7 @@ __tflite() {
 	mkdir -p build
 	pushd build
 
-	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release ../tensorflow/lite/c/
+	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release -DTFLI ../tensorflow/lite/c/
 	make
 
 	popd #build
@@ -112,6 +112,12 @@ __libusb() {
 }
 __libusb
 
+# __abseil_is_bs() {
+# 	git clone https://github.com/abseil/abseil-cpp.git
+# 	pushd abseil-cpp
+
+#   	cmake 
+
 __libedgetpu() {
 	pushd libedgetpu
 	git checkout $libedgetpu_version
@@ -119,7 +125,7 @@ __libedgetpu() {
 	# Build it
 	export CFLAGS="-L/build/install-prefix/lib -I/build/install-prefix/include"
 	export CXXFLAGS="-L/build/install-prefix/lib -I/build/install-prefix/include"
- 	export LDFLAGS="-L/build/install-prefix/lib"
+ 	export LDFLAGS="-L/build/install-prefix/lib -L/usr/lib/x86_64-linux-gnu"
   	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/build/install-prefix/lib/ make -f makefile_build/Makefile libedgetpu
 
 	pushd out
