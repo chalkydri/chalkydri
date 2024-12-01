@@ -29,7 +29,9 @@ jobs:
         run: rustup update nightly && rustup default nightly
 
       - name: Setup mdBook
-        run: cargo install mdbook
+        uses: MineBartekSA/quick-mdbook@v1.1
+        with:
+          clib: musl
 
       - run: mdbook build ./book
 
