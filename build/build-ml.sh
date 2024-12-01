@@ -118,7 +118,7 @@ __abseil_is_bs() {
 	mkdir -p build
 	pushd build
 
-	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release ../
+	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="/build/install-prefix" ../
 	make
  	make install
 
