@@ -18,7 +18,8 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container: ghcr.io/chalkydri/chalkydri:dev
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
