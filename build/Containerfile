@@ -3,7 +3,7 @@ FROM docker.io/library/alpine:latest as build
 
 # Install required packages
 RUN apk update
-RUN apk add musl-dev curl git bash make \
+RUN apk add musl-dev curl git bash make mold \
         cmake autoconf automake g++ gcompat clang-dev binutils libtool \
         libstdc++-dev xxd linux-headers abseil-cpp-dev libusb-dev flatbuffers-dev
 
@@ -25,7 +25,7 @@ COPY --from=build /deps /deps
 
 # Install required packages
 RUN apk update
-RUN apk add musl-dev curl git bash make \
+RUN apk add musl-dev curl git bash make mold \
         cmake autoconf automake clang-dev binutils libtool \
         libstdc++-dev xxd linux-headers gcompat abseil-cpp-dev libusb-dev \
         python3 py3-pip libcamera-dev libcamera-tools flatbuffers-dev
