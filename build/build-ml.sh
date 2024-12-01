@@ -121,6 +121,9 @@ __abseil_is_bs() {
 	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release ../
 	make
  	make install
+
+  	popd #build
+   	popd #abseil-cpp
 }
 __abseil_is_bs
 
