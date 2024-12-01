@@ -12,7 +12,7 @@ WORKDIR /build
 RUN git clone https://github.com/google/flatbuffers.git && \
         git clone https://github.com/tensorflow/tensorflow.git && \
         git clone https://github.com/libusb/libusb.git && \
-        git clone https://github.com/feranick/libedgetpu.git
+        git clone https://github.com/frc4533-lincoln/libedgetpu.git
 
 # Build non-Rust machine learning deps
 COPY ./build-ml.sh .
