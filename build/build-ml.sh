@@ -17,20 +17,20 @@ install_prefix='/deps'
 
 export PKG_CONFIG_PATH="/deps/lib/pkgconfig"
 
-__flatbuffers() {
-	pushd flatbuffers
- 	git checkout $flatbuffers_version
-	mkdir -p build
- 	pushd build
+# __flatbuffers() {
+# 	pushd flatbuffers
+#  	git checkout $flatbuffers_version
+# 	mkdir -p build
+#  	pushd build
   
-	cmake -DFLATBUFFERS_BUILD_SHAREDLIB=ON -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_INSTALL_PREFIX=/usr ..
-	make
-	make install
+# 	cmake -DFLATBUFFERS_BUILD_SHAREDLIB=ON -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_INSTALL_PREFIX=/usr ..
+# 	make
+# 	make install
 
- 	popd #build
-  	popd #flatbuffers
-}
-__flatbuffers
+#  	popd #build
+#   	popd #flatbuffers
+# }
+# __flatbuffers
 
 __tflite() {
 	pushd tensorflow
@@ -52,49 +52,46 @@ __tflite() {
 }
 __tflite
 
-__libusb() {
-	pushd libusb
-	git checkout $libusb_version
+# __libusb() {
+# 	pushd libusb
+# 	git checkout $libusb_version
 
-	# Run GNU autoconf
-	./bootstrap.sh
+# 	# Run GNU autoconf
+# 	./bootstrap.sh
 	
-	# -fPIC: Position Independent Code (tells the linker to not use specific locations)
-	# --enable-{shared,static}: Enables building the library's statically- and dynamically-linked versions
-	# --disable-udev: 
-	CFLAGS="-fPIC" ./configure --enable-static --enable-shared --disable-udev --prefix="/deps"
+# 	# -fPIC: Position Independent Code (tells the linker to not use specific locations)
+# 	# --enable-{shared,static}: Enables building the library's statically- and dynamically-linked versions
+# 	# --disable-udev: 
+# 	CFLAGS="-fPIC" ./configure --enable-static --enable-shared --disable-udev --prefix="/deps"
 
-	make
-	make install
+# 	make
+# 	make install
 	
-	popd #libusb
-}
-__libusb
+# 	popd #libusb
+# }
+# __libusb
 
-__abseil_is_bs() {
-	git clone https://github.com/abseil/abseil-cpp.git
-	pushd abseil-cpp
-	mkdir -p build
-	pushd build
+# __abseil_is_bs() {
+# 	git clone https://github.com/abseil/abseil-cpp.git
+# 	pushd abseil-cpp
+# 	mkdir -p build
+# 	pushd build
 
-	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="/deps" ../
-	make
- 	make install
+# 	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="/deps" ../
+# 	make
+#  	make install
 
-  	popd #build
-   	popd #abseil-cpp
-}
-__abseil_is_bs
+#   	popd #build
+#    	popd #abseil-cpp
+# }
+# __abseil_is_bs
 
 __libedgetpu() {
 	pushd libedgetpu
 	git checkout $libedgetpu_version
 
 	# Build it
-	export CFLAGS="-L/deps/lib -I/deps/include"
-	export CXXFLAGS="-L/deps/lib -I/deps/include"
- 	export LDFLAGS="-L/deps/lib -L/usr/lib/x86_64-linux-gnu"
-  	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/deps/lib/ make -f makefile_build/Makefile libedgetpu
+  	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/usr/lib make -f makefile_build/Makefile libedgetpu
 
 	pushd tflite
  	pushd public
