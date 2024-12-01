@@ -5,14 +5,12 @@ FROM docker.io/library/alpine:latest as build
 RUN apk update
 RUN apk add musl-dev curl git bash make \
         cmake autoconf automake g++ gcompat clang-dev binutils libtool \
-        libstdc++-dev xxd linux-headers abseil-cpp-dev libusb-dev \
-        flatbuffers-dev
+        libstdc++-dev xxd linux-headers abseil-cpp-dev libusb-dev
 
 WORKDIR /build
 # Clone non-Rust dependencies
 RUN git clone https://github.com/google/flatbuffers.git && \
         git clone https://github.com/tensorflow/tensorflow.git && \
-        git clone https://github.com/libusb/libusb.git && \
         git clone https://github.com/frc4533-lincoln/libedgetpu.git
 
 # Build non-Rust machine learning deps
@@ -30,7 +28,7 @@ RUN apk update
 RUN apk add musl-dev curl git bash make \
         cmake autoconf automake clang-dev binutils libtool \
         libstdc++-dev xxd linux-headers gcompat abseil-cpp-dev libusb-dev \
-        python3 py3-pip libcamera-dev libcamera-tools flatbuffers-dev
+        python3 py3-pip libcamera-dev libcamera-tools
 
 # Set command line shell
 SHELL [ "/bin/bash", "-c" ]
