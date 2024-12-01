@@ -17,24 +17,24 @@ install_prefix='/deps'
 
 export PKG_CONFIG_PATH="/deps/lib/pkgconfig"
 
-__flatbuffers() {
-	pushd flatbuffers
- 	git checkout $flatbuffers_version
-	mkdir -p build
- 	pushd build
+# __flatbuffers() {
+# 	pushd flatbuffers
+#  	git checkout $flatbuffers_version
+# 	mkdir -p build
+#  	pushd build
   
-	cmake -DFLATBUFFERS_BUILD_SHAREDLIB=OFF -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DFLATBUFFERS_BUILD_STATICLIB=TRUE -DCMAKE_INSTALL_PREFIX=/usr ..
-	make
-	make install
+# 	cmake -DFLATBUFFERS_BUILD_SHAREDLIB=OFF -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DFLATBUFFERS_BUILD_STATICLIB=TRUE -DCMAKE_INSTALL_PREFIX=/usr ..
+# 	make
+# 	make install
 
- 	popd #build
-  	popd #flatbuffers
-}
-__flatbuffers
+#  	popd #build
+#   	popd #flatbuffers
+# }
+# __flatbuffers
 
 __tflite() {
 	pushd tensorflow
-	git checkout $tensorflow_version
+	#git checkout $tensorflow_version
 	mkdir -p build
 	pushd build
 
@@ -88,7 +88,7 @@ __tflite
 
 __libedgetpu() {
 	pushd libedgetpu
-	git checkout $libedgetpu_version
+	#git checkout $libedgetpu_version
 
 	# Build it
   	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/usr/lib make -f makefile_build/Makefile libedgetpu
