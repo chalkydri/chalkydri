@@ -5,7 +5,7 @@ FROM docker.io/library/alpine:latest as build
 RUN apk update
 RUN apk add musl-dev curl git bash make \
         cmake autoconf automake clang-dev binutils libtool \
-        libstdc++-dev xxd
+        libstdc++-dev xxd linux-headers
 
 WORKDIR /build
 # Clone non-Rust dependencies
@@ -25,7 +25,11 @@ FROM docker.io/library/rust:alpine as final
 COPY --from=build /deps /deps
 
 # Install required packages
-RUN apk add musl-dev curl git bash make python3 py3-pip libcamera-dev libcamera-tools
+RUN apk update
+RUN apk add musl-dev curl git bash make \
+        cmake autoconf automake clang-dev binutils libtool \
+        libstdc++-dev xxd linux-headers \
+        python3 py3-pip libcamera-dev libcamera-tools
 
 # Set command line shell
 SHELL [ "/bin/bash", "-c" ]
