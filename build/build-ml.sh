@@ -15,6 +15,8 @@ tensorflow_version='v2.16.1'
 
 install_prefix='/build/install-prefix'
 
+export PKG_CONFIG_PATH="$install_prefix/lib/pkgconfig"
+
 # # If Bazel isn't installed, go through the entire process to download/bootstrap it w/ Bazelisk :/
 # if ! command -v bazel; then
 # 	#echo "Please install bazel first: https://github.com/bazelbuild/bazelisk/releases/latest"
