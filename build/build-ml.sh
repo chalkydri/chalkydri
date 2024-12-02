@@ -17,20 +17,20 @@ install_prefix='/deps'
 
 export PKG_CONFIG_PATH="/deps/lib/pkgconfig"
 
-# __flatbuffers() {
-# 	pushd flatbuffers
-#  	git checkout $flatbuffers_version
-# 	mkdir -p build
-#  	pushd build
+__flatbuffers() {
+	pushd flatbuffers
+ 	git checkout $flatbuffers_version
+	mkdir -p build
+ 	pushd build
   
-# 	cmake -DFLATBUFFERS_BUILD_SHAREDLIB=OFF -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DFLATBUFFERS_BUILD_STATICLIB=TRUE -DCMAKE_INSTALL_PREFIX=/usr ..
-# 	make
-# 	make install
+	cmake -DFLATBUFFERS_BUILD_SHAREDLIB=OFF -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DFLATBUFFERS_BUILD_STATICLIB=TRUE -DCMAKE_INSTALL_PREFIX=/deps ..
+	cmake --build . -j
+	cmake --install .
 
-#  	popd #build
-#   	popd #flatbuffers
-# }
-# __flatbuffers
+ 	popd #build
+  	popd #flatbuffers
+}
+__flatbuffers
 
 __tflite() {
 	pushd tensorflow
@@ -38,7 +38,7 @@ __tflite() {
 	mkdir -p build
 	pushd build
 
-	cmake -DTFLITE_ENABLE_XNNPACK=OFF -DCMAKE_BUILD_TYPE=Release \
+	cmake -DTFLITE_ENABLE_XNNPACK=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_LIBRARY_PATH=/deps/lib \
  		-DCMAKE_SHARED_LINKER_FLAGS="-lbsd" -DTFLITE_C_BUILD_SHARED_LIBS=OFF \
  		../tensorflow/lite/c/
 	cmake --build . -j
