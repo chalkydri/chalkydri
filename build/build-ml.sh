@@ -38,8 +38,8 @@ __tflite() {
 	mkdir -p build
 	pushd build
 
-	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DTFLITE_ENABLE_XNNPACK=OFF -DCMAKE_BUILD_TYPE=Release \
- 		-DCMAKE_SHARED_LINKER_FLAGS="-lbsd" \
+	cmake -DTFLITE_ENABLE_XNNPACK=OFF -DCMAKE_BUILD_TYPE=Release \
+ 		-DCMAKE_SHARED_LINKER_FLAGS="-lbsd" -DTFLITE_C_BUILD_SHARED_LIBS=OFF \
  		../tensorflow/lite/c/
 	cmake --build . -j
 
