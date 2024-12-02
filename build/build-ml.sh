@@ -46,7 +46,8 @@ __tflite() {
 	# popd #build
 
 	mkdir -p /deps/include /deps/lib
- 	find tensorflow/lite -type f -name '*.h' -exec cp --parents '{}' /deps/include \;
+ 	find tensorflow/lite -type f -name '*.h' -exec cp --parents '{}' /usr/local/include \;
+   	find tensorflow/lite -type f -name '*.h' -exec cp --parents '{}' /deps/include \;
   	# find build -type f -name '*.a' -exec cp '{}' /deps/lib \;
    # 	find build -type f -name '*.so' -exec cp '{}' /deps/lib \;
   
@@ -93,7 +94,7 @@ __libedgetpu() {
 	#git checkout $libedgetpu_version
 
 	# Build it
-  	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/usr/local/lib make -f makefile_build/Makefile libedgetpu
+  	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/deps/lib make -f makefile_build/Makefile libedgetpu
 
 	pushd tflite
  	pushd public
