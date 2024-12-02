@@ -93,7 +93,7 @@ __libedgetpu() {
 	#git checkout $libedgetpu_version
 
 	# Build it
-  	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/usr/lib make -f makefile_build/Makefile libedgetpu
+  	TFROOT=/build/tensorflow/ LD_LIBRARY_PATH=/usr/local/lib make -f makefile_build/Makefile libedgetpu
 
 	pushd tflite
  	pushd public
