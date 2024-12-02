@@ -20,8 +20,8 @@ RUN apk add musl-dev curl git bash make mold \
 
 WORKDIR /build
 # Clone non-Rust dependencies
-RUN git clone https://github.com/frc4533-lincoln/libedgetpu.git && \
-        git clone https://github.com/tensorflow/tensorflow.git
+RUN git clone --depth=1 https://github.com/frc4533-lincoln/libedgetpu.git && \
+        git clone --depth=1 https://github.com/tensorflow/tensorflow.git
 
 COPY --from=libtflite /home /usr/local/lib
 
