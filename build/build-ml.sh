@@ -32,27 +32,27 @@ export PKG_CONFIG_PATH="/deps/lib/pkgconfig"
 # }
 # __flatbuffers
 
-__tflite() {
-	pushd tensorflow
-	#git checkout $tensorflow_version
-	mkdir -p build
-	pushd build
+# __tflite() {
+# 	pushd tensorflow
+# 	#git checkout $tensorflow_version
+# 	mkdir -p build
+# 	pushd build
 
-	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=FALSE -DTFLITE_ENABLE_XNNPACK=OFF -DCMAKE_BUILD_TYPE=Release \
- 		-DCMAKE_SHARED_LINKER_FLAGS="-lbsd" -DCMAKE_STATIC_LINKER_FLAGS="-lbsd" \
- 		../tensorflow/lite/c/
-	make
+# 	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=FALSE -DTFLITE_ENABLE_XNNPACK=OFF -DCMAKE_BUILD_TYPE=Release \
+#  		-DCMAKE_SHARED_LINKER_FLAGS="-lbsd" -DCMAKE_STATIC_LINKER_FLAGS="-lbsd" \
+#  		../tensorflow/lite/c/
+# 	make
 
-	popd #build
+# 	popd #build
 
-	mkdir -p /deps/include /deps/lib
- 	find tensorflow/lite -type f -name '*.h' -exec cp --parents '{}' /deps/include \;
-  	find build -type f -name '*.a' -exec cp '{}' /deps/lib \;
-   	find build -type f -name '*.so' -exec cp '{}' /deps/lib \;
+# 	mkdir -p /deps/include /deps/lib
+#  	find tensorflow/lite -type f -name '*.h' -exec cp --parents '{}' /deps/include \;
+#   	find build -type f -name '*.a' -exec cp '{}' /deps/lib \;
+#    	find build -type f -name '*.so' -exec cp '{}' /deps/lib \;
   
-	popd #tensorflow
-}
-__tflite
+# 	popd #tensorflow
+# }
+# __tflite
 
 # __libusb() {
 # 	pushd libusb
