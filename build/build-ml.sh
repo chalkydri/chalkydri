@@ -35,13 +35,13 @@ export PKG_CONFIG_PATH="/deps/lib/pkgconfig"
 __tflite() {
 	pushd tensorflow
 	#git checkout $tensorflow_version
-	# mkdir -p build
-	# pushd build
+	mkdir -p build
+	pushd build
 
-	# cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=FALSE -DTFLITE_ENABLE_XNNPACK=OFF -DCMAKE_BUILD_TYPE=Release \
- # 		-DCMAKE_SHARED_LINKER_FLAGS="-lbsd" -DCMAKE_STATIC_LINKER_FLAGS="-lbsd" \
- # 		../tensorflow/lite/c/
-	# make
+	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=TRUE -DTFLITE_ENABLE_XNNPACK=OFF -DCMAKE_BUILD_TYPE=Release \
+ 		-DCMAKE_SHARED_LINKER_FLAGS="-lbsd" \
+ 		../tensorflow/lite/c/
+	cmake --build . -j
 
 	# popd #build
 
