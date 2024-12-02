@@ -38,7 +38,7 @@ __tflite() {
 	mkdir -p build
 	pushd build
 
-	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=FALSE -DCMAKE_BUILD_TYPE=Release ../tensorflow/lite/c/
+	cmake -DCMAKE_SHARED_LIBRARY=TRUE -DCMAKE_STATIC_LIBRARY=FALSE -DTFLITE_ENABLE_XNNPACK=OFF -DCMAKE_BUILD_TYPE=Release ../tensorflow/lite/c/
 	make
 
 	popd #build
