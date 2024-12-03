@@ -17,21 +17,21 @@ install_prefix='/deps'
 
 export PKG_CONFIG_PATH="/deps/lib/pkgconfig"
 
-__flatbuffers() {
-	pushd flatbuffers
- 	git checkout $flatbuffers_version
-	mkdir -p build
- 	pushd build
+# __flatbuffers() {
+# 	pushd flatbuffers
+#  	git checkout $flatbuffers_version
+# 	mkdir -p build
+#  	pushd build
   
-	cmake -DFLATBUFFERS_BUILD_SHAREDLIB=OFF -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DFLATBUFFERS_BUILD_STATICLIB=TRUE \
- 		-DFLATBUFFERS_LOCALE_INDEPENDENT=1 -DCMAKE_INSTALL_PREFIX=/deps ..
-	cmake --build . -j
-	cmake --install .
+# 	cmake -DFLATBUFFERS_BUILD_SHAREDLIB=OFF -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DFLATBUFFERS_BUILD_STATICLIB=TRUE \
+#  		-DFLATBUFFERS_LOCALE_INDEPENDENT=1 -DCMAKE_INSTALL_PREFIX=/deps ..
+# 	cmake --build . -j
+# 	cmake --install .
 
- 	popd #build
-  	popd #flatbuffers
-}
-__flatbuffers
+#  	popd #build
+#   	popd #flatbuffers
+# }
+# __flatbuffers
 
 __tflite() {
 	pushd tensorflow
