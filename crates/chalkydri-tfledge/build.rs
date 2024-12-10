@@ -10,7 +10,7 @@ fn main() {
     #[cfg(feature = "__bindgen")]
     {
         let mut b = bindgen::builder()
-            .clang_arg("-I/deps/include")
+            .clang_arg("-I/usr/local/include")
             .rustified_enum(".*")
             .use_core();
         for h in [
@@ -27,7 +27,7 @@ fn main() {
         b.generate().unwrap().write_to_file("src/gen.rs").unwrap();
     }
 
-    println!("cargo:rustc-link-search=/deps/lib");
+    println!("cargo:rustc-link-search=/usr/local/lib");
     println!("cargo:rustc-link-lib=edgetpu");
     println!("cargo:rustc-link-lib=tensorflowlite_c");
 }
