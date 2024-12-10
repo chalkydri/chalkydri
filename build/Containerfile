@@ -26,7 +26,7 @@ RUN chmod +x ./build-ml.sh && ./build-ml.sh
 #
 
 # Now the actual image, based on glorious Alpine
-FROM docker.io/library/rust:ubuntu as final
+FROM docker.io/library/rust as final
 
 # Copy over build artifacts from the TFLite dumpster fire
 COPY --from=build /deps /usr/local
