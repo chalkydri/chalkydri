@@ -9,7 +9,7 @@ FROM docker.io/library/ubuntu:latest as build
 RUN apt update
 RUN apt install -y build-essential git bash make \
         cmake autoconf automake g++ binutils libtool \
-        libabsl-dev libusb-1.0-0-dev xxd
+        libabsl-dev libusb-1.0-0-dev xxd mold
 
 WORKDIR /build
 # Clone non-Rust dependencies
