@@ -1,30 +1,21 @@
 #
-# "TFLITE IS TRASH" STAGE
-#
-
-FROM docker.io/jonarod/tensorflow_lite_alpine as libtflite
-
-#
 # BUILD STAGE
 #
 
 # Google containment
-FROM docker.io/library/alpine:latest as build
+FROM docker.io/library/ubuntu:latest as build
 
 # Install required packages
-RUN apk update
-RUN apk add musl-dev curl git bash make mold \
-        cmake autoconf automake g++ gcompat clang-dev binutils libtool \
-        libstdc++-dev xxd linux-headers abseil-cpp-dev libusb-dev flatbuffers-dev \
-        python3 py3-pip
+RUN apt update
+RUN apt install -y build-essential git bash make \
+        cmake autoconf automake g++ binutils libtool \
+        libabsl-dev libusb-1.0-0-dev xxd
 
 WORKDIR /build
 # Clone non-Rust dependencies
 RUN git clone --depth=1 https://github.com/frc4533-lincoln/libedgetpu.git && \
         git clone --depth=1 https://github.com/google/flatbuffers.git && \
         git clone --depth=1 https://github.com/tensorflow/tensorflow.git
-
-COPY --from=libtflite /home /usr/local/lib
 
 # Build non-Rust machine learning deps
 COPY ./build-ml.sh .
@@ -35,18 +26,16 @@ RUN chmod +x ./build-ml.sh && ./build-ml.sh
 #
 
 # Now the actual image, based on glorious Alpine
-FROM docker.io/library/rust:alpine as final
+FROM docker.io/library/rust:ubuntu as final
 
 # Copy over build artifacts from the TFLite dumpster fire
-COPY --from=libtflite /home /usr/local/lib
 COPY --from=build /deps /usr/local
 
 # Install required packages
-RUN apk update
-RUN apk add musl-dev curl git bash make mold \
-        cmake autoconf automake clang-dev binutils libtool \
-        libstdc++-dev xxd linux-headers gcompat abseil-cpp-dev libusb-dev \
-        python3 py3-pip libcamera-dev libcamera-tools flatbuffers-dev
+RUN apt update
+RUN apt install -y build-essential git bash make \
+        cmake autoconf automake g++ binutils libtool \
+        libabsl-dev libusb-1.0-0-dev xxd
 
 # Set command line shell
 SHELL [ "/bin/bash", "-c" ]
