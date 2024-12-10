@@ -30,6 +30,7 @@ FROM docker.io/library/rust as final
 
 # Copy over build artifacts from the TFLite dumpster fire
 COPY --from=build /deps /usr/local
+RUN ln -s /usr/local/lib/libedgetpu.so.1.0 /usr/local/lib/libedgetpu.so
 
 # Install required packages
 RUN apt update
