@@ -26,12 +26,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Restore from cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
+          key: cargo
           path: |
             ~/.cargo
             ~/.rustup
-          save-always: true
         
       - name: Install rust nightly
         run: rustup update nightly && rustup default nightly
@@ -48,6 +48,14 @@ jobs:
 
       - name: Run rustdoc
         run: cargo doc --workspace --document-private-items --no-deps
+
+      - name: Save to cache
+        uses: actions/cache/save@v4
+        with:
+          key: cargo
+          path: |
+            ~/.cargo
+            ~/.rustup
 
       - name: Copy rustdoc
         run: mv target/doc book/book
