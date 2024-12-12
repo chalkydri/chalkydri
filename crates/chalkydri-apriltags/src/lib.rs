@@ -10,7 +10,7 @@
 #[cfg(feature = "multi-thread")]
 extern crate rayon;
 
-mod decode;
+//mod decode;
 // mod pose_estimation;
 pub mod utils;
 
