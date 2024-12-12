@@ -11,11 +11,11 @@
 extern crate rayon;
 
 mod decode;
-mod pose_estimation;
+// mod pose_estimation;
 pub mod utils;
 
 use cam_geom::IntrinsicParametersPerspective;
-use pose_estimation::pose_estimation;
+// use pose_estimation::pose_estimation;
 use ril::{Line, Rgb};
 // TODO: ideally we'd use alloc here and only pull in libstd for sync::atomic when the multi-thread feature is enabled
 use std::{
@@ -64,7 +64,7 @@ impl Detector {
         width: usize,
         height: usize,
         valid_tags: &'static [usize],
-        intrinsics: IntrinsicParametersPerspective<f32>,
+        //intrinsics: IntrinsicParametersPerspective<f32>,
     ) -> Self {
         unsafe {
             // Allocate raw buffers
@@ -142,7 +142,7 @@ impl Detector {
 
         self.check_edges();
 
-        pose_estimation(intrinsics);
+        //pose_estimation(intrinsics);
     }
 
     /// Run corner detection
