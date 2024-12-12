@@ -25,6 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Update source
+        run: git pull --force
+
       - name: Restore from cache
         uses: actions/cache/restore@v4
         with:
