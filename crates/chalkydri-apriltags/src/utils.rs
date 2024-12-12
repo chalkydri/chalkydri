@@ -1,5 +1,5 @@
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Color {
+pub(crate) enum Color {
     Black,
     White,
     Other,
@@ -24,13 +24,13 @@ impl Color {
 /// # Safety
 /// `y` should be within the vertical bounds.
 #[inline(always)]
-const unsafe fn px(x: usize, y: usize, width: usize) -> usize {
+pub(crate) const unsafe fn px(x: usize, y: usize, width: usize) -> usize {
     y.unchecked_mul(width).unchecked_add(x)
 }
 
 /// Convert a 24-bit RGB (color) value to a 8-bit luma/brightness (grayscale) value
 #[inline(always)]
-fn grayscale(data: &[u8]) -> u8 {
+pub(crate) fn grayscale(data: &[u8]) -> u8 {
     if let &[r, g, b] = data {
         // Somebody else's ideal RGB conversion values:
         // (r as f32).mul_add(0.3, (g as f32).mul_add(0.59, (b as f32) * 0.11)) as u8
@@ -48,7 +48,7 @@ fn grayscale(data: &[u8]) -> u8 {
 /// Turns p1, p2, p3... into an approximate angle
 #[rustfmt::skip]
 #[inline(always)]
-fn fast_angle(p: u8) -> f32 {
+pub(crate) fn fast_angle(p: u8) -> f32 {
     match p {
         1  =>   0.0,
         2  =>  22.5,
@@ -71,7 +71,7 @@ fn fast_angle(p: u8) -> f32 {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Orientation {
+pub(crate) enum Orientation {
     Collinear,
     Clockwise,
     Counterclockwise,
@@ -79,7 +79,7 @@ pub enum Orientation {
 
 /// Calculate the orientation
 #[inline(always)]
-pub fn orientation(
+pub(crate) fn orientation(
     (px, py): (usize, usize),
     (qx, qy): (usize, usize),
     (rx, ry): (usize, usize),
@@ -101,7 +101,7 @@ pub fn orientation(
 }
 
 /// My gift wrapping implementation
-pub struct PresentWrapper {}
+pub(crate) struct PresentWrapper {}
 impl PresentWrapper {
     // IDEA: I can take advantage of triangles for the early termination feature.
     // After drawing two lines, I can find the hypotenuse using Pythag theorem.
