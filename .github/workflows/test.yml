@@ -33,8 +33,11 @@ jobs:
       - name: Install rust nightly
         run: rustup update nightly && rustup default nightly
 
-      - name: Run rustdoc
-        run: cargo test --workspace --keep-going
+      - name: Run check
+        run: cargo check --workspace --keep-going
+      
+      - name: Run tests
+        run: cargo test --workspace --no-fail-fast
       
       - name: Save to cache
         uses: actions/cache/save@v4
