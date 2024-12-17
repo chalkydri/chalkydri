@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -27,7 +26,15 @@ jobs:
 
       # - name: Update source
       #   run: git config --global --add safe.directory /__w/chalkydri/chalkydri && git pull --force
-        
+      
+      - name: Restore from cache
+        uses: actions/cache/restore@v4
+        with:
+          key: cargo
+          path: |
+            ~/.cargo
+            ~/.rustup
+      
       - name: Install rust nightly
         run: rustup update nightly && rustup default nightly
 
@@ -47,7 +54,15 @@ jobs:
 
       - name: Run rustdoc
         run: cargo doc --workspace --document-private-items --no-deps
-
+      
+      - name: Save to cache
+        uses: actions/cache/save@v4
+        with:
+          key: cargo
+          path: |
+            ~/.cargo
+            ~/.rustup
+      
       - name: Copy rustdoc
         run: mv target/doc book/book
 
