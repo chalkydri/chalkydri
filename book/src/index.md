@@ -28,3 +28,12 @@ Chalkydri has been built from the ground up for performance on popular FRC visio
  - [Lincoln](https://github.com/frc4533-lincoln) (Student, 4533)
    - Phoenix vision code lead
 
+ - [Chloe](https://github.com/chofuu) (Student, 4533)
+   - Implemented pose estimation
+
+ - [Eda](https://github.com/) (Student, 4533)
+   - Implemented AprilTags edge checking algorithm
+
+ - [Drake](https://github.com/drakeerv) (Student, 4533)
+   - Past vision code lead
+

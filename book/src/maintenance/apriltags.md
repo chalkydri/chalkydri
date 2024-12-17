@@ -21,10 +21,8 @@ CAT is based on existing algorithms, but with some tweaks specific to our use ca
  1. Get a frame
  2. [Grayscale & threshold](#grayscale--threshold)
  3. [Detect corners](#corner-detection)
- 4. [Cluster & filter outliers](#cluster--filter-outliers) (TODO)
- 5. [Find convex hulls](#find-convex-hulls)
- 6. [Check convex hulls](#check-convex-hulls)
- 7. [Decode tags](#decode-tags)
+ 4. [Edge checking](#edge-checking)
+ 5. [Decode tags](#decode-tags)
 
 ## Grayscale & threshold
 
@@ -32,7 +30,7 @@ Converting RGB to grayscale and thresholding are combined into one step for perf
 
 I can't find the original reference I used for grayscale values.
 
-For adaptive thresholding, "Bradley's method" seems like the best option. It's described in [Adaptive Thresholding Using the Integral Image](https://people.scs.carleton.ca/~roth/iit-publications-iti/docs/gerh-50002.pdf).
+We need to implement "iterative tri-class adaptive thresholding" based on Otsu's method.
 
 ## Corner detection
 
@@ -49,22 +47,13 @@ Another advantage: it's very simple and easy to understand.
 |    | 11 |    |    |    |  7 |    |
 |    |    | 10 |  9 |  8 |    |    |
 
-## Cluster & filter outliers
+## Edge checking
 
-OPTICS[^1] is an algorithm for clustering and outlier detection.
+"Edge checking" reuses some of our corner detection algorithm.
 
-It's similar to [DBSCAN](), which is described pretty well by Wikipedia:
- > given a set of points in some space, it groups together points that are closely packed (points with many nearby neighbors), and marks as outliers points that lie alone in low-density regions (those whose nearest neighbors are too far away).
+We simply check a few points alongside the paths of each imaginary line between two corners.
 
-You can read more about it in [the Wikipedia article](https://en.wikipedia.org/wiki/OPTICS_algorithm).
-
-## Find convex hulls
-
-Gift wrapping algorithm
-
-## Check convex hulls
-
-TODO
+![Insert photo here]()
 
 ## Decode tags
 
@@ -74,4 +63,3 @@ Decoding tags is done pretty much the same way the C library does it.
 
  - [Real-time Quadrilateral Object Corner Detection Algorithm Based on Deep Learning](/assets/C83.pdf)
 
-[^1]: https://en.wikipedia.org/wiki/OPTICS_algorithm ([PDF](/assets/OPTICS_algorithm.pdf))
