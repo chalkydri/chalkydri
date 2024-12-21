@@ -30,20 +30,20 @@ extern crate pyo3;
 #[cfg(feature = "ml")]
 extern crate tfledge;
 
-//#[cfg(feature = "libcamera")]
-//mod cameras;
-mod api;
+#[cfg(feature = "libcamera")]
+mod cameras;
+//mod api;
 mod config;
-mod subsys;
+//mod subsys;
 mod utils;
 //mod logger;
 
 use actix::prelude::*;
 use minint::NtConn;
 use std::{error::Error, marker::PhantomData, time::Duration};
-use subsys::apriltags::{Apriltags, ApriltagsConfig};
+//use subsys::apriltags::{Apriltags, ApriltagsConfig};
 
-use crate::{api::run_api, utils::gen_team_ip};
+use crate::utils::gen_team_ip;
 
 /// A processing subsystem
 ///
@@ -124,15 +124,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Connected to NT server at {roborio_ip:?} successfully!");
 
-    let apriltags_subsys = Apriltags::init().await?;
+    //let apriltags_subsys = Apriltags::init().await?;
     //let ml_subsys = MlSubsys::init().await?;
 
-    let apriltags = apriltags_subsys.run(ApriltagsConfig { workers: 4 }).await;
+    //let apriltags = apriltags_subsys.run(ApriltagsConfig { workers: 4 }).await;
     //let ml = ml_subsys.run(MlSubsysCfg { model_path: String::from("test.tflite") }).await;
 
     // Have to let NT topics get dropped before calling nt.stop()
     {
-        run_api(nt.clone()).await;
+        //run_api(nt.clone()).await;
     }
 
     // Shut down NT connection
