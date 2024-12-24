@@ -3,7 +3,7 @@ use libcamera::{
 };
 use std::{error::Error, time::Duration};
 
-pub async fn load_cameras() -> Result<(), Box<dyn Error>> {
+pub async fn load_cameras(frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Result<(), Box<dyn Error>> {
     use libcamera::controls::*;
 
     let man = CameraManager::new()?;
@@ -76,19 +76,21 @@ pub async fn load_cameras() -> Result<(), Box<dyn Error>> {
 
         let properties::Model(model) = cam.properties().get::<properties::Model>()?;
 
-        loop {
-            let mut req = rx.recv_timeout(Duration::from_millis(300)).expect("camera request failed");
-            let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> = req.buffer(&stream).unwrap();
+            loop {
+                let mut req = rx.recv_timeout(Duration::from_millis(300)).expect("camera request failed");
+                let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> = req.buffer(&stream).unwrap();
 
-            let planes = framebuffer.data();
-            let frame_data = planes.get(0).unwrap();
-            let bytes_used = framebuffer.metadata().unwrap().planes().get(0).unwrap().bytes_used as usize;
+                let planes = framebuffer.data();
+                let frame_data = planes.get(0).unwrap();
+                let bytes_used = framebuffer.metadata().unwrap().planes().get(0).unwrap().bytes_used as usize;
 
-            let data = &frame_data[..bytes_used];
+                let data = &frame_data[..bytes_used];
+                let data_clone = Vec::from_iter(data.iter().cloned());
+                frame_tx.send(data_clone).unwrap();
 
-            req.reuse(ReuseFlag::REUSE_BUFFERS);
-            cam.queue_request(req).unwrap();
-        }
+                req.reuse(ReuseFlag::REUSE_BUFFERS);
+                cam.queue_request(req).unwrap();
+            }
     }
 
     Ok(())
