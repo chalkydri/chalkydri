@@ -26,10 +26,10 @@ impl Subsystem<'_, (), ()> for Apriltags {
 impl Actor for Apriltags {
     type Context = SyncContext<Self>;
 }
-impl Handler<ProcessFrame<()>> for Apriltags {
+impl Handler<ProcessFrame<(), ()>> for Apriltags {
     type Result = Result<(), ()>;
 
-    fn handle(&mut self, msg: ProcessFrame<()>, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: ProcessFrame<(), ()>, ctx: &mut Self::Context) -> Self::Result {
         //
 
         Ok(())

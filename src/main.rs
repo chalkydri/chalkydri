@@ -57,16 +57,16 @@ use crate::utils::gen_team_ip;
 /// subsystem, rather than a brand new subsystem.
 ///
 /// Make sure to pay attention to and respect each subsystem's documentation and structure.
-pub(crate) trait Subsystem<'fr, O, E>
+pub(crate) trait Subsystem<'fr, R, E>
 where
     Self: Sized,
-    O: Sized + 'static,
-    E: Debug + Send,
+    R: Sized + 'static,
+    E: Debug + Send + 'static,
 {
     /// The actual frame processing [Actor]
     ///
     /// May be `Self`
-    type Processor: Actor + Handler<ProcessFrame<O>>;
+    type Processor: Actor + Handler<ProcessFrame<R, E>>;
     /// The subsystem's configuration type
     type Config;
 
@@ -81,12 +81,16 @@ where
 }
 
 /// Actix message for sending a frame to a subsystem for processing
-pub(crate) struct ProcessFrame<R> {
+pub(crate) struct ProcessFrame<R, E>
+where
+    R: 'static,
+    E: Debug + Send + 'static,
+{
     buf: Arc<Vec<u8>>,
-    _marker: PhantomData<R>,
+    _marker: PhantomData<(R, E)>,
 }
-impl<R: 'static> Message for ProcessFrame<R> {
-    type Result = Result<R, ()>;
+impl<R: 'static, E: Debug + Send + 'static> Message for ProcessFrame<R, E> {
+    type Result = Result<R, E>;
 }
 
 #[actix::main]
@@ -143,7 +147,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         loop {
             let buf = rx.recv().unwrap();
             let buf = buf.clone();
-            apriltags.send(ProcessFrame::<()> {
+            apriltags.send(ProcessFrame::<(), ()> {
                 buf: buf.into(),
                 _marker: PhantomData,
             }).await.unwrap().unwrap();
