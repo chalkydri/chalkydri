@@ -30,20 +30,22 @@ extern crate pyo3;
 #[cfg(feature = "ml")]
 extern crate tfledge;
 
-//#[cfg(feature = "libcamera")]
-//mod cameras;
-mod api;
+#[cfg(feature = "libcamera")]
+mod cameras;
+//mod api;
 mod config;
 mod subsys;
 mod utils;
 //mod logger;
 
 use actix::prelude::*;
+use cameras::load_cameras;
 use minint::NtConn;
-use std::{error::Error, marker::PhantomData, time::Duration};
 use subsys::apriltags::{Apriltags, ApriltagsConfig};
+use std::{error::Error, fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
+//use subsys::apriltags::{Apriltags, ApriltagsConfig};
 
-use crate::{api::run_api, utils::gen_team_ip};
+use crate::utils::gen_team_ip;
 
 /// A processing subsystem
 ///
@@ -55,22 +57,23 @@ use crate::{api::run_api, utils::gen_team_ip};
 /// subsystem, rather than a brand new subsystem.
 ///
 /// Make sure to pay attention to and respect each subsystem's documentation and structure.
-pub(crate) trait Subsystem<'fr, O>
+pub(crate) trait Subsystem<'fr, R, E>
 where
     Self: Sized,
-    O: Sized + 'static,
+    R: Sized + 'static,
+    E: Debug + Send + 'static,
 {
     /// The actual frame processing [Actor]
     ///
     /// May be `Self`
-    type Processor: Actor + Handler<ProcessFrame<'fr, O>>;
+    type Processor: Actor + Handler<ProcessFrame<R, E>>;
     /// The subsystem's configuration type
     type Config;
 
     /// Initialize the subsystem
     ///
     /// This should initialize the subsystem actor, but not start it.
-    async fn init() -> Result<Self, Box<dyn Error>>;
+    async fn init() -> Result<Self, E>;
     /// Run the subsystem
     ///
     /// This should return the [Addr] of a frame processing actor.
@@ -78,12 +81,16 @@ where
 }
 
 /// Actix message for sending a frame to a subsystem for processing
-pub(crate) struct ProcessFrame<'fr, R> {
-    buf: &'fr [u8],
-    _marker: PhantomData<R>,
+pub(crate) struct ProcessFrame<R, E>
+where
+    R: 'static,
+    E: Debug + Send + 'static,
+{
+    buf: Arc<Vec<u8>>,
+    _marker: PhantomData<(R, E)>,
 }
-impl<'fr, R: 'static> Message for ProcessFrame<'fr, R> {
-    type Result = Result<R, Box<dyn Error>>;
+impl<R: 'static, E: Debug + Send + 'static> Message for ProcessFrame<R, E> {
+    type Result = Result<R, E>;
 }
 
 #[actix::main]
@@ -124,15 +131,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Connected to NT server at {roborio_ip:?} successfully!");
 
-    let apriltags_subsys = Apriltags::init().await?;
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+
+    tokio::task::spawn(async move {
+        load_cameras(tx).await.unwrap();
+    });
+
+    let apriltags_subsys = Apriltags::init().await.unwrap();
     //let ml_subsys = MlSubsys::init().await?;
 
     let apriltags = apriltags_subsys.run(ApriltagsConfig { workers: 4 }).await;
     //let ml = ml_subsys.run(MlSubsysCfg { model_path: String::from("test.tflite") }).await;
 
+    tokio::spawn(async move {
+        loop {
+            let buf = rx.recv().unwrap();
+            let buf = buf.clone();
+            apriltags.send(ProcessFrame::<(), ()> {
+                buf: buf.into(),
+                _marker: PhantomData,
+            }).await.unwrap().unwrap();
+        }
+    });
+
+
     // Have to let NT topics get dropped before calling nt.stop()
     {
-        run_api(nt.clone()).await;
+        //run_api(nt.clone()).await;
     }
 
     // Shut down NT connection

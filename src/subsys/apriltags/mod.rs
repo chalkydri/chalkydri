@@ -12,11 +12,11 @@ pub struct ApriltagsConfig {
 pub struct Apriltags {
     det: (),
 }
-impl Subsystem<'_, ()> for Apriltags {
+impl Subsystem<'_, (), ()> for Apriltags {
     type Processor = Self;
     type Config = ApriltagsConfig;
 
-    async fn init() -> Result<Self, Box<dyn std::error::Error>> {
+    async fn init() -> Result<Self, ()> {
         Ok(Self { det: () })
     }
     async fn run(self, cfg: Self::Config) -> actix::Addr<Self::Processor> {
@@ -26,10 +26,10 @@ impl Subsystem<'_, ()> for Apriltags {
 impl Actor for Apriltags {
     type Context = SyncContext<Self>;
 }
-impl Handler<ProcessFrame<'_, ()>> for Apriltags {
-    type Result = Result<(), Box<dyn std::error::Error>>;
+impl Handler<ProcessFrame<(), ()>> for Apriltags {
+    type Result = Result<(), ()>;
 
-    fn handle(&mut self, msg: ProcessFrame<'_, ()>, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: ProcessFrame<(), ()>, ctx: &mut Self::Context) -> Self::Result {
         //
 
         Ok(())

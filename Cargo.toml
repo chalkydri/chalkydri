@@ -6,7 +6,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["apriltags", "capriltags"]
+default = ["libcamera", "apriltags"]
 apriltags = ["dep:chalkydri-apriltags"]
 ml = ["dep:tfledge"]
 python = ["dep:pyo3"]
@@ -26,7 +26,7 @@ pyo3 = { version = "0.23.3", optional = true, features = ["generate-import-lib"]
 ril = { version = "0.10.1", default-features = false, features = ["quantize", "resize"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 chalkydri-apriltags = { version = "*", optional = true, path = "crates/chalkydri-apriltags" }
-libcamera = { version = "0.3.0", optional = true }
+libcamera = { version = "0.3.0", optional = true, default-features = false, features = ["libcamera_semver_versioning", "vendor_rpi"], git = "https://github.com/chalkydri/libcamera-rs.git", branch = "main" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8.12"
 actix-web = "4.5.1"
@@ -41,11 +41,15 @@ apriltag = { version = "0.4.0", optional = true }
 members = ["crates/chalkydri-apriltags", "crates/chalkydri-tfledge", "crates/minint"]
 
 # Compile dependencies with optimization level 3 even when in debug mode
+# This can reduce the time required to build when actively developing and testing.
 [profile.dev.package.'*']
 opt-level = 3
 
 # Compile everything with extreme optimizations when in release mode
 [profile.release]
+# Optimization level 3 is the most extreme level of optimization.
+# It isn't *always* the most optimized for every codebase, but I haven't bothered testing.
+# TODO: do that testing
 opt-level = 3
 # Link Time Optimization
 lto = true
