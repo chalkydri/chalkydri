@@ -1,32 +1,86 @@
 use libcamera::{
-    camera_manager::CameraManager, framebuffer::AsFrameBuffer, framebuffer_allocator::{FrameBuffer, FrameBufferAllocator}, framebuffer_map::MemoryMappedFrameBuffer, properties, request::{Request, ReuseFlag}, stream::StreamRole
+    camera::{ActiveCamera, CameraConfiguration},
+    camera_manager::CameraManager,
+    framebuffer::AsFrameBuffer,
+    framebuffer_allocator::{FrameBuffer, FrameBufferAllocator},
+    framebuffer_map::MemoryMappedFrameBuffer,
+    pixel_format::PixelFormat,
+    properties,
+    request::{Request, ReuseFlag},
+    stream::StreamRole,
 };
 use std::{error::Error, time::Duration};
 
-pub async fn load_cameras(frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Result<(), Box<dyn Error>> {
-    use libcamera::controls::*;
-
+pub async fn load_cameras(
+    frame_tx: std::sync::mpsc::Sender<Vec<u8>>,
+) -> Result<(), Box<dyn Error>> {
     let man = CameraManager::new()?;
 
     let cameras = man.cameras();
 
-    for i in 0..cameras.len() {
-        let cam = cameras.get(i).unwrap();
-        println!("{}", cam.id());
+    // TODO: this must not crash the software
+    assert!(cameras.len() > 0, "connect a camera");
 
-        let mut cam = cam.acquire().unwrap();
+    let cam = cameras.get(0).unwrap();
+    info!("using camera '{}'", cam.id());
 
-        let mut alloc = FrameBufferAllocator::new(&cam);
+    let active_cam = cam.acquire().unwrap();
 
-        let configs = cam
+    let mut cw = CamWrapper::new(active_cam, frame_tx);
+    cw.setup();
+    cw.run();
+
+    Ok(())
+}
+
+pub struct CamWrapper<'cam> {
+    cam: ActiveCamera<'cam>,
+    alloc: FrameBufferAllocator,
+    frame_tx: std::sync::mpsc::Sender<Vec<u8>>,
+    cam_tx: std::sync::mpsc::Sender<Request>,
+    cam_rx: std::sync::mpsc::Receiver<Request>,
+    configs: CameraConfiguration,
+}
+impl<'cam> CamWrapper<'cam> {
+    /// Wrap an [ActiveCamera]
+    pub fn new(cam: ActiveCamera<'cam>, frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Self {
+        let alloc = FrameBufferAllocator::new(&cam);
+
+        let mut configs = cam
             .generate_configuration(&[StreamRole::Raw, StreamRole::ViewFinder])
             .unwrap();
-        let config = configs.get(0).unwrap();
-        let stream = config.stream().unwrap();
+
+        configs
+            .get_mut(0)
+            .unwrap()
+            .set_pixel_format(PixelFormat::new(
+                u32::from_le_bytes([b'R', b'G', b'B', b'8']),
+                0,
+            ));
+
+        let (cam_tx, cam_rx) = std::sync::mpsc::channel();
+
+        Self {
+            cam,
+            alloc,
+            frame_tx,
+            cam_tx,
+            cam_rx,
+            configs,
+        }
+    }
+
+    /// Set up the camera and request the first frame
+    pub fn setup(&mut self) {
+        use libcamera::controls::*;
+
+        let stream = self.configs.get(0).unwrap().stream().unwrap();
 
         // Allocate some buffers
-        let buffers = alloc
-            .alloc(&stream)?
+        let buffers = self
+            .alloc
+            .alloc(&stream)
+            .unwrap()
             .into_iter()
             .map(|buf| MemoryMappedFrameBuffer::new(buf).unwrap())
             .collect::<Vec<_>>();
@@ -36,7 +90,7 @@ pub async fn load_cameras(frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Result<
             .enumerate()
             .map(|(i, buf)| -> Result<Request, Box<dyn Error>> {
                 // Create the initial request
-                let mut req = cam.create_request(Some(i as u64)).unwrap();
+                let mut req = self.cam.create_request(Some(i as u64)).unwrap();
 
                 // Set control values for the camera
                 {
@@ -64,35 +118,50 @@ pub async fn load_cameras(frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Result<
             .map(|x| x.unwrap())
             .collect::<Vec<_>>();
 
-        let (tx, rx) = std::sync::mpsc::channel();
-        cam.on_request_completed(move |req| {
+        let tx = self.cam_tx.clone();
+        self.cam.on_request_completed(move |req| {
             tx.send(req).unwrap();
         });
 
-        cam.start(None)?;
+        self.cam.start(None).unwrap();
         for req in reqs {
-            cam.queue_request(req)?;
+            self.cam.queue_request(req).unwrap();
         }
 
-        let properties::Model(model) = cam.properties().get::<properties::Model>()?;
-
-            loop {
-                let mut req = rx.recv_timeout(Duration::from_millis(300)).expect("camera request failed");
-                let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> = req.buffer(&stream).unwrap();
-
-                let planes = framebuffer.data();
-                let frame_data = planes.get(0).unwrap();
-                let bytes_used = framebuffer.metadata().unwrap().planes().get(0).unwrap().bytes_used as usize;
-
-                let data = &frame_data[..bytes_used];
-                let data_clone = Vec::from_iter(data.iter().cloned());
-                frame_tx.send(data_clone).unwrap();
-
-                req.reuse(ReuseFlag::REUSE_BUFFERS);
-                cam.queue_request(req).unwrap();
-            }
+        let properties::Model(_model) = self.cam.properties().get::<properties::Model>().unwrap();
     }
 
-    Ok(())
-}
+    /// Get a frame and request another
+    pub fn get_frame(&mut self) {
+        let stream = self.configs.get(0).unwrap().stream().unwrap();
+        let mut req = self
+            .cam_rx
+            .recv_timeout(Duration::from_millis(300))
+            .expect("camera request failed");
+        let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> = req.buffer(&stream).unwrap();
 
+        let planes = framebuffer.data();
+        let frame_data = planes.get(0).unwrap();
+        let bytes_used = framebuffer
+            .metadata()
+            .unwrap()
+            .planes()
+            .get(0)
+            .unwrap()
+            .bytes_used as usize;
+
+        let data = &frame_data[..bytes_used];
+        let data_clone = Vec::from_iter(data.iter().cloned());
+        self.frame_tx.send(data_clone).unwrap();
+
+        req.reuse(ReuseFlag::REUSE_BUFFERS);
+        self.cam.queue_request(req).unwrap();
+    }
+
+    /// Continously request frames until the end of time
+    pub fn run(mut self) {
+        loop {
+            self.get_frame();
+        }
+    }
+}

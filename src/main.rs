@@ -9,6 +9,7 @@
 #[macro_use]
 extern crate log;
 extern crate actix;
+extern crate actix_web;
 extern crate env_logger;
 extern crate fast_image_resize;
 #[cfg(feature = "libcamera")]
@@ -18,11 +19,11 @@ extern crate minint;
 extern crate mozjpeg;
 extern crate ril;
 extern crate tokio;
-#[macro_use]
-extern crate actix_web;
 extern crate utoipa as utopia;
 #[macro_use]
 extern crate serde;
+#[cfg(feature = "capriltags")]
+extern crate apriltag;
 #[cfg(feature = "apriltags")]
 extern crate chalkydri_apriltags;
 #[cfg(feature = "python")]
@@ -41,9 +42,8 @@ mod utils;
 use actix::prelude::*;
 use cameras::load_cameras;
 use minint::NtConn;
-use subsys::apriltags::{Apriltags, ApriltagsConfig};
 use std::{error::Error, fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
-//use subsys::apriltags::{Apriltags, ApriltagsConfig};
+use subsys::capriltags::CApriltagsDetector;
 
 use crate::utils::gen_team_ip;
 
@@ -57,39 +57,32 @@ use crate::utils::gen_team_ip;
 /// subsystem, rather than a brand new subsystem.
 ///
 /// Make sure to pay attention to and respect each subsystem's documentation and structure.
-pub(crate) trait Subsystem<'fr, R, E>
-where
-    Self: Sized,
-    R: Sized + 'static,
-    E: Debug + Send + 'static,
-{
+pub(crate) trait Subsystem<'fr>: Sized {
     /// The actual frame processing [Actor]
     ///
     /// May be `Self`
-    type Processor: Actor + Handler<ProcessFrame<R, E>>;
+    type Processor: Actor + Handler<ProcessFrame<Self::Output, Self::Error>>;
     /// The subsystem's configuration type
     type Config;
+    type Output: Send + 'static;
+    type Error: Debug + Send + 'static;
 
     /// Initialize the subsystem
     ///
     /// This should initialize the subsystem actor, but not start it.
-    async fn init() -> Result<Self, E>;
-    /// Run the subsystem
-    ///
-    /// This should return the [Addr] of a frame processing actor.
-    async fn run(self, cfg: Self::Config) -> Addr<Self::Processor>;
+    async fn init(cfg: Self::Config) -> Result<Addr<Self::Processor>, Self::Error>;
 }
 
 /// Actix message for sending a frame to a subsystem for processing
 pub(crate) struct ProcessFrame<R, E>
 where
-    R: 'static,
+    R: Send + 'static,
     E: Debug + Send + 'static,
 {
     buf: Arc<Vec<u8>>,
     _marker: PhantomData<(R, E)>,
 }
-impl<R: 'static, E: Debug + Send + 'static> Message for ProcessFrame<R, E> {
+impl<R: Send + 'static, E: Debug + Send + 'static> Message for ProcessFrame<R, E> {
     type Result = Result<R, E>;
 }
 
@@ -137,23 +130,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
         load_cameras(tx).await.unwrap();
     });
 
-    let apriltags_subsys = Apriltags::init().await.unwrap();
+    //let apriltags_subsys = Apriltags::init().await.unwrap();
     //let ml_subsys = MlSubsys::init().await?;
 
-    let apriltags = apriltags_subsys.run(ApriltagsConfig { workers: 4 }).await;
+    //let apriltags = apriltags_subsys.run(ApriltagsConfig { workers: 4 }).await;
     //let ml = ml_subsys.run(MlSubsysCfg { model_path: String::from("test.tflite") }).await;
+
+    let apriltags = CApriltagsDetector::init(()).await.unwrap();
 
     tokio::spawn(async move {
         loop {
             let buf = rx.recv().unwrap();
             let buf = buf.clone();
-            apriltags.send(ProcessFrame::<(), ()> {
-                buf: buf.into(),
-                _marker: PhantomData,
-            }).await.unwrap().unwrap();
+            apriltags
+                .do_send(ProcessFrame::<(), _> {
+                    buf: buf.into(),
+                    _marker: PhantomData,
+                });
         }
     });
-
 
     // Have to let NT topics get dropped before calling nt.stop()
     {
