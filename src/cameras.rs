@@ -24,9 +24,18 @@ pub async fn load_cameras(
     let cam = cameras.get(0).unwrap();
     info!("using camera '{}'", cam.id());
 
+        let mut cfgg = cam
+            .generate_configuration(&[StreamRole::VideoRecording])
+            .unwrap();
+dbg!(&cfgg);
+//       cfgg.get_mut(0).unwrap().set_pixel_format(PixelFormat::new(
+//                u32::from_le_bytes([b'R', b'G', b'B', b'8']),
+//                0,
+//            ));
+
     let active_cam = cam.acquire().unwrap();
 
-    let mut cw = CamWrapper::new(active_cam, frame_tx);
+    let mut cw = CamWrapper::new(active_cam, cfgg, frame_tx);
     cw.setup();
     cw.run();
 
@@ -39,24 +48,14 @@ pub struct CamWrapper<'cam> {
     frame_tx: std::sync::mpsc::Sender<Vec<u8>>,
     cam_tx: std::sync::mpsc::Sender<Request>,
     cam_rx: std::sync::mpsc::Receiver<Request>,
-    configs: CameraConfiguration,
+	configs: CameraConfiguration,
 }
 impl<'cam> CamWrapper<'cam> {
     /// Wrap an [ActiveCamera]
-    pub fn new(cam: ActiveCamera<'cam>, frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Self {
+    pub fn new(mut cam: ActiveCamera<'cam>, mut cfgg: CameraConfiguration, frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Self {
         let alloc = FrameBufferAllocator::new(&cam);
+	cam.configure(&mut cfgg).unwrap();
 
-        let mut configs = cam
-            .generate_configuration(&[StreamRole::Raw, StreamRole::ViewFinder])
-            .unwrap();
-
-        configs
-            .get_mut(0)
-            .unwrap()
-            .set_pixel_format(PixelFormat::new(
-                u32::from_le_bytes([b'R', b'G', b'B', b'8']),
-                0,
-            ));
 
         let (cam_tx, cam_rx) = std::sync::mpsc::channel();
 
@@ -66,7 +65,7 @@ impl<'cam> CamWrapper<'cam> {
             frame_tx,
             cam_tx,
             cam_rx,
-            configs,
+configs: cfgg,
         }
     }
 
@@ -74,7 +73,8 @@ impl<'cam> CamWrapper<'cam> {
     pub fn setup(&mut self) {
         use libcamera::controls::*;
 
-        let stream = self.configs.get(0).unwrap().stream().unwrap();
+        let stream = self.configs.get(0).unwrap();
+	let stream = stream.stream().unwrap();
 
         // Allocate some buffers
         let buffers = self
