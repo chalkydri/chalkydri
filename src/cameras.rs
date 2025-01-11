@@ -137,7 +137,7 @@ configs: cfgg,
         let stream = self.configs.get(0).unwrap().stream().unwrap();
         let mut req = self
             .cam_rx
-            .recv_timeout(Duration::from_millis(300))
+            .recv_timeout(Duration::from_millis(2000))
             .expect("camera request failed");
         let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> = req.buffer(&stream).unwrap();
 
@@ -167,7 +167,7 @@ configs: cfgg,
             width: 1920, height: 1080, y_plane, u_plane, v_plane, y_stride, u_stride, v_stride
         };
 
-        let mut buff = Vec::new();
+        let mut buff = vec![0u8; 6_220__800];
 
         yuv420_to_rgb(&image, &mut buff, 5760, YuvRange::Limited, YuvStandardMatrix::Bt601).unwrap();
         self.frame_tx.send(buff).unwrap();
