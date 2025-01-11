@@ -9,6 +9,7 @@ use libcamera::{
     request::{Request, ReuseFlag},
     stream::StreamRole,
 };
+use yuvutils_rs::{yuv420_to_rgb, YuvPlanarImage, YuvRange, YuvStandardMatrix};
 use std::{error::Error, time::Duration};
 
 pub async fn load_cameras(
@@ -141,23 +142,38 @@ configs: cfgg,
         let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> = req.buffer(&stream).unwrap();
 
         let planes = framebuffer.data();
-        let frame_data = planes.get(0).unwrap();
-        let bytes_used = framebuffer
-            .metadata()
-            .unwrap()
-            .planes()
+        let plane_metadata = framebuffer
+        .metadata()
+        .unwrap()
+        .planes();
+
+        let y_plane = planes.get(0).unwrap();
+        let y_stride = plane_metadata
             .get(0)
             .unwrap()
-            .bytes_used as usize;
+            .bytes_used;
+        let u_plane = planes.get(1).unwrap();
+        let u_stride = plane_metadata
+            .get(1)
+            .unwrap()
+            .bytes_used;
+        let v_plane = planes.get(2).unwrap();
+        let v_stride = plane_metadata
+            .get(2)
+            .unwrap()
+            .bytes_used;
 
-        let data = &frame_data[..bytes_used];
-        let data_clone = Vec::from_iter(data.iter().cloned());
-        self.frame_tx.send(data_clone).unwrap();
+        let image = YuvPlanarImage {
+            width: 1920, height: 1080, y_plane, u_plane, v_plane, y_stride, u_stride, v_stride
+        };
 
+        let mut buff = Vec::new();
+
+        yuv420_to_rgb(&image, &mut buff, 5760, YuvRange::Limited, YuvStandardMatrix::Bt601).unwrap();
+        self.frame_tx.send(buff).unwrap();
         req.reuse(ReuseFlag::REUSE_BUFFERS);
         self.cam.queue_request(req).unwrap();
     }
-
     /// Continously request frames until the end of time
     pub fn run(mut self) {
         loop {
