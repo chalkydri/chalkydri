@@ -142,11 +142,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         loop {
             let buf = rx.recv().unwrap();
             let buf = buf.clone();
-            apriltags
-                .do_send(ProcessFrame::<(), _> {
-                    buf: buf.into(),
-                    _marker: PhantomData,
-                });
+            apriltags.do_send(ProcessFrame::<(), _> {
+                buf: buf.into(),
+                _marker: PhantomData,
+            });
         }
     });
 

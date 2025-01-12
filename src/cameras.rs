@@ -9,8 +9,8 @@ use libcamera::{
     request::{Request, ReuseFlag},
     stream::StreamRole,
 };
-use yuvutils_rs::{yuv420_to_rgb, YuvPlanarImage, YuvRange, YuvStandardMatrix};
 use std::{error::Error, time::Duration};
+use yuvutils_rs::{yuv420_to_rgb, YuvPlanarImage, YuvRange, YuvStandardMatrix};
 
 pub async fn load_cameras(
     frame_tx: std::sync::mpsc::Sender<Vec<u8>>,
@@ -25,14 +25,14 @@ pub async fn load_cameras(
     let cam = cameras.get(0).unwrap();
     info!("using camera '{}'", cam.id());
 
-        let mut cfgg = cam
-            .generate_configuration(&[StreamRole::VideoRecording])
-            .unwrap();
-dbg!(&cfgg);
-//       cfgg.get_mut(0).unwrap().set_pixel_format(PixelFormat::new(
-//                u32::from_le_bytes([b'R', b'G', b'B', b'8']),
-//                0,
-//            ));
+    let mut cfgg = cam
+        .generate_configuration(&[StreamRole::VideoRecording])
+        .unwrap();
+    dbg!(&cfgg);
+    //       cfgg.get_mut(0).unwrap().set_pixel_format(PixelFormat::new(
+    //                u32::from_le_bytes([b'R', b'G', b'B', b'8']),
+    //                0,
+    //            ));
 
     let active_cam = cam.acquire().unwrap();
 
@@ -49,14 +49,17 @@ pub struct CamWrapper<'cam> {
     frame_tx: std::sync::mpsc::Sender<Vec<u8>>,
     cam_tx: std::sync::mpsc::Sender<Request>,
     cam_rx: std::sync::mpsc::Receiver<Request>,
-	configs: CameraConfiguration,
+    configs: CameraConfiguration,
 }
 impl<'cam> CamWrapper<'cam> {
     /// Wrap an [ActiveCamera]
-    pub fn new(mut cam: ActiveCamera<'cam>, mut cfgg: CameraConfiguration, frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Self {
+    pub fn new(
+        mut cam: ActiveCamera<'cam>,
+        mut cfgg: CameraConfiguration,
+        frame_tx: std::sync::mpsc::Sender<Vec<u8>>,
+    ) -> Self {
         let alloc = FrameBufferAllocator::new(&cam);
-	cam.configure(&mut cfgg).unwrap();
-
+        cam.configure(&mut cfgg).unwrap();
 
         let (cam_tx, cam_rx) = std::sync::mpsc::channel();
 
@@ -66,7 +69,7 @@ impl<'cam> CamWrapper<'cam> {
             frame_tx,
             cam_tx,
             cam_rx,
-configs: cfgg,
+            configs: cfgg,
         }
     }
 
@@ -75,7 +78,7 @@ configs: cfgg,
         use libcamera::controls::*;
 
         let stream = self.configs.get(0).unwrap();
-	let stream = stream.stream().unwrap();
+        let stream = stream.stream().unwrap();
 
         // Allocate some buffers
         let buffers = self
@@ -142,34 +145,36 @@ configs: cfgg,
         let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> = req.buffer(&stream).unwrap();
 
         let planes = framebuffer.data();
-        let plane_metadata = framebuffer
-        .metadata()
-        .unwrap()
-        .planes();
+        let plane_metadata = framebuffer.metadata().unwrap().planes();
 
         let y_plane = planes.get(0).unwrap();
-        let y_stride = plane_metadata
-            .get(0)
-            .unwrap()
-            .bytes_used;
+        let y_stride = plane_metadata.get(0).unwrap().bytes_used;
         let u_plane = planes.get(1).unwrap();
-        let u_stride = plane_metadata
-            .get(1)
-            .unwrap()
-            .bytes_used;
+        let u_stride = plane_metadata.get(1).unwrap().bytes_used;
         let v_plane = planes.get(2).unwrap();
-        let v_stride = plane_metadata
-            .get(2)
-            .unwrap()
-            .bytes_used;
+        let v_stride = plane_metadata.get(2).unwrap().bytes_used;
 
         let image = YuvPlanarImage {
-            width: 1920, height: 1080, y_plane, u_plane, v_plane, y_stride, u_stride, v_stride
+            width: 1920,
+            height: 1080,
+            y_plane,
+            u_plane,
+            v_plane,
+            y_stride,
+            u_stride,
+            v_stride,
         };
 
         let mut buff = vec![0u8; 6_220__800];
 
-        yuv420_to_rgb(&image, &mut buff, 5760, YuvRange::Limited, YuvStandardMatrix::Bt601).unwrap();
+        yuv420_to_rgb(
+            &image,
+            &mut buff,
+            5760,
+            YuvRange::Limited,
+            YuvStandardMatrix::Bt601,
+        )
+        .unwrap();
         self.frame_tx.send(buff).unwrap();
         req.reuse(ReuseFlag::REUSE_BUFFERS);
         self.cam.queue_request(req).unwrap();
