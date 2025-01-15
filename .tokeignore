@@ -1,0 +1,9 @@
+**gen*
+**bindings*
+book/book
+app/web
+app/linux
+app/macos
+app/windows
+app/android
+app/ios
