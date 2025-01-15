@@ -28,12 +28,33 @@ impl Subsystem<'_> for CApriltagsDetector {
     async fn init(_cfg: Self::Config) -> Result<Addr<Self>, Self::Error> {
         Ok(SyncArbiter::start(1, move || {
             let det = Detector::builder()
-                .add_family_bits(Family::tag_16h5(), 3)
+                .add_family_bits(Family::tag_36h11(), 3)
                 .build()
                 .unwrap();
 
             Self { det }
         }))
+    }
+}
+
+impl CApriltagsDetector {
+    pub fn new() -> Self {
+        let det = Detector::builder()
+                .add_family_bits(Family::tag_36h11(), 3)
+                .build()
+                .unwrap();
+
+            Self { det }
+    }
+    pub fn detect(&mut self, buf: Vec<u8>) {
+        let img_rgb =
+            DynamicImage::ImageRgb8(RgbImage::from_vec(1920, 1080, buf.to_vec()).unwrap());
+        let img_gray = img_rgb.grayscale();
+        let buf = img_gray.as_luma8().unwrap();
+        let img = Image::from_image_buffer(buf);
+        img_rgb.save("skibidi.png").unwrap();
+        let dets = self.det.detect(&img);
+        dets.first().unwrap();
     }
 }
 
@@ -54,9 +75,9 @@ impl Handler<ProcessFrame<(), Box<dyn std::error::Error + Send>>> for CApriltags
         let img_gray = img_rgb.grayscale();
         let buf = img_gray.as_luma8().unwrap();
         let img = Image::from_image_buffer(buf);
-
+        img_rgb.save("skibidi.png").unwrap();
         let dets = self.det.detect(&img);
-        dets.first().unwrap();
+        dbg!(dets.first().unwrap());
 
         Ok(())
     }

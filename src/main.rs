@@ -86,7 +86,7 @@ impl<R: Send + 'static, E: Debug + Send + 'static> Message for ProcessFrame<R, E
     type Result = Result<R, E>;
 }
 
-#[actix::main]
+#[actix::main(worker_threads = 12)]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize logger
     env_logger::init();
@@ -126,9 +126,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
 
-    tokio::task::spawn(async move {
-        load_cameras(tx).await.unwrap();
+    {
+        let tx = tx.clone();
+    tokio::task::spawn_blocking(move || {
+        load_cameras(tx).unwrap();
     });
+    }
+    println!("skibidi sigma");
 
     //let apriltags_subsys = Apriltags::init().await.unwrap();
     //let ml_subsys = MlSubsys::init().await?;
@@ -136,18 +140,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //let apriltags = apriltags_subsys.run(ApriltagsConfig { workers: 4 }).await;
     //let ml = ml_subsys.run(MlSubsysCfg { model_path: String::from("test.tflite") }).await;
 
-    let apriltags = CApriltagsDetector::init(()).await.unwrap();
-
-    tokio::spawn(async move {
+        let mut at = CApriltagsDetector::new();
+            
         loop {
+            println!("skibidi sigma");
             let buf = rx.recv().unwrap();
             let buf = buf.clone();
-            apriltags.do_send(ProcessFrame::<(), _> {
+
+            at.detect(buf);
+            std::thread::sleep(Duration::from_millis(100));
+            /*
+            at.send(ProcessFrame::<(), _> {
                 buf: buf.into(),
                 _marker: PhantomData,
-            });
+            }).await.unwrap();
+            */
         }
-    });
 
     // Have to let NT topics get dropped before calling nt.stop()
     {
