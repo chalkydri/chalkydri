@@ -126,13 +126,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
 
-    {
+    std::thread::spawn(move || {
         let tx = tx.clone();
-    tokio::task::spawn_blocking(move || {
         load_cameras(tx).unwrap();
     });
-    }
-    println!("skibidi sigma");
 
     //let apriltags_subsys = Apriltags::init().await.unwrap();
     //let ml_subsys = MlSubsys::init().await?;
@@ -140,22 +137,39 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //let apriltags = apriltags_subsys.run(ApriltagsConfig { workers: 4 }).await;
     //let ml = ml_subsys.run(MlSubsysCfg { model_path: String::from("test.tflite") }).await;
 
-        let mut at = CApriltagsDetector::new();
-            
-        loop {
-            println!("skibidi sigma");
-            let buf = rx.recv().unwrap();
-            let buf = buf.clone();
+    let mut at = CApriltagsDetector::init(()).await.unwrap();
 
-            at.detect(buf);
-            std::thread::sleep(Duration::from_millis(100));
-            /*
-            at.send(ProcessFrame::<(), _> {
+    loop {
+        // Wait for a new image from the camera
+        let buf = rx.recv().unwrap();
+
+        // Send the buffer to AprilTag detector
+        let poses = at
+            .send(ProcessFrame::<Vec<(Vec<f64>, Vec<f64>)>, _> {
                 buf: buf.into(),
                 _marker: PhantomData,
-            }).await.unwrap();
-            */
-        }
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        let nt = nt.clone();
+        tokio::spawn(async move {
+            for (i, pose) in poses.into_iter().enumerate() {
+                let mut translation = nt
+                    .publish::<Vec<f64>>(&format!("/chalkydri/apriltags/poses/{i}/translation"))
+                    .await
+                    .unwrap();
+                let mut rotation = nt
+                    .publish::<Vec<f64>>(&format!("/chalkydri/apriltags/poses/{i}/rotation"))
+                    .await
+                    .unwrap();
+                let (t, r) = pose;
+                translation.set(t.clone()).await.unwrap();
+                rotation.set(r.clone()).await.unwrap();
+            }
+        });
+    }
 
     // Have to let NT topics get dropped before calling nt.stop()
     {
