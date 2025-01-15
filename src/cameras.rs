@@ -12,7 +12,7 @@ use libcamera::{
 use std::{error::Error, time::Duration};
 use yuvutils_rs::{yuv420_to_rgb, YuvPlanarImage, YuvRange, YuvStandardMatrix};
 
-pub async fn load_cameras(
+pub fn load_cameras(
     frame_tx: std::sync::mpsc::Sender<Vec<u8>>,
 ) -> Result<(), Box<dyn Error>> {
     let man = CameraManager::new()?;
@@ -142,17 +142,15 @@ impl<'cam> CamWrapper<'cam> {
             .cam_rx
             .recv_timeout(Duration::from_millis(2000))
             .expect("camera request failed");
+    
         let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> = req.buffer(&stream).unwrap();
 
         let planes = framebuffer.data();
         let plane_metadata = framebuffer.metadata().unwrap().planes();
 
         let y_plane = planes.get(0).unwrap();
-        let y_stride = plane_metadata.get(0).unwrap().bytes_used;
         let u_plane = planes.get(1).unwrap();
-        let u_stride = plane_metadata.get(1).unwrap().bytes_used;
         let v_plane = planes.get(2).unwrap();
-        let v_stride = plane_metadata.get(2).unwrap().bytes_used;
 
         let image = YuvPlanarImage {
             width: 1920,
@@ -160,9 +158,9 @@ impl<'cam> CamWrapper<'cam> {
             y_plane,
             u_plane,
             v_plane,
-            y_stride,
-            u_stride,
-            v_stride,
+            y_stride: 1920,
+            u_stride: 960,
+            v_stride: 960,
         };
 
         let mut buff = vec![0u8; 6_220__800];
@@ -175,6 +173,7 @@ impl<'cam> CamWrapper<'cam> {
             YuvStandardMatrix::Bt601,
         )
         .unwrap();
+
         self.frame_tx.send(buff).unwrap();
         req.reuse(ReuseFlag::REUSE_BUFFERS);
         self.cam.queue_request(req).unwrap();
@@ -183,6 +182,7 @@ impl<'cam> CamWrapper<'cam> {
     pub fn run(mut self) {
         loop {
             self.get_frame();
+        std::thread::sleep(Duration::from_millis(100));
         }
     }
 }
