@@ -1,3 +1,7 @@
+use std::{fmt::Debug, marker::PhantomData, sync::Arc};
+
+use actix::{Actor, Addr, Handler, Message, SyncContext};
+
 /// A processing subsystem
 ///
 /// Subsystems implement different computer vision tasks, such as AprilTags or object detection.
@@ -8,7 +12,7 @@
 /// subsystem, rather than a brand new subsystem.
 ///
 /// Make sure to pay attention to and respect each subsystem's documentation and structure.
-pub(crate) trait Subsystem<'fr>: Sized {
+pub(crate) trait Subsystem<'fr>: Sized + Actor {
     /// The actual frame processing [Actor]
     ///
     /// May be `Self`
@@ -20,27 +24,27 @@ pub(crate) trait Subsystem<'fr>: Sized {
 
     /// Initialize the subsystem
     async fn init(cfg: Self::Config) -> Result<Addr<Self>, Self::Error>;
-
-    fn handle(
-        &mut self,
-        msg: ProcessFrame<Self::Output, Self::Error>,
-        ctx: &mut <Self as Actor>::Context,
-    ) -> Result<Self::Output, Self::Error>;
 }
-impl<S: Subsystem> Actor for S {
-    type Context = SyncContext<S::Output>;
-}
-impl<S: Subsystem> Handler<ProcessFrame<S::Output, S::Error>> for S {
-    type Result = Result<S::Output, S::Error>;
-
-    fn handle(
-        &mut self,
-        msg: ProcessFrame<S::Output, S::Error>,
-        ctx: &mut Self::Context,
-    ) -> Self::Result {
-        <Self as Subsystem>::handle(self, msg, ctx)
-    }
-}
+//    fn handle(
+//        &mut self,
+//        msg: ProcessFrame<Self::Output, Self::Error>,
+//        ctx: &mut <Self as Actor>::Context,
+//    ) -> Result<<Self as Subsystem>::Output, <Self as Subsystem>::Error>;
+//}
+//impl<S: Subsystem> Actor for S {
+//    type Context = SyncContext<Self>;
+//}
+//impl<S: Subsystem> Handler<ProcessFrame<S::Output, S::Error>> for S {
+//    type Result = Result<S::Output, S::Error>;
+//
+//    fn handle(
+//        &mut self,
+//        msg: ProcessFrame<S::Output, S::Error>,
+//        ctx: &mut Self::Context,
+//    ) -> Self::Result {
+//        <S as Subsystem>::handle(self, msg, ctx)
+//    }
+//}
 
 /// Actix message for sending a frame to a subsystem for processing
 pub(crate) struct ProcessFrame<R, E>
@@ -49,7 +53,7 @@ where
     E: Debug + Send + 'static,
 {
     pub buf: Arc<Vec<u8>>,
-    _marker: PhantomData<(R, E)>,
+    pub _marker: PhantomData<(R, E)>,
 }
 impl<R: Send + 'static, E: Debug + Send + 'static> Message for ProcessFrame<R, E> {
     type Result = Result<R, E>;
