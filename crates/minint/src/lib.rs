@@ -28,7 +28,7 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use datatype::{Data, DataType, DataWrap};
+use datatype::{Data, DataWrap};
 use messages::*;
 
 use futures_util::{SinkExt, StreamExt};
@@ -241,7 +241,7 @@ impl NtConn {
     ///     // ...
     /// }
     /// ```
-    pub async fn publish<T: DataType>(
+    pub async fn publish<T: DataWrap>(
         &self,
         name: impl Into<String>,
     ) -> Result<NtTopic<T>, Box<dyn Error>> {
@@ -251,7 +251,7 @@ impl NtConn {
         let buf = serde_json::to_string(&[ClientMsg::Publish {
             pubuid,
             name: name.clone(),
-            r#type: T::DATATYPE_STRING.to_string(),
+            r#type: T::STRING.to_string(),
             properties: Some(PublishProps {
                 persistent: Some(true),
                 retained: Some(true),
@@ -262,7 +262,7 @@ impl NtConn {
 
         debug!(
             "{name} ({data_type}): publishing with pubuid {pubuid}",
-            data_type = T::DATATYPE_STRING.to_string()
+            data_type = T::STRING.to_string()
         );
 
         while !(*self.pubuid_topics.lock().await).contains_key(&pubuid) {
@@ -312,7 +312,7 @@ impl NtConn {
         let subuid = self.next_id().await;
 
         let buf = serde_json::to_string(&[ClientMsg::Subscribe {
-            topics: vec![topic.to_string()],
+            topics: Vec::from_iter([topic.to_string()]),
             subuid,
             options: BTreeMap::new(),
         }])?;
@@ -411,12 +411,12 @@ impl Clone for NtConn {
 ///
 /// This structure represents a published topic on the NetworkTables server. It allows you to set
 /// the value of the topic. The topic is automatically unpublished when this structure is dropped.
-pub struct NtTopic<'nt, T: DataType> {
+pub struct NtTopic<'nt, T: DataWrap> {
     conn: &'nt NtConn,
     pubuid: i32,
     _marker: PhantomData<T>,
 }
-impl<T: DataType + std::fmt::Debug> NtTopic<'_, T> {
+impl<T: DataWrap + std::fmt::Debug> NtTopic<'_, T> {
     /// Set the value of the topic.
     ///
     /// # Arguments
@@ -447,7 +447,7 @@ impl<T: DataType + std::fmt::Debug> NtTopic<'_, T> {
             if let Some(name) = (*self.conn.topics.lock().await).get(&id) {
                 debug!(
                     "{name} ({data_type}): set to {val:?}",
-                    data_type = T::DATATYPE_STRING.to_string()
+                    data_type = T::STRING.to_string()
                 );
             }
         }
@@ -457,7 +457,7 @@ impl<T: DataType + std::fmt::Debug> NtTopic<'_, T> {
         Ok(())
     }
 }
-impl<T: DataType> Drop for NtTopic<'_, T> {
+impl<T: DataWrap> Drop for NtTopic<'_, T> {
     fn drop(&mut self) {
         self.conn.unpublish(self.pubuid).unwrap();
     }
