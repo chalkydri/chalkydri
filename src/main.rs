@@ -31,7 +31,7 @@ extern crate pyo3;
 #[cfg(feature = "ml")]
 extern crate tfledge;
 
-mod api;
+//mod api;
 #[cfg(feature = "libcamera")]
 mod cameras;
 mod config;
@@ -41,15 +41,18 @@ mod utils;
 mod subsystem;
 
 use actix::prelude::*;
-use api::run_api;
+//use api::run_api;
 use cameras::load_cameras;
 use minint::NtConn;
+use re_web_viewer_server::WebViewerServerPort;
+use re_ws_comms::RerunServerPort;
+use rerun::{Image, MemoryLimit};
 use std::{error::Error, fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
 use subsys::capriltags::CApriltagsDetector;
 
 use crate::utils::gen_team_ip;
 
-use subsystem::Subsystem;
+use subsystem::{ProcessFrame, Subsystem};
 
 #[actix::main(worker_threads = 12)]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -58,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "0.0.0.0",
             WebViewerServerPort(8080),
             RerunServerPort(6969),
-            4_000_000,
+            MemoryLimit::from_bytes(1000000),
             false,
         )
         .unwrap();
@@ -110,10 +113,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut at = CApriltagsDetector::init(()).await.unwrap();
 
         let nt = nt.clone();
-        tokio::spawn(async move {
             loop {
                 // Wait for a new image from the camera
                 let buf = rx.recv().unwrap();
+                rr.log("images", Image::from_pixel_format([1920, 1080], rerun::PixelFormat::R, bytes));
 
                 // Send the buffer to AprilTag detector
                 let poses = at
@@ -125,8 +128,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .unwrap()
                     .unwrap();
 
-                let nt = nt.clone();
-                tokio::spawn(async move {
                     for (i, pose) in poses.into_iter().enumerate() {
                         let mut translation = nt
                             .publish::<Vec<f64>>(&format!(
@@ -144,14 +145,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         translation.set(t.clone()).await.unwrap();
                         rotation.set(r.clone()).await.unwrap();
                     }
-                });
             }
-        });
     }
 
     // Have to let NT topics get dropped before calling nt.stop()
     {
-        run_api(nt.clone()).await;
+        //run_api(nt.clone()).await;
     }
 
     // Shut down NT connection
