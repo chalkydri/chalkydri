@@ -50,6 +50,12 @@ apriltag = { version = "0.4.0", optional = true }
 image = "0.25.5"
 apriltag-image = { version = "0.1.0", optional = true }
 yuvutils-rs = { version = "0.5.14", features = ["rayon"] }
+rerun = { version = "0.21.0", default-features = false, features = [
+  "nasm",
+  "sdk",
+  "web_viewer",
+  "server",
+] }
 
 [workspace]
 members = [

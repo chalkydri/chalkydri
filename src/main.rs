@@ -31,15 +31,17 @@ extern crate pyo3;
 #[cfg(feature = "ml")]
 extern crate tfledge;
 
+mod api;
 #[cfg(feature = "libcamera")]
 mod cameras;
-//mod api;
 mod config;
 mod subsys;
 mod utils;
 //mod logger;
+mod subsystem;
 
 use actix::prelude::*;
+use api::run_api;
 use cameras::load_cameras;
 use minint::NtConn;
 use std::{error::Error, fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
@@ -47,47 +49,19 @@ use subsys::capriltags::CApriltagsDetector;
 
 use crate::utils::gen_team_ip;
 
-/// A processing subsystem
-///
-/// Subsystems implement different computer vision tasks, such as AprilTags or object detection.
-///
-/// A subsystem should be generic, not something that is only used for some specific aspect of a
-/// game.
-/// For example, note detection for the 2024 game, Crescendo, would go under the object detection
-/// subsystem, rather than a brand new subsystem.
-///
-/// Make sure to pay attention to and respect each subsystem's documentation and structure.
-pub(crate) trait Subsystem<'fr>: Sized {
-    /// The actual frame processing [Actor]
-    ///
-    /// May be `Self`
-    type Processor: Actor + Handler<ProcessFrame<Self::Output, Self::Error>>;
-    /// The subsystem's configuration type
-    type Config;
-    type Output: Send + 'static;
-    type Error: Debug + Send + 'static;
-
-    /// Initialize the subsystem
-    ///
-    /// This should initialize the subsystem actor, but not start it.
-    async fn init(cfg: Self::Config) -> Result<Addr<Self::Processor>, Self::Error>;
-}
-
-/// Actix message for sending a frame to a subsystem for processing
-pub(crate) struct ProcessFrame<R, E>
-where
-    R: Send + 'static,
-    E: Debug + Send + 'static,
-{
-    buf: Arc<Vec<u8>>,
-    _marker: PhantomData<(R, E)>,
-}
-impl<R: Send + 'static, E: Debug + Send + 'static> Message for ProcessFrame<R, E> {
-    type Result = Result<R, E>;
-}
+use subsystem::Subsystem;
 
 #[actix::main(worker_threads = 12)]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let rr = rerun::RecordingStreamBuilder::new("chalkydri")
+        .serve_web(
+            "0.0.0.0",
+            WebViewerServerPort(8080),
+            RerunServerPort(6969),
+            4_000_000,
+            false,
+        )
+        .unwrap();
     // Initialize logger
     env_logger::init();
 
@@ -131,49 +105,53 @@ async fn main() -> Result<(), Box<dyn Error>> {
         load_cameras(tx).unwrap();
     });
 
-    //let apriltags_subsys = Apriltags::init().await.unwrap();
-    //let ml_subsys = MlSubsys::init().await?;
-
-    //let apriltags = apriltags_subsys.run(ApriltagsConfig { workers: 4 }).await;
-    //let ml = ml_subsys.run(MlSubsysCfg { model_path: String::from("test.tflite") }).await;
-
-    let mut at = CApriltagsDetector::init(()).await.unwrap();
-
-    loop {
-        // Wait for a new image from the camera
-        let buf = rx.recv().unwrap();
-
-        // Send the buffer to AprilTag detector
-        let poses = at
-            .send(ProcessFrame::<Vec<(Vec<f64>, Vec<f64>)>, _> {
-                buf: buf.into(),
-                _marker: PhantomData,
-            })
-            .await
-            .unwrap()
-            .unwrap();
+    // apriltag C library subsystem
+    {
+        let mut at = CApriltagsDetector::init(()).await.unwrap();
 
         let nt = nt.clone();
         tokio::spawn(async move {
-            for (i, pose) in poses.into_iter().enumerate() {
-                let mut translation = nt
-                    .publish::<Vec<f64>>(&format!("/chalkydri/apriltags/poses/{i}/translation"))
+            loop {
+                // Wait for a new image from the camera
+                let buf = rx.recv().unwrap();
+
+                // Send the buffer to AprilTag detector
+                let poses = at
+                    .send(ProcessFrame::<Vec<(Vec<f64>, Vec<f64>)>, _> {
+                        buf: buf.into(),
+                        _marker: PhantomData,
+                    })
                     .await
+                    .unwrap()
                     .unwrap();
-                let mut rotation = nt
-                    .publish::<Vec<f64>>(&format!("/chalkydri/apriltags/poses/{i}/rotation"))
-                    .await
-                    .unwrap();
-                let (t, r) = pose;
-                translation.set(t.clone()).await.unwrap();
-                rotation.set(r.clone()).await.unwrap();
+
+                let nt = nt.clone();
+                tokio::spawn(async move {
+                    for (i, pose) in poses.into_iter().enumerate() {
+                        let mut translation = nt
+                            .publish::<Vec<f64>>(&format!(
+                                "/chalkydri/apriltags/poses/{i}/translation"
+                            ))
+                            .await
+                            .unwrap();
+                        let mut rotation = nt
+                            .publish::<Vec<f64>>(&format!(
+                                "/chalkydri/apriltags/poses/{i}/rotation"
+                            ))
+                            .await
+                            .unwrap();
+                        let (t, r) = pose;
+                        translation.set(t.clone()).await.unwrap();
+                        rotation.set(r.clone()).await.unwrap();
+                    }
+                });
             }
         });
     }
 
     // Have to let NT topics get dropped before calling nt.stop()
     {
-        //run_api(nt.clone()).await;
+        run_api(nt.clone()).await;
     }
 
     // Shut down NT connection
