@@ -5,6 +5,7 @@
 // Unsafe code is NOT allowed in Chalkydri core.
 // If unsafe code is required, it should be part of a different crate.
 #![forbid(unsafe_code)]
+#![allow(unreachable_code)]
 
 #[macro_use]
 extern crate log;
@@ -61,7 +62,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "0.0.0.0",
             WebViewerServerPort(8080),
             RerunServerPort(6969),
-            MemoryLimit::from_bytes(1000000),
+            MemoryLimit::from_bytes(100000000),
             false,
         )
         .unwrap();
@@ -110,13 +111,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // apriltag C library subsystem
     {
-        let mut at = CApriltagsDetector::init(()).await.unwrap();
+        let at = CApriltagsDetector::init(()).await.unwrap();
 
         let nt = nt.clone();
             loop {
                 // Wait for a new image from the camera
                 let buf = rx.recv().unwrap();
-                rr.log("images", Image::from_pixel_format([1920, 1080], rerun::PixelFormat::R, bytes));
+                rr.log("images", &Image::from_rgb24(buf.clone(), [1920, 1080])).unwrap();
 
                 // Send the buffer to AprilTag detector
                 let poses = at

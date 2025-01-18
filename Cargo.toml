@@ -58,6 +58,7 @@ rerun = { version = "0.21.0", default-features = false, features = [
 ] }
 re_web_viewer_server = "0.21.0"
 re_ws_comms = { version = "0.21.0", features = ["server"] }
+nalgebra = "0.33.2"
 
 [workspace]
 members = [
