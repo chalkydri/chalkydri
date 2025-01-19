@@ -15,7 +15,10 @@ use actix::{Actor, Addr, Arbiter, Handler, SyncArbiter, SyncContext};
 use apriltag::{Detector, Family, Image, TagParams};
 use apriltag_image::image::{DynamicImage, RgbImage};
 use apriltag_image::prelude::*;
-use nalgebra::{Isometry3, Matrix3, Quaternion, Rotation3, Translation3, UnitQuaternion};
+use cam_geom::{Pixels, Ray};
+use rapier3d::math::{Matrix, Rotation, Translation};
+use rapier3d::na::Matrix3;
+use rapier3d::na::Quaternion;
 
 use crate::{ProcessFrame, Subsystem};
 
@@ -33,13 +36,13 @@ pub struct CApriltagsDetector {
 }
 impl<'fr> Subsystem<'fr> for CApriltagsDetector {
     type Config = ();
-    type Output = Vec<(Vec<f64>, Vec<f64>)>;
+    type Output = (Vec<f64>, Vec<f64>);
     type Error = Box<dyn std::error::Error + Send>;
 
     async fn init(_cfg: Self::Config) -> Result<Addr<Self>, Self::Error> {
         Ok(SyncArbiter::start(1, || {
-            let layout: AprilTagFieldLayout = serde_json::from_reader(File::open("layout.json").unwrap()).unwrap();
-            
+            let layout: AprilTagFieldLayout =
+                serde_json::from_reader(File::open("layout.json").unwrap()).unwrap();
             let det = Detector::builder()
                 .add_family_bits(Family::tag_36h11(), 3)
                 .build()
@@ -73,10 +76,11 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
     //}
 }
 
- impl CApriltagsDetector {
-     pub fn new() -> Self {
-        let layout: AprilTagFieldLayout = serde_json::from_reader(File::open("layout.json").unwrap()).unwrap();
-         let det = Detector::builder()
+impl CApriltagsDetector {
+    pub fn new() -> Self {
+        let layout: AprilTagFieldLayout =
+            serde_json::from_reader(File::open("layout.json").unwrap()).unwrap();
+        let det = Detector::builder()
             .add_family_bits(Family::tag_36h11(), 3)
             .build()
             .unwrap();
@@ -102,10 +106,10 @@ impl Actor for CApriltagsDetector {
     type Context = SyncContext<Self>;
 }
 
-impl Handler<ProcessFrame<Vec<(Vec<f64>, Vec<f64>)>, Box<dyn std::error::Error + Send>>>
+impl Handler<ProcessFrame<(Vec<f64>, Vec<f64>), Box<dyn std::error::Error + Send>>>
     for CApriltagsDetector
 {
-    type Result = Result<Vec<(Vec<f64>, Vec<f64>)>, Box<dyn std::error::Error + Send>>;
+    type Result = Result<(Vec<f64>, Vec<f64>), Box<dyn std::error::Error + Send>>;
 
     fn handle(
         &mut self,
@@ -119,63 +123,105 @@ impl Handler<ProcessFrame<Vec<(Vec<f64>, Vec<f64>)>, Box<dyn std::error::Error +
         let img = Image::from_image_buffer(buf);
         let dets = self.det.detect(&img);
 
-        Ok(dets
+        let poses: Vec<_> = dets
             .iter()
             .filter_map(|det| {
                 let pose = det.estimate_tag_pose(&TAG_PARAMS).unwrap();
 
                 let cam_translation = pose.translation().data().to_vec();
-                let cam_translation = Translation3::new(cam_translation[0], cam_translation[1], cam_translation[2]);
+                let cam_translation =
+                    Translation::new(cam_translation[0], cam_translation[1], cam_translation[2]);
 
                 let cam_rotation = pose.rotation().data().to_vec();
-                let cam_rotation = Rotation3::from_matrix(&Matrix3::from_vec(cam_rotation));
+                let cam_rotation = Rotation::from_matrix(&Matrix::from_vec(cam_rotation));
 
-                let tag_translation: Translation3<f64>;
-                let tag_rotation: Quaternion<f64>;
+                let tag_translation: Translation<f64>;
+                let tag_rotation: Rotation<f64>;
 
-                for Tag { id, pose: Pose { translation, rotation: Rotation { quaternion } } } in self.layout.tags.clone() {
+                for LayoutTag {
+                    id,
+                    pose:
+                        LayoutPose {
+                            translation,
+                            rotation: LayoutRotation { quaternion },
+                        },
+                } in self.layout.tags.clone()
+                {
                     if det.id() == (id as usize) {
-                        tag_translation = Translation3::new(translation.x, translation.y, translation.z);
-                        tag_rotation = Quaternion::new(quaternion.w, quaternion.x, quaternion.y, quaternion.z);
+                        tag_translation =
+                            Translation::new(translation.x, translation.y, translation.z);
+                        tag_rotation = Rotation::from_quaternion(Quaternion::new(
+                            quaternion.w,
+                            quaternion.x,
+                            quaternion.y,
+                            quaternion.z,
+                        ));
 
                         let translation = tag_translation * cam_translation;
-                        let rotation = UnitQuaternion::from_quaternion(tag_rotation * *UnitQuaternion::from_rotation_matrix(&cam_rotation)).to_rotation_matrix();
-
-                        return Some((translation.to_homogeneous().data.as_slice().to_vec(), rotation.to_homogeneous().data.as_slice().to_vec()));
+                        let rotation = tag_rotation * cam_rotation;
+                        return Some((translation, rotation, det.decision_margin() as f64));
                     }
                 }
 
                 None
             })
-            .collect())
+            .collect();
+
+        let mut weighted_avg_translation = Translation::new(0.0f64, 0.0, 0.0);
+        let mut weighted_avg_rotation = Quaternion::new(0.0f64, 0.0, 0.0, 0.0);
+
+        for pose in poses.iter() {
+            weighted_avg_translation.x += pose.0.x * pose.2;
+            weighted_avg_translation.y += pose.0.y * pose.2;
+            weighted_avg_translation.z += pose.0.z * pose.2;
+
+            weighted_avg_rotation.w += pose.1.w * pose.2;
+            weighted_avg_rotation.i += pose.1.i * pose.2;
+            weighted_avg_rotation.j += pose.1.j * pose.2;
+            weighted_avg_rotation.k += pose.1.k * pose.2;
+        }
+
+        weighted_avg_translation.x /= poses.len() as f64;
+        weighted_avg_translation.x /= poses.len() as f64;
+        weighted_avg_translation.x /= poses.len() as f64;
+
+        weighted_avg_rotation.w /= poses.len() as f64;
+        weighted_avg_rotation.i /= poses.len() as f64;
+        weighted_avg_rotation.j /= poses.len() as f64;
+        weighted_avg_rotation.k /= poses.len() as f64;
+
+        Ok((
+            weighted_avg_translation.vector.data.as_slice().to_vec(),
+            weighted_avg_rotation.vector().data.into_slice().to_vec(),
+        ))
     }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AprilTagFieldLayout {
-    pub tags: Vec<Tag>,
+    pub tags: Vec<LayoutTag>,
     pub field: Field,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Tag {
+pub struct LayoutTag {
     #[serde(rename = "ID")]
     pub id: i64,
-    pub pose: Pose,
+    pub pose: LayoutPose,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Pose {
-    pub translation: Translation,
-    pub rotation: Rotation,
+pub struct LayoutPose {
+    pub translation: LayoutTranslation,
+    pub rotation: LayoutRotation,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Translation {
+pub struct LayoutTranslation {
     pub x: f64,
     pub y: f64,
     pub z: f64,
@@ -183,7 +229,7 @@ pub struct Translation {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Rotation {
+pub struct LayoutRotation {
     pub quaternion: LayoutQuaternion,
 }
 

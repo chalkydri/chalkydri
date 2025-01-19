@@ -33,6 +33,7 @@ use messages::*;
 
 use futures_util::{SinkExt, StreamExt};
 use rmp::decode::Bytes;
+use tokio::sync::RwLock;
 use tokio::{
     sync::{mpsc, Mutex},
     task::AbortHandle,
@@ -56,10 +57,10 @@ pub struct NtConn {
     /// Outgoing client-to-server message queue
     c2s: mpsc::UnboundedSender<Message>,
 
-    topics: Arc<Mutex<HashMap<i32, String>>>,
-    topic_pubuids: Arc<Mutex<HashMap<i32, i32>>>,
-    pubuid_topics: Arc<Mutex<HashMap<i32, i32>>>,
-    values: Arc<Mutex<HashMap<i32, Data>>>,
+    topics: Arc<RwLock<HashMap<i32, String>>>,
+    topic_pubuids: Arc<RwLock<HashMap<i32, i32>>>,
+    pubuid_topics: Arc<RwLock<HashMap<i32, i32>>>,
+    values: Arc<RwLock<HashMap<i32, Data>>>,
 }
 impl NtConn {
     /// Connect to a NetworkTables server
@@ -86,10 +87,10 @@ impl NtConn {
         server: impl Into<IpAddr>,
         client_ident: impl Into<String>,
     ) -> Result<Self, Box<dyn Error>> {
-        let topics = Arc::new(Mutex::new(HashMap::new()));
-        let topic_pubuids = Arc::new(Mutex::new(HashMap::new()));
-        let pubuid_topics = Arc::new(Mutex::new(HashMap::new()));
-        let values = Arc::new(Mutex::new(HashMap::new()));
+        let topics = Arc::new(RwLock::new(HashMap::new()));
+        let topic_pubuids = Arc::new(RwLock::new(HashMap::new()));
+        let pubuid_topics = Arc::new(RwLock::new(HashMap::new()));
+        let values = Arc::new(RwLock::new(HashMap::new()));
 
         // Get server and client_ident into something we can work with
         let server = server.into();
@@ -128,11 +129,11 @@ impl NtConn {
                                 for msg in messages {
                                     match msg {
                                         ServerMsg::Announce { name, id, r#type, pubuid, .. } => {
-                                            (*topics.lock().await).insert(id, name.clone());
+                                            (*topics.write().await).insert(id, name.clone());
 
                                             if let Some(pubuid) = pubuid {
-                                                let mut pubuid_topics = pubuid_topics.lock().await;
-                                                let mut topic_pubuids = topic_pubuids.lock().await;
+                                                let mut pubuid_topics = pubuid_topics.write().await;
+                                                let mut topic_pubuids = topic_pubuids.write().await;
 
                                                 (*pubuid_topics).insert(pubuid, id);
                                                 (*topic_pubuids).insert(id, pubuid);
@@ -146,9 +147,9 @@ impl NtConn {
                                             }
                                         }
                                         ServerMsg::Unannounce { name, id } => {
-                                            let mut topics = topics.lock().await;
-                                            let topic_pubuids = topic_pubuids.lock().await;
-                                            let mut pubuid_topics = pubuid_topics.lock().await;
+                                            let mut topics = topics.write().await;
+                                            let topic_pubuids = topic_pubuids.read().await;
+                                            let mut pubuid_topics = pubuid_topics.write().await;
 
                                             (*topics).remove(&id);
                                             if let Some(pubuid) = (*topic_pubuids).get(&id) {
@@ -265,7 +266,7 @@ impl NtConn {
             data_type = T::STRING.to_string()
         );
 
-        while !(*self.pubuid_topics.lock().await).contains_key(&pubuid) {
+        while !(*self.pubuid_topics.read().await).contains_key(&pubuid) {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
@@ -443,8 +444,8 @@ impl<T: DataWrap + std::fmt::Debug> NtTopic<'_, T> {
     /// }
     /// ```
     pub async fn set(&mut self, val: T) -> Result<(), Box<dyn Error>> {
-        if let Some(id) = (*self.conn.pubuid_topics.lock().await).get(&self.pubuid) {
-            if let Some(name) = (*self.conn.topics.lock().await).get(&id) {
+        if let Some(id) = (*self.conn.pubuid_topics.read().await).get(&self.pubuid) {
+            if let Some(name) = (*self.conn.topics.read().await).get(&id) {
                 debug!(
                     "{name} ({data_type}): set to {val:?}",
                     data_type = T::STRING.to_string()
@@ -471,9 +472,7 @@ pub struct NtSubscription<'nt> {
     conn: &'nt NtConn,
     subuid: i32,
 }
-impl NtSubscription<'_> {
-    //
-}
+impl NtSubscription<'_> {}
 impl Drop for NtSubscription<'_> {
     fn drop(&mut self) {
         self.conn.unsubscribe(self.subuid).unwrap();

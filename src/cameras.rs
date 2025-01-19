@@ -12,9 +12,7 @@ use libcamera::{
 use std::{error::Error, time::Duration};
 use yuvutils_rs::{yuv420_to_rgb, YuvPlanarImage, YuvRange, YuvStandardMatrix};
 
-pub fn load_cameras(
-    frame_tx: std::sync::mpsc::Sender<Vec<u8>>,
-) -> Result<(), Box<dyn Error>> {
+pub fn load_cameras(frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Result<(), Box<dyn Error>> {
     let man = CameraManager::new()?;
 
     let cameras = man.cameras();
@@ -142,7 +140,7 @@ impl<'cam> CamWrapper<'cam> {
             .cam_rx
             .recv_timeout(Duration::from_millis(2000))
             .expect("camera request failed");
-    
+
         let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> = req.buffer(&stream).unwrap();
 
         let planes = framebuffer.data();
@@ -182,7 +180,7 @@ impl<'cam> CamWrapper<'cam> {
     pub fn run(mut self) {
         loop {
             self.get_frame();
-        std::thread::sleep(Duration::from_millis(100));
+            std::thread::sleep(Duration::from_millis(100));
         }
     }
 }

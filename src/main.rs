@@ -114,39 +114,36 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let at = CApriltagsDetector::init(()).await.unwrap();
 
         let nt = nt.clone();
-            loop {
-                // Wait for a new image from the camera
-                let buf = rx.recv().unwrap();
-                rr.log("images", &Image::from_rgb24(buf.clone(), [1920, 1080])).unwrap();
+        loop {
+            // Wait for a new image from the camera
+            let buf = rx.recv().unwrap();
+            rr.log("images", &Image::from_rgb24(buf.clone(), [1920, 1080]))
+                .unwrap();
 
-                // Send the buffer to AprilTag detector
-                let poses = at
-                    .send(ProcessFrame::<Vec<(Vec<f64>, Vec<f64>)>, _> {
-                        buf: buf.into(),
-                        _marker: PhantomData,
-                    })
-                    .await
-                    .unwrap()
-                    .unwrap();
+            // Send the buffer to AprilTag detector
+            let pose = at
+                .send(ProcessFrame::<(Vec<f64>, Vec<f64>), _> {
+                    buf: buf.into(),
+                    _marker: PhantomData,
+                })
+                .await
+                .unwrap()
+                .unwrap();
 
-                    for (i, pose) in poses.into_iter().enumerate() {
-                        let mut translation = nt
-                            .publish::<Vec<f64>>(&format!(
-                                "/chalkydri/apriltags/poses/{i}/translation"
-                            ))
-                            .await
-                            .unwrap();
-                        let mut rotation = nt
-                            .publish::<Vec<f64>>(&format!(
-                                "/chalkydri/apriltags/poses/{i}/rotation"
-                            ))
-                            .await
-                            .unwrap();
-                        let (t, r) = pose;
-                        translation.set(t.clone()).await.unwrap();
-                        rotation.set(r.clone()).await.unwrap();
-                    }
-            }
+            let mut translation = nt
+                .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
+                .await
+                .unwrap();
+            let mut rotation = nt
+                .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
+                .await
+                .unwrap();
+
+            let (t, r) = pose;
+
+            translation.set(t.clone()).await.unwrap();
+            rotation.set(r.clone()).await.unwrap();
+        }
     }
 
     // Have to let NT topics get dropped before calling nt.stop()
