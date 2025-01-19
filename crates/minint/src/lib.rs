@@ -472,8 +472,7 @@ pub struct NtSubscription<'nt> {
     conn: &'nt NtConn,
     subuid: i32,
 }
-impl NtSubscription<'_> {
-}
+impl NtSubscription<'_> {}
 impl Drop for NtSubscription<'_> {
     fn drop(&mut self) {
         self.conn.unsubscribe(self.subuid).unwrap();
