@@ -1,6 +1,8 @@
-use std::{fmt::Debug, marker::PhantomData, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 
-use actix::{Actor, Addr, Handler, Message, SyncContext};
+use tokio::sync::{broadcast, watch};
+
+pub type Buffer = Arc<Vec<u8>>;
 
 /// A processing subsystem
 ///
@@ -12,7 +14,7 @@ use actix::{Actor, Addr, Handler, Message, SyncContext};
 /// subsystem, rather than a brand new subsystem.
 ///
 /// Make sure to pay attention to and respect each subsystem's documentation and structure.
-pub(crate) trait Subsystem<'fr>: Sized + Actor {
+pub trait Subsystem<'fr>: Sized {
     /// The actual frame processing [Actor]
     ///
     /// May be `Self`
@@ -23,38 +25,23 @@ pub(crate) trait Subsystem<'fr>: Sized + Actor {
     type Error: Debug + Send + 'static;
 
     /// Initialize the subsystem
-    async fn init(cfg: Self::Config) -> Result<Addr<Self>, Self::Error>;
+    async fn init(cfg: Self::Config) -> Result<Self, Self::Error>;
+    /// Process a frame
+    fn process(&mut self, buf: Buffer) -> Result<Self::Output, Self::Error>;
 }
-//    fn handle(
-//        &mut self,
-//        msg: ProcessFrame<Self::Output, Self::Error>,
-//        ctx: &mut <Self as Actor>::Context,
-//    ) -> Result<<Self as Subsystem>::Output, <Self as Subsystem>::Error>;
-//}
-//impl<S: Subsystem> Actor for S {
-//    type Context = SyncContext<Self>;
-//}
-//impl<S: Subsystem> Handler<ProcessFrame<S::Output, S::Error>> for S {
-//    type Result = Result<S::Output, S::Error>;
-//
-//    fn handle(
-//        &mut self,
-//        msg: ProcessFrame<S::Output, S::Error>,
-//        ctx: &mut Self::Context,
-//    ) -> Self::Result {
-//        <S as Subsystem>::handle(self, msg, ctx)
-//    }
-//}
 
-/// Actix message for sending a frame to a subsystem for processing
-pub(crate) struct ProcessFrame<R, E>
-where
-    R: Send + 'static,
-    E: Debug + Send + 'static,
-{
-    pub buf: Arc<Vec<u8>>,
-    pub _marker: PhantomData<(R, E)>,
+/// Run a [`subsystem`](Subsystem)
+async fn run<'fr, S: Subsystem<'fr>>(config: S::Config, mut rx: watch::Receiver<Arc<Vec<u8>>>) {
+    let mut subsys = S::init(config).await.unwrap();
+
+    while let Ok(()) = rx.changed().await {
+        let buf = rx.borrow_and_update();
+        S::process(&mut subsys, buf.clone()).unwrap();
+    }
 }
-impl<R: Send + 'static, E: Debug + Send + 'static> Message for ProcessFrame<R, E> {
-    type Result = Result<R, E>;
+
+pub struct SubsysHandle<T: Sized> {
+    tx: watch::Sender<Buffer>,
+    rx: broadcast::Receiver<T>,
 }
+

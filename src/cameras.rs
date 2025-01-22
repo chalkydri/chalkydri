@@ -4,15 +4,15 @@ use libcamera::{
     framebuffer::AsFrameBuffer,
     framebuffer_allocator::{FrameBuffer, FrameBufferAllocator},
     framebuffer_map::MemoryMappedFrameBuffer,
-    pixel_format::PixelFormat,
     properties,
     request::{Request, ReuseFlag},
     stream::StreamRole,
 };
-use std::{error::Error, time::Duration};
+use std::{error::Error, sync::Arc, time::Duration};
 use yuvutils_rs::{yuv420_to_rgb, YuvPlanarImage, YuvRange, YuvStandardMatrix};
+use tokio::sync::watch;
 
-pub fn load_cameras(frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Result<(), Box<dyn Error>> {
+pub fn load_cameras(frame_tx: watch::Sender<Arc<Vec<u8>>>) -> Result<(), Box<dyn Error>> {
     let man = CameraManager::new()?;
 
     let cameras = man.cameras();
@@ -44,7 +44,7 @@ pub fn load_cameras(frame_tx: std::sync::mpsc::Sender<Vec<u8>>) -> Result<(), Bo
 pub struct CamWrapper<'cam> {
     cam: ActiveCamera<'cam>,
     alloc: FrameBufferAllocator,
-    frame_tx: std::sync::mpsc::Sender<Vec<u8>>,
+    frame_tx: watch::Sender<Arc<Vec<u8>>>,
     cam_tx: std::sync::mpsc::Sender<Request>,
     cam_rx: std::sync::mpsc::Receiver<Request>,
     configs: CameraConfiguration,
@@ -54,7 +54,7 @@ impl<'cam> CamWrapper<'cam> {
     pub fn new(
         mut cam: ActiveCamera<'cam>,
         mut cfgg: CameraConfiguration,
-        frame_tx: std::sync::mpsc::Sender<Vec<u8>>,
+        frame_tx: watch::Sender<Arc<Vec<u8>>>,
     ) -> Self {
         let alloc = FrameBufferAllocator::new(&cam);
         cam.configure(&mut cfgg).unwrap();
@@ -144,7 +144,6 @@ impl<'cam> CamWrapper<'cam> {
         let framebuffer: &MemoryMappedFrameBuffer<FrameBuffer> = req.buffer(&stream).unwrap();
 
         let planes = framebuffer.data();
-        let plane_metadata = framebuffer.metadata().unwrap().planes();
 
         let y_plane = planes.get(0).unwrap();
         let u_plane = planes.get(1).unwrap();
@@ -172,10 +171,15 @@ impl<'cam> CamWrapper<'cam> {
         )
         .unwrap();
 
-        self.frame_tx.send(buff).unwrap();
+        debug!("color converted. sending...");
+        self.frame_tx.send(Arc::new(buff.clone())).unwrap();
+        drop(buff);
         req.reuse(ReuseFlag::REUSE_BUFFERS);
+
+        debug!("queueing another request");
         self.cam.queue_request(req).unwrap();
     }
+
     /// Continously request frames until the end of time
     pub fn run(mut self) {
         loop {

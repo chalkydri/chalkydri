@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 #[derive(Deserialize, Serialize)]
 pub struct Config {
+    pub sigma: String,
     pub version: String,
     pub camera: HashMap<String, CameraConfig>,
     pub tpu: Option<TpuConfig>,
