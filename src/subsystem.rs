@@ -1,5 +1,6 @@
 use std::{fmt::Debug, sync::Arc};
 
+use rerun::RecordingStream;
 use tokio::sync::{broadcast, watch};
 
 pub type Buffer = Arc<Vec<u8>>;
@@ -27,16 +28,20 @@ pub trait Subsystem<'fr>: Sized {
     /// Initialize the subsystem
     async fn init(cfg: Self::Config) -> Result<Self, Self::Error>;
     /// Process a frame
-    fn process(&mut self, buf: Buffer) -> Result<Self::Output, Self::Error>;
+    fn process(&mut self, buf: Buffer, rr: RecordingStream) -> Result<Self::Output, Self::Error>;
 }
 
 /// Run a [`subsystem`](Subsystem)
-async fn run<'fr, S: Subsystem<'fr>>(config: S::Config, mut rx: watch::Receiver<Arc<Vec<u8>>>) {
+async fn run<'fr, S: Subsystem<'fr>>(
+    config: S::Config,
+    mut rx: watch::Receiver<Arc<Vec<u8>>>,
+    rr: RecordingStream,
+) {
     let mut subsys = S::init(config).await.unwrap();
 
     while let Ok(()) = rx.changed().await {
         let buf = rx.borrow_and_update();
-        S::process(&mut subsys, buf.clone()).unwrap();
+        S::process(&mut subsys, buf.clone(), rr.clone()).unwrap();
     }
 }
 
@@ -44,4 +49,3 @@ pub struct SubsysHandle<T: Sized> {
     tx: watch::Sender<Buffer>,
     rx: broadcast::Receiver<T>,
 }
-

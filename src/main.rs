@@ -11,8 +11,6 @@
 extern crate log;
 //extern crate actix_web;
 extern crate env_logger;
-#[cfg(feature = "libcamera")]
-extern crate libcamera;
 extern crate minint;
 #[cfg(feature = "mjpeg")]
 extern crate mozjpeg;
@@ -32,7 +30,6 @@ extern crate tfledge;
 //extern crate nokhwa;
 
 //mod api;
-#[cfg(feature = "libcamera")]
 mod cameras;
 mod config;
 mod subsys;
@@ -41,17 +38,20 @@ mod utils;
 mod subsystem;
 
 //use api::run_api;
-#[cfg(feature = "libcamera")]
 use cameras::load_cameras;
+use mimalloc::MiMalloc;
 use minint::NtConn;
 #[cfg(feature = "rerun_web_viewer")]
 use re_web_viewer_server::WebViewerServerPort;
 use re_ws_comms::RerunServerPort;
-use rerun::{Image, MemoryLimit};
-use tokio::sync::watch;
+use rerun::{Image, MemoryLimit, Text, TextLog};
 use std::{error::Error, fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
 #[cfg(feature = "capriltags")]
 use subsys::capriltags::CApriltagsDetector;
+use tokio::sync::watch;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 use crate::utils::gen_team_ip;
 
@@ -72,7 +72,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Initialize logger
     //env_logger::init();
-    rerun::Logger::new(rr.clone()).with_path_prefix("logs/handler").with_filter(rerun::default_log_filter()).init()?;
+    rerun::Logger::new(rr.clone())
+        .with_path_prefix("logs/handler")
+        .with_filter(rerun::default_log_filter())
+        .init()?;
 
     //// Create a new SystemRunner for Actix
     //let sys = System::with_tokio_rt(|| Runtime::new().unwrap());
@@ -109,46 +112,44 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (tx, mut rx) = watch::channel::<Arc<Vec<u8>>>(Arc::new(Vec::new()));
 
-    #[cfg(feature = "libcamera")]
+    let rr_ = rr.clone();
     std::thread::spawn(move || {
         let tx = tx.clone();
-        load_cameras(tx).unwrap();
+        load_cameras(tx, rr_).unwrap();
     });
 
     // apriltag C library subsystem
     {
-        let at = CApriltagsDetector::init(()).await.unwrap();
+        let mut at = CApriltagsDetector::init(()).await.unwrap();
 
         //let nt = nt.clone();
         loop {
             // Wait for a new image from the camera
-            let buf = rx.borrow_and_update();
-            rr.log("/images", &Image::from_rgb24(buf.clone().to_vec(), [1920, 1080]))
-                .unwrap();
+            if rx.changed().await.is_ok() {
+                let buf = rx.borrow_and_update();
+                //rr.log("/working", &TextLog::new("ITS WORKING")).unwrap();
+                //rr.log("/images", &Image::from_rgb24(buf.clone().to_vec(), [1280, 720]))
+                //    .unwrap();
 
-            // Send the buffer to AprilTag detector
-            //let pose = at
-            //    .send(ProcessFrame::<(Vec<f64>, Vec<f64>), _> {
-            //        buf: buf.into(),
-            //        _marker: PhantomData,
-            //    })
-            //    .await
-            //    .unwrap()
-            //    .unwrap();
+                // Send the buffer to AprilTag detector
+                let buf_ = buf.clone();
+                drop(buf);
+                let pose = at.process(buf_, rr.clone()).unwrap();
 
-            //let mut translation = nt
-            //    .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
-            //    .await
-            //    .unwrap();
-            //let mut rotation = nt
-            //    .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
-            //    .await
-            //    .unwrap();
+                //let mut translation = nt
+                //    .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
+                //    .await
+                //    .unwrap();
+                //let mut rotation = nt
+                //    .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
+                //    .await
+                //    .unwrap();
 
-            //let (t, r) = pose;
+                //let (t, r) = pose;
 
-            //translation.set(t.clone()).await.unwrap();
-            //rotation.set(r.clone()).await.unwrap();
+                //translation.set(t.clone()).await.unwrap();
+                //rotation.set(r.clone()).await.unwrap();
+            }
         }
     }
 

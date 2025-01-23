@@ -18,6 +18,7 @@ use cam_geom::{Pixels, Ray};
 use rapier3d::math::{Matrix, Rotation, Translation};
 use rapier3d::na::Matrix3;
 use rapier3d::na::Quaternion;
+use rerun::{Boxes2D, Points2D, Position2D};
 
 use crate::Subsystem;
 
@@ -38,20 +39,22 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
     type Output = (Vec<f64>, Vec<f64>);
     type Error = Box<dyn std::error::Error + Send>;
 
-
     async fn init(cfg: Self::Config) -> Result<Self, Self::Error> {
-            let layout: AprilTagFieldLayout =
-                serde_json::from_reader(File::open("layout.json").unwrap()).unwrap();
-            let det = Detector::builder()
-                .add_family_bits(Family::tag_36h11(), 3)
-                .build()
-                .unwrap();
+        let layout: AprilTagFieldLayout =
+            serde_json::from_reader(File::open("layout.json").unwrap()).unwrap();
+        let det = Detector::builder()
+            .add_family_bits(Family::tag_36h11(), 3)
+            .build()
+            .unwrap();
 
-            Ok(Self { det, layout })
+        Ok(Self { det, layout })
     }
-    fn process(&mut self, buf: crate::subsystem::Buffer) -> Result<Self::Output, Self::Error> {
-        let img_rgb =
-            DynamicImage::ImageRgb8(RgbImage::from_vec(1920, 1080, buf.to_vec()).unwrap());
+    fn process(
+        &mut self,
+        buf: crate::subsystem::Buffer,
+        rr: rerun::RecordingStream,
+    ) -> Result<Self::Output, Self::Error> {
+        let img_rgb = DynamicImage::ImageRgb8(RgbImage::from_vec(1280, 720, buf.to_vec()).unwrap());
         let img_gray = img_rgb.grayscale();
         let buf = img_gray.as_luma8().unwrap();
         let img = Image::from_image_buffer(buf);
@@ -81,6 +84,15 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
                         },
                 } in self.layout.tags.clone()
                 {
+                    rr.log(
+                        "/tag",
+                        &Points2D::new(
+                            det.corners()
+                                .iter()
+                                .map(|c| Position2D::new(c[0] as f32, c[1] as f32)),
+                        ),
+                    )
+                    .unwrap();
                     if det.id() == (id as usize) {
                         tag_translation =
                             Translation::new(translation.x, translation.y, translation.z);

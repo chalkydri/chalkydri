@@ -8,18 +8,17 @@ edition = "2021"
 [features]
 #default = ["libcamera", "capriltags"]
 #default = ["capriltags"]
-default = ["libcamera", "mjpeg", "dep:yuvutils-rs"]
+default = ["mjpeg", "dep:yuvutils-rs", "rerun_web_viewer", "capriltags"]
 apriltags = ["dep:chalkydri-apriltags"]
 ml = ["dep:tfledge"]
 python = ["dep:pyo3"]
 mjpeg = ["dep:mozjpeg"]
-libcamera = ["dep:libcamera"]
+#libcamera = ["dep:libcamera"]
 
 # AprilTags C library
 capriltags = ["dep:apriltag", "dep:apriltag-image"]
 
 rerun_web_viewer = ["dep:re_web_viewer_server", "rerun/web_viewer", "re_ws_comms/server"]
-nokhwa = ["dep:nokhwa"]
 
 [dependencies]
 env_logger = "0.11.2"
@@ -34,10 +33,10 @@ pyo3 = { version = "0.23.3", optional = true, features = [
 ] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
 chalkydri-apriltags = { version = "*", optional = true, path = "crates/chalkydri-apriltags" }
-libcamera = { version = "0.3.0", optional = true, default-features = false, features = [
-  "libcamera_semver_versioning",
-  "vendor_rpi",
-], git = "https://github.com/chalkydri/libcamera-rs.git", branch = "main" }
+#libcamera = { version = "0.3.0", optional = true, default-features = false, features = [
+#  "libcamera_semver_versioning",
+#  #"vendor_rpi",
+#], git = "https://github.com/chalkydri/libcamera-rs.git", branch = "main" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8.12"
 actix-web = { version = "4.5.1", optional = true }
@@ -54,13 +53,22 @@ re_ws_comms = { version = "0.21.0" }
 cam-geom = "0.15.1"
 rapier3d = { version = "0.23.0", features = ["parallel", "simd-nightly"] }
 sharded-slab = "0.1.7"
-nokhwa = { version = "0.10.7", default-features = false, optional = true, features = ["input-v4l"] }
+nokhwa = { version = "0.10.7", features = ["input-v4l", "decoding"] }
+#nokhwa = { git = "https://github.com/l1npengtul/nokhwa.git", branch = "senpai" }
+mimalloc = { version = "0.1.43", features = ["override"] }
+#camera-intrinsic-calibration = { path = "../camera-intrinsic-calibration-rs", version = "*" }
+#camera-intrinsic-model = { path = "../camera-intrinsic-model-rs", version = "*" }
+camera-intrinsic-calibration = { git = "https://github.com/chalkydri/camera-intrinsic-calibration-rs.git", branch = "main" }
+camera-intrinsic-model = { git = "https://github.com/chalkydri/camera-intrinsic-model-rs.git", branch = "main" }
+
+[build-dependencies]
+bindgen = { version = "*", default-features = false, features = ["runtime"] }
 
 [workspace]
 members = [
   "crates/chalkydri-apriltags",
   "crates/chalkydri-tfledge",
-  "crates/minint",
+  "crates/minint", "crates/nokhwa-libcamera",
 ]
 
 # Compile dependencies with optimization level 3 even when in debug mode
