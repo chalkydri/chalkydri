@@ -4,3 +4,4 @@ Cargo.lock
 book/book/
 
 networktables.json
+tools/.python-version

@@ -3,7 +3,7 @@ name = "chalkydri-tools"
 version = "0.1.0"
 description = "Python tools for Chalkydri"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "pyntcore>=2025.2.1",
 ]

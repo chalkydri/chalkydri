@@ -6,19 +6,22 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["libcamera", "capriltags"]
+#default = ["libcamera", "capriltags"]
+#default = ["capriltags"]
+default = ["mjpeg", "dep:yuvutils-rs", "rerun_web_viewer", "capriltags"]
 apriltags = ["dep:chalkydri-apriltags"]
 ml = ["dep:tfledge"]
 python = ["dep:pyo3"]
 mjpeg = ["dep:mozjpeg"]
-libcamera = ["dep:libcamera"]
+#libcamera = ["dep:libcamera"]
 
 # AprilTags C library
 capriltags = ["dep:apriltag", "dep:apriltag-image"]
 
+rerun_web_viewer = ["dep:re_web_viewer_server", "rerun/web_viewer", "re_ws_comms/server"]
+
 [dependencies]
 env_logger = "0.11.2"
-fast_image_resize = "5"
 log = "0.4.21"
 mozjpeg = { version = "0.10.7", optional = true, features = [
   "with_simd",
@@ -28,44 +31,44 @@ tfledge = { version = "*", path = "crates/chalkydri-tfledge", optional = true }
 pyo3 = { version = "0.23.3", optional = true, features = [
   "generate-import-lib",
 ] }
-ril = { version = "0.10.1", default-features = false, features = [
-  "quantize",
-  "resize",
-] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
 chalkydri-apriltags = { version = "*", optional = true, path = "crates/chalkydri-apriltags" }
-libcamera = { version = "0.3.0", optional = true, default-features = false, features = [
-  "libcamera_semver_versioning",
-  "vendor_rpi",
-], git = "https://github.com/chalkydri/libcamera-rs.git", branch = "main" }
+#libcamera = { version = "0.3.0", optional = true, default-features = false, features = [
+#  "libcamera_semver_versioning",
+#  #"vendor_rpi",
+#], git = "https://github.com/chalkydri/libcamera-rs.git", branch = "main" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8.12"
-actix-web = "4.5.1"
+actix-web = { version = "4.5.1", optional = true }
 minint = { version = "0.1.0", path = "crates/minint" }
-utoipa = { version = "5.2.0", features = ["actix_extras"] }
+utoipa = { version = "5.2.0", optional = true, features = ["actix_extras"] }
 serde_json = "1"
 fastrand = "2.1.0"
-actix = "0.13.5"
 apriltag = { version = "0.4.0", optional = true }
-image = "0.25.5"
 apriltag-image = { version = "0.1.0", optional = true }
-yuvutils-rs = { version = "0.5.14", features = ["rayon"] }
-rerun = { version = "0.21.0", default-features = false, features = [
-  "nasm",
-  "sdk",
-  "web_viewer",
-  "server",
-] }
-re_web_viewer_server = "0.21.0"
-re_ws_comms = { version = "0.21.0", features = ["server"] }
+yuvutils-rs = { version = "0.5.14", optional = true, features = ["rayon"] }
+rerun = { version = "0.21.0", default-features = false, features = ["nasm", "sdk", "server", "log"] }
+re_web_viewer_server = { version = "0.21.0", optional = true }
+re_ws_comms = { version = "0.21.0" }
 cam-geom = "0.15.1"
 rapier3d = { version = "0.23.0", features = ["parallel", "simd-nightly"] }
+sharded-slab = "0.1.7"
+nokhwa = { version = "0.10.7", features = ["input-v4l", "decoding"] }
+#nokhwa = { git = "https://github.com/l1npengtul/nokhwa.git", branch = "senpai" }
+mimalloc = { version = "0.1.43", features = ["override"] }
+#camera-intrinsic-calibration = { path = "../camera-intrinsic-calibration-rs", version = "*" }
+#camera-intrinsic-model = { path = "../camera-intrinsic-model-rs", version = "*" }
+camera-intrinsic-calibration = { git = "https://github.com/chalkydri/camera-intrinsic-calibration-rs.git", branch = "main" }
+camera-intrinsic-model = { git = "https://github.com/chalkydri/camera-intrinsic-model-rs.git", branch = "main" }
+
+[build-dependencies]
+bindgen = { version = "*", default-features = false, features = ["runtime"] }
 
 [workspace]
 members = [
   "crates/chalkydri-apriltags",
   "crates/chalkydri-tfledge",
-  "crates/minint",
+  "crates/minint", "crates/nokhwa-libcamera",
 ]
 
 # Compile dependencies with optimization level 3 even when in debug mode
