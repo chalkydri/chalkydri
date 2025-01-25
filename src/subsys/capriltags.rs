@@ -15,24 +15,23 @@ use apriltag::{Detector, Family, Image, TagParams};
 use apriltag_image::image::{DynamicImage, RgbImage};
 use apriltag_image::prelude::*;
 use cam_geom::{Pixels, Ray};
+use camera_intrinsic_model::{GenericModel, OpenCVModel5};
 use rapier3d::math::{Matrix, Rotation, Translation};
-use rapier3d::na::Matrix3;
+use rapier3d::na::{Matrix3, Vector3};
 use rapier3d::na::Quaternion;
-use rerun::{Boxes2D, Points2D, Position2D};
+use rerun::components::{PinholeProjection, PoseRotationQuat, ViewCoordinates};
+use rerun::external::re_types;
+use rerun::{Boxes2D, Mat3x3, Points2D, Position2D};
 
+use crate::calibration::CalibratedModel;
 use crate::Subsystem;
 
-const TAG_PARAMS: TagParams = TagParams {
-    tagsize: 1.0,
-    fx: 100.0,
-    fy: 100.0,
-    cx: 1920.0,
-    cy: 1080.0,
-};
+const TAG_SIZE: f64 = 165.1;
 
 pub struct CApriltagsDetector {
     det: apriltag::Detector,
     layout: AprilTagFieldLayout,
+    model: CalibratedModel,
 }
 impl<'fr> Subsystem<'fr> for CApriltagsDetector {
     type Config = ();
@@ -40,6 +39,7 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
     type Error = Box<dyn std::error::Error + Send>;
 
     async fn init(cfg: Self::Config) -> Result<Self, Self::Error> {
+        let model = CalibratedModel::new();
         let layout: AprilTagFieldLayout =
             serde_json::from_reader(File::open("layout.json").unwrap()).unwrap();
         let det = Detector::builder()
@@ -47,7 +47,7 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
             .build()
             .unwrap();
 
-        Ok(Self { det, layout })
+        Ok(Self { det, layout, model })
     }
     fn process(
         &mut self,
@@ -63,7 +63,19 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
         let poses: Vec<_> = dets
             .iter()
             .filter_map(|det| {
-                let pose = det.estimate_tag_pose(&TAG_PARAMS).unwrap();
+                let OpenCVModel5 { fx, fy, cx, cy, .. } = if let GenericModel::OpenCVModel5(model) = self.model.inner_model() {
+                    model
+                } else {
+                    panic!("camera model type not supported yet");
+                };
+
+                let pose = det.estimate_tag_pose(&TagParams {
+                    fx,
+                    fy,
+                    cx,
+                    cy,
+                    tagsize: TAG_SIZE,
+                }).unwrap();
 
                 let cam_translation = pose.translation().data().to_vec();
                 let cam_translation =
@@ -71,6 +83,13 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
 
                 let cam_rotation = pose.rotation().data().to_vec();
                 let cam_rotation = Rotation::from_matrix(&Matrix::from_vec(cam_rotation));
+
+                //let (rotation, translation) = CalibratedModel::new().determine_pose(det.corners().iter().map(|c| (c[0], c[1])).collect::<Vec<_>>());
+                //let rotation = Rotation::from_euler_angles(rotation.0, rotation.1, rotation.2);
+                //let quat = rerun::Quaternion::from_wxyz([rotation.w as f32, rotation.i as f32, rotation.j as f32, rotation.k as f32]);
+                //let quat2 = rerun::Quaternion::from_wxyz([cam_rotation.w as f32, cam_rotation.i as f32, cam_rotation.j as f32, cam_rotation.k as f32]);
+                //rr.log("/image/tag_rust", &rerun::Transform3D::from_translation_rotation(rerun::Vec3D::new(translation.0 as f32, translation.1 as f32, translation.2 as f32), quat)).unwrap();
+                //rr.log("/image/tag_c", &rerun::Transform3D::from_translation_rotation(rerun::Vec3D::new(cam_translation.x as f32, cam_translation.y as f32, cam_translation.z as f32), quat2)).unwrap();
 
                 let tag_translation: Translation<f64>;
                 let tag_rotation: Rotation<f64>;

@@ -59,7 +59,7 @@ impl CamWrapper {
         let frame = self.cam.frame().unwrap();
         self.rr
             .log(
-                "/images",
+                "/image",
                 &rerun::EncodedImage::new(frame.buffer().to_vec()),
             )
             .unwrap();

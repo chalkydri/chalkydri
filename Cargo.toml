@@ -60,6 +60,8 @@ mimalloc = { version = "0.1.43", features = ["override"] }
 #camera-intrinsic-model = { path = "../camera-intrinsic-model-rs", version = "*" }
 camera-intrinsic-calibration = { git = "https://github.com/chalkydri/camera-intrinsic-calibration-rs.git", branch = "main" }
 camera-intrinsic-model = { git = "https://github.com/chalkydri/camera-intrinsic-model-rs.git", branch = "main" }
+aprilgrid = "0.5.3"
+sqpnp_simple = "0.1.5"
 
 [build-dependencies]
 bindgen = { version = "*", default-features = false, features = ["runtime"] }

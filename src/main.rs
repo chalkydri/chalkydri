@@ -36,6 +36,7 @@ mod subsys;
 mod utils;
 //mod logger;
 mod subsystem;
+mod calibration;
 
 //use api::run_api;
 use cameras::load_cameras;
@@ -135,6 +136,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let buf_ = buf.clone();
                 drop(buf);
                 let pose = at.process(buf_, rr.clone()).unwrap();
+                info!("{pose:?}");
 
                 //let mut translation = nt
                 //    .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
