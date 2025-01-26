@@ -1,12 +1,19 @@
-use std::collections::HashMap;
+use crate::error::Error;
+use std::{collections::HashMap, fs::File, path::Path};
 
 #[derive(Deserialize, Serialize)]
 pub struct Config {
-    pub sigma: String,
+    pub team_number: u16,
     pub version: String,
     pub camera: HashMap<String, CameraConfig>,
     pub tpu: Option<TpuConfig>,
     //pub backends: HashMap<Backend, BackendConfig>,
+}
+impl Config {
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, Error> {
+        let f = File::open(path).map_err(|_| Error::FailedToReadConfig)?;
+        serde_json::from_reader(f).map_err(|_| Error::InvalidConfig)
+    }
 }
 
 #[derive(Deserialize, Serialize)]

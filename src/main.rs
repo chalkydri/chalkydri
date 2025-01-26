@@ -14,7 +14,6 @@ extern crate env_logger;
 extern crate minint;
 #[cfg(feature = "mjpeg")]
 extern crate mozjpeg;
-//extern crate ril;
 extern crate tokio;
 //extern crate utoipa as utopia;
 #[macro_use]
@@ -23,45 +22,60 @@ extern crate serde;
 extern crate apriltag;
 #[cfg(feature = "apriltags")]
 extern crate chalkydri_apriltags;
+extern crate nokhwa;
 #[cfg(feature = "python")]
 extern crate pyo3;
 #[cfg(feature = "ml")]
 extern crate tfledge;
-//extern crate nokhwa;
 
 //mod api;
+mod calibration;
 mod cameras;
 mod config;
+mod error;
+mod logger;
 mod subsys;
-mod utils;
-//mod logger;
 mod subsystem;
-mod calibration;
+mod utils;
 
 //use api::run_api;
 use cameras::load_cameras;
+use config::Config;
+use logger::Logger;
 use mimalloc::MiMalloc;
 use minint::NtConn;
+use once_cell::sync::Lazy;
+#[cfg(feature = "rerun")]
+use re_sdk::{MemoryLimit, RecordingStream};
 #[cfg(feature = "rerun_web_viewer")]
 use re_web_viewer_server::WebViewerServerPort;
+#[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
-use rerun::{Image, MemoryLimit, Text, TextLog};
-use std::{error::Error, fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
+use std::{error::Error, sync::Arc, time::Duration};
 #[cfg(feature = "capriltags")]
 use subsys::capriltags::CApriltagsDetector;
-use tokio::sync::watch;
+use tokio::{
+    sync::{watch, RwLock},
+    task::LocalSet,
+};
 
+// mimalloc is a very good general purpose allocator
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-use crate::utils::gen_team_ip;
+use utils::gen_team_ip;
 
 use subsystem::Subsystem;
 
-#[tokio::main(worker_threads = 16)]
-async fn main() -> Result<(), Box<dyn Error>> {
+#[allow(non_upper_case_globals)]
+static Cfg: Lazy<RwLock<Config>> =
+    Lazy::new(|| RwLock::new(Config::load("chalkydri.toml").unwrap()));
+
+#[cfg(feature = "rerun")]
+#[allow(non_upper_case_globals)]
+static Rerun: Lazy<RecordingStream> = Lazy::new(|| {
     #[cfg(feature = "rerun_web_viewer")]
-    let rr = rerun::RecordingStreamBuilder::new("chalkydri")
+    re_sdk::RecordingStreamBuilder::new("chalkydri")
         .serve_web(
             "0.0.0.0",
             WebViewerServerPort(8080),
@@ -69,91 +83,101 @@ async fn main() -> Result<(), Box<dyn Error>> {
             MemoryLimit::from_bytes(10_000_000),
             true,
         )
-        .unwrap();
+        .unwrap()
+        .into()
+});
 
-    // Initialize logger
-    //env_logger::init();
-    rerun::Logger::new(rr.clone())
-        .with_path_prefix("logs/handler")
-        .with_filter(rerun::default_log_filter())
-        .init()?;
-
-    //// Create a new SystemRunner for Actix
-    //let sys = System::with_tokio_rt(|| Runtime::new().unwrap());
+#[tokio::main(worker_threads = 16)]
+async fn main() -> Result<(), Box<dyn Error>> {
+    Logger::new().with_path_prefix("logs/handler").init()?;
 
     info!("Chalkydri starting up...");
 
-    let roborio_ip = gen_team_ip(4533).expect("failed to generate team ip");
+    let roborio_ip = gen_team_ip(Cfg.read().await.team_number).expect("failed to generate team ip");
     // Generate a random device id
     let dev_id = fastrand::u32(..);
 
     // Attempt to connect to the NT server, retrying until successful
 
-    //let nt: NtConn;
+    let nt: NtConn;
 
-    //let mut retry = false;
+    let mut retry = false;
 
-    //loop {
-    //    match NtConn::new(roborio_ip, format!("chalkydri{dev_id}")).await {
-    //        Ok(conn) => {
-    //            nt = conn;
-    //            break;
-    //        }
-    //        Err(err) => {
-    //            if !retry {
-    //                error!("Error connecting to NT server: {err:?}");
-    //                retry = true;
-    //            }
-    //            tokio::time::sleep(Duration::from_millis(5)).await;
-    //        }
-    //    }
-    //}
-
-    //info!("Connected to NT server at {roborio_ip:?} successfully!");
-
-    let (tx, mut rx) = watch::channel::<Arc<Vec<u8>>>(Arc::new(Vec::new()));
-
-    let rr_ = rr.clone();
-    std::thread::spawn(move || {
-        let tx = tx.clone();
-        load_cameras(tx, rr_).unwrap();
-    });
-
-    // apriltag C library subsystem
-    {
-        let mut at = CApriltagsDetector::init(()).await.unwrap();
-
-        //let nt = nt.clone();
-        loop {
-            // Wait for a new image from the camera
-            if rx.changed().await.is_ok() {
-                let buf = rx.borrow_and_update();
-                //rr.log("/working", &TextLog::new("ITS WORKING")).unwrap();
-                //rr.log("/images", &Image::from_rgb24(buf.clone().to_vec(), [1280, 720]))
-                //    .unwrap();
-
-                // Send the buffer to AprilTag detector
-                let buf_ = buf.clone();
-                drop(buf);
-                let pose = at.process(buf_, rr.clone()).unwrap();
-                info!("{pose:?}");
-
-                //let mut translation = nt
-                //    .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
-                //    .await
-                //    .unwrap();
-                //let mut rotation = nt
-                //    .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
-                //    .await
-                //    .unwrap();
-
-                //let (t, r) = pose;
-
-                //translation.set(t.clone()).await.unwrap();
-                //rotation.set(r.clone()).await.unwrap();
+    loop {
+        match NtConn::new(roborio_ip, format!("chalkydri{dev_id}")).await {
+            Ok(conn) => {
+                nt = conn;
+                break;
+            }
+            Err(err) => {
+                if !retry {
+                    error!("Error connecting to NT server: {err:?}");
+                    retry = true;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
             }
         }
     }
+
+    info!("Connected to NT server at {roborio_ip:?} successfully!");
+
+    // Create a channel for sharing frames from the camera thread with the subsystems
+    let (tx, mut rx) = watch::channel::<Arc<Vec<u8>>>(Arc::new(Vec::new()));
+
+    // Spawn a thread to handle cameras
+    std::thread::spawn(move || {
+        let tx = tx.clone();
+        load_cameras(tx).unwrap();
+    });
+
+    // apriltag C library subsystem
+    let local = LocalSet::new();
+    let nt_ = nt.clone();
+    local.spawn_local(async move {
+        let nt = nt_;
+
+        // Initialize the apriltag C library subsystem
+        let mut at = CApriltagsDetector::init().await.unwrap();
+
+        // Publish NT topics
+        let mut translation = nt
+            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
+            .await
+            .unwrap();
+        let mut rotation = nt
+            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
+            .await
+            .unwrap();
+        let mut timestamp = nt
+            .publish::<String>(&format!("/chalkydri/robot_pose/timestamp"))
+            .await
+            .unwrap();
+
+        loop {
+            // Wait for a new image from the camera
+            if rx.changed().await.is_ok() {
+                // Get timestamp for the image
+                let ts = chrono::Utc::now().to_rfc3339();
+                // Borrow the buffer and let the channel know we've seen this value
+                let buf = rx.borrow_and_update();
+
+                // Make a copy of the buffer and release the borrow of the original
+                let buf_ = buf.clone();
+                drop(buf);
+
+                // Send the buffer to AprilTag detector
+                let pose = at.process(buf_).unwrap();
+
+                // Unpack the pose into translation and rotation
+                let (t, r) = pose;
+
+                // Update the translation, rotation, and timestamp on NetworkTables
+                translation.set(t.clone()).await.unwrap();
+                rotation.set(r.clone()).await.unwrap();
+                timestamp.set(ts).await.unwrap();
+            }
+        }
+    }).await.unwrap();
 
     // Have to let NT topics get dropped before calling nt.stop()
     {
@@ -161,7 +185,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Shut down NT connection
-    //nt.stop();
+    nt.stop();
 
     Ok(())
 }
