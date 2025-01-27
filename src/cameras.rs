@@ -3,17 +3,17 @@ use nokhwa::{
     utils::{ApiBackend, RequestedFormat, RequestedFormatType},
     Camera,
 };
-use rerun::RecordingStream;
+#[cfg(feature = "rerun")]
+use re_types::archetypes::EncodedImage;
 use std::{error::Error, sync::Arc};
 use tokio::sync::watch;
 
-pub fn load_cameras(
-    frame_tx: watch::Sender<Arc<Vec<u8>>>,
-    rr: RecordingStream,
-) -> Result<(), Box<dyn Error>> {
+#[cfg(feature = "rerun")]
+use crate::Rerun;
+
+pub fn load_cameras(frame_tx: watch::Sender<Arc<Vec<u8>>>) -> Result<(), Box<dyn Error>> {
     let cams = nokhwa::query(ApiBackend::Auto).unwrap();
     for cam in cams {
-        let rr = rr.clone();
         let frame_tx = frame_tx.clone();
         std::thread::spawn(move || {
             if let Ok(cam) = Camera::new(
@@ -28,7 +28,7 @@ pub fn load_cameras(
                 );
                 info!("{}", cam.info().human_name());
 
-                let mut cw = CamWrapper::new(cam, rr, frame_tx);
+                let mut cw = CamWrapper::new(cam, frame_tx);
                 cw.setup();
                 cw.run();
             }
@@ -40,13 +40,12 @@ pub fn load_cameras(
 
 pub struct CamWrapper {
     cam: Camera,
-    rr: RecordingStream,
     frame_tx: watch::Sender<Arc<Vec<u8>>>,
 }
 impl CamWrapper {
     /// Wrap an [ActiveCamera]
-    pub fn new(cam: Camera, rr: RecordingStream, frame_tx: watch::Sender<Arc<Vec<u8>>>) -> Self {
-        Self { cam, rr, frame_tx }
+    pub fn new(cam: Camera, frame_tx: watch::Sender<Arc<Vec<u8>>>) -> Self {
+        Self { cam, frame_tx }
     }
 
     /// Set up the camera and request the first frame
@@ -57,14 +56,13 @@ impl CamWrapper {
     /// Get a frame and request another
     pub fn get_frame(&mut self) {
         let frame = self.cam.frame().unwrap();
-        self.rr
-            .log(
-                "/images",
-                &rerun::EncodedImage::new(frame.buffer().to_vec()),
-            )
-            .unwrap();
         let buff = frame.decode_image::<RgbFormat>().unwrap().to_vec();
         self.frame_tx.send(buff.into()).unwrap();
+
+        #[cfg(feature = "rerun")]
+        Rerun
+            .log("/image", &EncodedImage::new(frame.buffer().to_vec()))
+            .unwrap();
     }
 
     /// Continously request frames until the end of time

@@ -9,51 +9,50 @@
 // <https://www.chiefdelphi.com/t/frc-blog-technology-updates-past-present-future-and-beyond-apriltags-and-new-radio/440931>
 // According to this post on CD, we're doing the 36h11 tag family now.
 
+use std::collections::HashMap;
 use std::fs::File;
+use std::path::Path;
 
 use apriltag::{Detector, Family, Image, TagParams};
 use apriltag_image::image::{DynamicImage, RgbImage};
 use apriltag_image::prelude::*;
-use cam_geom::{Pixels, Ray};
+use camera_intrinsic_model::{GenericModel, OpenCVModel5};
 use rapier3d::math::{Matrix, Rotation, Translation};
-use rapier3d::na::Matrix3;
 use rapier3d::na::Quaternion;
-use rerun::{Boxes2D, Points2D, Position2D};
+use rapier3d::na::{Matrix3, Vector3};
+#[cfg(feature = "rerun")]
+use re_sdk::external::re_types_core;
+#[cfg(feature = "rerun")]
+use re_types::{
+    archetypes::{Boxes2D, Points2D},
+    components::{PinholeProjection, PoseRotationQuat, Position2D, ViewCoordinates},
+};
 
+use crate::calibration::CalibratedModel;
 use crate::Subsystem;
 
-const TAG_PARAMS: TagParams = TagParams {
-    tagsize: 1.0,
-    fx: 100.0,
-    fy: 100.0,
-    cx: 1920.0,
-    cy: 1080.0,
-};
+const TAG_SIZE: f64 = 165.1;
 
 pub struct CApriltagsDetector {
     det: apriltag::Detector,
-    layout: AprilTagFieldLayout,
+    layout: HashMap<u64, (Translation<f64>, Rotation<f64>)>,
+    model: CalibratedModel,
 }
 impl<'fr> Subsystem<'fr> for CApriltagsDetector {
-    type Config = ();
     type Output = (Vec<f64>, Vec<f64>);
     type Error = Box<dyn std::error::Error + Send>;
 
-    async fn init(cfg: Self::Config) -> Result<Self, Self::Error> {
-        let layout: AprilTagFieldLayout =
-            serde_json::from_reader(File::open("layout.json").unwrap()).unwrap();
+    async fn init() -> Result<Self, Self::Error> {
+        let model = CalibratedModel::new();
+        let layout = AprilTagFieldLayout::load("layout.json");
         let det = Detector::builder()
             .add_family_bits(Family::tag_36h11(), 3)
             .build()
             .unwrap();
 
-        Ok(Self { det, layout })
+        Ok(Self { det, layout, model })
     }
-    fn process(
-        &mut self,
-        buf: crate::subsystem::Buffer,
-        rr: rerun::RecordingStream,
-    ) -> Result<Self::Output, Self::Error> {
+    fn process(&mut self, buf: crate::subsystem::Buffer) -> Result<Self::Output, Self::Error> {
         let img_rgb = DynamicImage::ImageRgb8(RgbImage::from_vec(1280, 720, buf.to_vec()).unwrap());
         let img_gray = img_rgb.grayscale();
         let buf = img_gray.as_luma8().unwrap();
@@ -63,50 +62,39 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
         let poses: Vec<_> = dets
             .iter()
             .filter_map(|det| {
-                let pose = det.estimate_tag_pose(&TAG_PARAMS).unwrap();
+                // Extract camera calibration values from the [CalibratedModel]
+                let OpenCVModel5 { fx, fy, cx, cy, .. } =
+                    if let GenericModel::OpenCVModel5(model) = self.model.inner_model() {
+                        model
+                    } else {
+                        panic!("camera model type not supported yet");
+                    };
 
+                // Estimate tag pose with the camera calibration values
+                let pose = det
+                    .estimate_tag_pose(&TagParams {
+                        fx,
+                        fy,
+                        cx,
+                        cy,
+                        tagsize: TAG_SIZE,
+                    })
+                    .unwrap();
+
+                // Extract the camera's translation and rotation matrices from the [Pose]
                 let cam_translation = pose.translation().data().to_vec();
+                let cam_rotation = pose.rotation().data().to_vec();
+
+                // Convert the camera's translation and rotation matrices into proper Rust datatypes
                 let cam_translation =
                     Translation::new(cam_translation[0], cam_translation[1], cam_translation[2]);
-
-                let cam_rotation = pose.rotation().data().to_vec();
                 let cam_rotation = Rotation::from_matrix(&Matrix::from_vec(cam_rotation));
 
-                let tag_translation: Translation<f64>;
-                let tag_rotation: Rotation<f64>;
-
-                for LayoutTag {
-                    id,
-                    pose:
-                        LayoutPose {
-                            translation,
-                            rotation: LayoutRotation { quaternion },
-                        },
-                } in self.layout.tags.clone()
-                {
-                    rr.log(
-                        "/tag",
-                        &Points2D::new(
-                            det.corners()
-                                .iter()
-                                .map(|c| Position2D::new(c[0] as f32, c[1] as f32)),
-                        ),
-                    )
-                    .unwrap();
-                    if det.id() == (id as usize) {
-                        tag_translation =
-                            Translation::new(translation.x, translation.y, translation.z);
-                        tag_rotation = Rotation::from_quaternion(Quaternion::new(
-                            quaternion.w,
-                            quaternion.x,
-                            quaternion.y,
-                            quaternion.z,
-                        ));
-
-                        let translation = tag_translation * cam_translation;
-                        let rotation = tag_rotation * cam_rotation;
-                        return Some((translation, rotation, det.decision_margin() as f64));
-                    }
+                // Try to get the tag's pose from the field layout
+                if let Some((tag_translation, tag_rotation)) = self.layout.get(&(det.id() as u64)) {
+                    let translation = tag_translation * cam_translation;
+                    let rotation = tag_rotation * cam_rotation;
+                    return Some((translation, rotation, det.decision_margin() as f64));
                 }
 
                 None
@@ -149,6 +137,36 @@ pub struct AprilTagFieldLayout {
     pub tags: Vec<LayoutTag>,
     pub field: Field,
 }
+impl AprilTagFieldLayout {
+    pub fn load(path: impl AsRef<Path>) -> HashMap<u64, (Translation<f64>, Rotation<f64>)> {
+        let f = File::open(path).unwrap();
+        let layout: Self = serde_json::from_reader(f).unwrap();
+
+        let mut tags = HashMap::new();
+        for LayoutTag {
+            id,
+            pose:
+                LayoutPose {
+                    translation,
+                    rotation: LayoutRotation { quaternion },
+                },
+        } in layout.tags.clone()
+        {
+            // Turn the field layout values into Rust datatypes
+            let tag_translation = Translation::new(translation.x, translation.y, translation.z);
+            let tag_rotation = Rotation::from_quaternion(Quaternion::new(
+                quaternion.w,
+                quaternion.x,
+                quaternion.y,
+                quaternion.z,
+            ));
+
+            tags.insert(id as u64, (tag_translation, tag_rotation));
+        }
+
+        tags
+    }
+}
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -158,14 +176,14 @@ pub struct LayoutTag {
     pub pose: LayoutPose,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutPose {
     pub translation: LayoutTranslation,
     pub rotation: LayoutRotation,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutTranslation {
     pub x: f64,
@@ -173,13 +191,13 @@ pub struct LayoutTranslation {
     pub z: f64,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutRotation {
     pub quaternion: LayoutQuaternion,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutQuaternion {
     #[serde(rename = "W")]
@@ -192,7 +210,7 @@ pub struct LayoutQuaternion {
     pub z: f64,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Field {
     pub length: f64,
