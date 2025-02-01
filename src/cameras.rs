@@ -13,7 +13,6 @@ use libcamera::{
 use re_types::archetypes::EncodedImage;
 use std::{error::Error, sync::Arc, time::Duration};
 use yuvutils_rs::{yuv420_to_rgb, YuvPlanarImage, YuvRange, YuvStandardMatrix};
-use std::{error::Error, sync::Arc};
 use tokio::sync::watch;
 
 #[cfg(feature = "rerun")]

@@ -6,7 +6,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["mjpeg", "capriltags"]
+default = ["mjpeg", "capriltags", "dep:yuvutils_rs"]
 apriltags = ["dep:chalkydri-apriltags"]
 ml = ["dep:tfledge"]
 python = ["dep:pyo3"]

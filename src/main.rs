@@ -22,7 +22,6 @@ extern crate serde;
 extern crate apriltag;
 #[cfg(feature = "apriltags")]
 extern crate chalkydri_apriltags;
-extern crate nokhwa;
 #[cfg(feature = "python")]
 extern crate pyo3;
 #[cfg(feature = "ml")]
