@@ -24,7 +24,7 @@ pub fn load_cameras(frame_tx: watch::Sender<Arc<Vec<u8>>>) -> Result<(), Box<dyn
     assert!(cameras.len() > 0, "connect a camera");
     let cam = cameras.get(0).unwrap();
     info!("using camera '{}'", cam.id());
-    let mut cfgg = cam
+    let cfgg = cam
         .generate_configuration(&[StreamRole::VideoRecording])
         .unwrap();
     dbg!(&cfgg);
@@ -40,6 +40,7 @@ pub fn load_cameras(frame_tx: watch::Sender<Arc<Vec<u8>>>) -> Result<(), Box<dyn
 pub struct CamWrapper<'cam> {
     cam: ActiveCamera<'cam>,
     alloc: FrameBufferAllocator,
+    frame_tx: watch::Sender<Arc<Vec<u8>>>,
     cam_tx: std::sync::mpsc::Sender<Request>,
     cam_rx: std::sync::mpsc::Receiver<Request>,
     configs: CameraConfiguration
@@ -59,6 +60,7 @@ impl<'cam> CamWrapper<'cam> {
             alloc,
             cam_tx,
             cam_rx,
+            frame_tx,
             configs: cfgg,
         }
     }
@@ -112,7 +114,6 @@ impl<'cam> CamWrapper<'cam> {
             self.cam.queue_request(req).unwrap();
         }
         let properties::Model(_model) = self.cam.properties().get::<properties::Model>().unwrap();
-        self.cam.open_stream().unwrap();
     }
 
     /// Get a frame and request another
@@ -152,5 +153,12 @@ impl<'cam> CamWrapper<'cam> {
         req.reuse(ReuseFlag::REUSE_BUFFERS);
         debug!("queueing another request");
         self.cam.queue_request(req).unwrap();
+    }
+
+    /// Continously request frames until the end of time
+    pub fn run(mut self) {
+        loop {
+            self.get_frame();
+        }
     }
 }
