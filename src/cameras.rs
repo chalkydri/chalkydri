@@ -6,14 +6,14 @@ use libcamera::{
     framebuffer_map::MemoryMappedFrameBuffer,
     properties,
     request::{Request, ReuseFlag},
-    stream::StreamRole
+    stream::StreamRole,
 };
 
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
 use std::{error::Error, sync::Arc, time::Duration};
-use yuvutils_rs::{yuv420_to_rgb, YuvPlanarImage, YuvRange, YuvStandardMatrix};
 use tokio::sync::watch;
+use yuvutils_rs::{yuv420_to_rgb, YuvPlanarImage, YuvRange, YuvStandardMatrix};
 
 #[cfg(feature = "rerun")]
 use crate::Rerun;
@@ -43,7 +43,7 @@ pub struct CamWrapper<'cam> {
     frame_tx: watch::Sender<Arc<Vec<u8>>>,
     cam_tx: std::sync::mpsc::Sender<Request>,
     cam_rx: std::sync::mpsc::Receiver<Request>,
-    configs: CameraConfiguration
+    configs: CameraConfiguration,
 }
 impl<'cam> CamWrapper<'cam> {
     /// Wrap an [ActiveCamera]

@@ -2,7 +2,7 @@
 //! Machine learning subsystem
 //!
 
-use crate::{ProcessFrame, Subsystem, Cfg};
+use crate::{Cfg, ProcessFrame, Subsystem};
 use actix::prelude::*;
 use tfledge::{CoralDevice, Error, Input, Interpreter, Model, Output, Tensor};
 
@@ -15,13 +15,13 @@ impl<'fr> Subsystem<'fr> for MlInterpreter {
         // Get the first available Coral device
         let dev = tfledge::list_devices()
             .next()
-            .expect("no Coral devices found"); 
+            .expect("no Coral devices found");
 
         // Load TFLite model from the path in the config
         let model = Model::from_file(Cfg.model_path.as_str()).unwrap();
 
         let int = Interpreter::new(model, dev).unwrap();
-        
+
         Self { int }
     }
 

@@ -132,51 +132,54 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // apriltag C library subsystem
     let local = LocalSet::new();
     let nt_ = nt.clone();
-    local.spawn_local(async move {
-        let nt = nt_;
+    local
+        .spawn_local(async move {
+            let nt = nt_;
 
-        // Initialize the apriltag C library subsystem
-        let mut at = CApriltagsDetector::init().await.unwrap();
+            // Initialize the apriltag C library subsystem
+            let mut at = CApriltagsDetector::init().await.unwrap();
 
-        // Publish NT topics
-        let mut translation = nt
-            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
-            .await
-            .unwrap();
-        let mut rotation = nt
-            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
-            .await
-            .unwrap();
-        let mut timestamp = nt
-            .publish::<String>(&format!("/chalkydri/robot_pose/timestamp"))
-            .await
-            .unwrap();
+            // Publish NT topics
+            let mut translation = nt
+                .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
+                .await
+                .unwrap();
+            let mut rotation = nt
+                .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
+                .await
+                .unwrap();
+            let mut timestamp = nt
+                .publish::<String>(&format!("/chalkydri/robot_pose/timestamp"))
+                .await
+                .unwrap();
 
-        loop {
-            // Wait for a new image from the camera
-            if rx.changed().await.is_ok() {
-                // Get timestamp for the image
-                let ts = chrono::Utc::now().to_rfc3339();
-                // Borrow the buffer and let the channel know we've seen this value
-                let buf = rx.borrow_and_update();
+            loop {
+                // Wait for a new image from the camera
+                if rx.changed().await.is_ok() {
+                    // Get timestamp for the image
+                    let ts = chrono::Utc::now().to_rfc3339();
+                    // Borrow the buffer and let the channel know we've seen this value
+                    let buf = rx.borrow_and_update();
 
-                // Make a copy of the buffer and release the borrow of the original
-                let buf_ = buf.clone();
-                drop(buf);
+                    // Make a copy of the buffer and release the borrow of the original
+                    let buf_ = buf.clone();
+                    drop(buf);
 
-                // Send the buffer to AprilTag detector
-                let pose = at.process(buf_).unwrap();
+                    // Send the buffer to AprilTag detector
+                    let pose = at.process(buf_).unwrap();
 
-                // Unpack the pose into translation and rotation
-                let (t, r) = pose;
+                    // Unpack the pose into translation and rotation
+                    let (t, r) = pose;
 
-                // Update the translation, rotation, and timestamp on NetworkTables
-                translation.set(t.clone()).await.unwrap();
-                rotation.set(r.clone()).await.unwrap();
-                timestamp.set(ts).await.unwrap();
+                    // Update the translation, rotation, and timestamp on NetworkTables
+                    translation.set(t.clone()).await.unwrap();
+                    rotation.set(r.clone()).await.unwrap();
+                    timestamp.set(ts).await.unwrap();
+                }
             }
-        }
-    }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
     // Have to let NT topics get dropped before calling nt.stop()
     {
