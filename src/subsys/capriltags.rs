@@ -19,7 +19,6 @@ use apriltag_image::prelude::*;
 use camera_intrinsic_model::{GenericModel, OpenCVModel5};
 use rapier3d::math::{Matrix, Rotation, Translation};
 use rapier3d::na::Quaternion;
-use rapier3d::na::{Matrix3, Vector3};
 #[cfg(feature = "rerun")]
 use re_sdk::external::re_types_core;
 #[cfg(feature = "rerun")]
@@ -44,7 +43,13 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
 
     async fn init() -> Result<Self, Self::Error> {
         let model = CalibratedModel::new();
-        let layout = AprilTagFieldLayout::load("layout.json");
+
+        let mut path = Path::new("/boot/layout.json");
+        if !path.exists() {
+            path = Path::new("./layout.json");
+        }
+
+        let layout = AprilTagFieldLayout::load(path);
         let det = Detector::builder()
             .add_family_bits(Family::tag_36h11(), 3)
             .build()

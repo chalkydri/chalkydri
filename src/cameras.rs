@@ -1,7 +1,6 @@
 use libcamera::{
     camera::{ActiveCamera, CameraConfiguration},
     camera_manager::CameraManager,
-    framebuffer::AsFrameBuffer,
     framebuffer_allocator::{FrameBuffer, FrameBufferAllocator},
     framebuffer_map::MemoryMappedFrameBuffer,
     properties,

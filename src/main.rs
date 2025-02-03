@@ -50,7 +50,7 @@ use re_sdk::{MemoryLimit, RecordingStream};
 use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
-use std::{error::Error, sync::Arc, time::Duration};
+use std::{error::Error, path::Path, sync::Arc, time::Duration};
 #[cfg(feature = "capriltags")]
 use subsys::capriltags::CApriltagsDetector;
 use tokio::{
@@ -67,8 +67,17 @@ use utils::gen_team_ip;
 use subsystem::Subsystem;
 
 #[allow(non_upper_case_globals)]
-static Cfg: Lazy<RwLock<Config>> =
-    Lazy::new(|| RwLock::new(Config::load("chalkydri.toml").unwrap()));
+static Cfg: Lazy<RwLock<Config>> = Lazy::new(|| {
+    let mut path = Path::new("/boot/chalkydri.toml");
+    if !path.exists() {
+        path = Path::new("/etc/chalkydri.toml");
+        if !path.exists() {
+            path = Path::new("./chalkydri.toml");
+        }
+    }
+
+    RwLock::new(Config::load(path).unwrap())
+});
 
 #[cfg(feature = "rerun")]
 #[allow(non_upper_case_globals)]
