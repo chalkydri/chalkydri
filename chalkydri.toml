@@ -4,9 +4,7 @@ team_number = 4533
 # If not specified, Chalkydri will host a local web viewer on port 8080
 server_address = "127.0.0.1:9876"
 
-[devices.front]
-resolution = "1920x1080"
-framerate = 30
-
-[devices.*.apriltags]
-enabled = true
+[camera.front]
+kind = "pi_cam"
+id = 0
+resolution = { width = 1920, height = 1080 }

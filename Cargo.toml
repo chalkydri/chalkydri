@@ -45,7 +45,7 @@ serde_json = "1"
 fastrand = "2.1.0"
 apriltag = { version = "0.4.0", optional = true }
 apriltag-image = { version = "0.1.0", optional = true }
-yuvutils-rs = { version = "0.5.14", optional = true, features = ["rayon"] }
+yuvutils-rs = { version = "0.8.0", optional = true, features = ["rayon"] }
 re_web_viewer_server = { version = "0.21.0", optional = true }
 re_ws_comms = { version = "0.21.0", optional = true }
 rapier3d = { version = "0.23.0", features = ["parallel", "simd-nightly"] }
