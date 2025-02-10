@@ -47,7 +47,7 @@ apriltag = { version = "0.4.0", optional = true }
 apriltag-image = { version = "0.1.0", optional = true }
 yuvutils-rs = { version = "0.8.0", optional = true, features = ["rayon"] }
 re_web_viewer_server = { version = "0.21.0", optional = true }
-re_ws_comms = { version = "0.21.0", optional = true }
+re_ws_comms = { version = "0.22.0", optional = true }
 rapier3d = { version = "0.23.0", features = ["parallel", "simd-nightly"] }
 #nokhwa = { version = "0.10.7", features = ["input-v4l", "decoding"] }
 #nokhwa = { git = "https://github.com/l1npengtul/nokhwa.git", branch = "senpai" }
