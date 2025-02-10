@@ -106,32 +106,32 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
             })
             .collect();
 
-        let mut weighted_avg_translation = Translation::new(0.0f64, 0.0, 0.0);
-        let mut weighted_avg_rotation = Quaternion::new(0.0f64, 0.0, 0.0, 0.0);
+        let mut avg_translation = Translation::new(0.0f64, 0.0, 0.0);
+        let mut avg_rotation = Quaternion::new(0.0f64, 0.0, 0.0, 0.0);
 
         for pose in poses.iter() {
-            weighted_avg_translation.x += pose.0.x * pose.2;
-            weighted_avg_translation.y += pose.0.y * pose.2;
-            weighted_avg_translation.z += pose.0.z * pose.2;
+            avg_translation.x += pose.0.x;
+            avg_translation.y += pose.0.y;
+            avg_translation.z += pose.0.z;
 
-            weighted_avg_rotation.w += pose.1.w * pose.2;
-            weighted_avg_rotation.i += pose.1.i * pose.2;
-            weighted_avg_rotation.j += pose.1.j * pose.2;
-            weighted_avg_rotation.k += pose.1.k * pose.2;
+            avg_rotation.w += pose.1.w;
+            avg_rotation.i += pose.1.i;
+            avg_rotation.j += pose.1.j;
+            avg_rotation.k += pose.1.k;
         }
 
-        weighted_avg_translation.x /= poses.len() as f64;
-        weighted_avg_translation.x /= poses.len() as f64;
-        weighted_avg_translation.x /= poses.len() as f64;
+        avg_translation.x /= poses.len() as f64;
+        avg_translation.x /= poses.len() as f64;
+        avg_translation.x /= poses.len() as f64;
 
-        weighted_avg_rotation.w /= poses.len() as f64;
-        weighted_avg_rotation.i /= poses.len() as f64;
-        weighted_avg_rotation.j /= poses.len() as f64;
-        weighted_avg_rotation.k /= poses.len() as f64;
+        avg_rotation.w /= poses.len() as f64;
+        avg_rotation.i /= poses.len() as f64;
+        avg_rotation.j /= poses.len() as f64;
+        avg_rotation.k /= poses.len() as f64;
 
         Ok((
-            weighted_avg_translation.vector.data.as_slice().to_vec(),
-            weighted_avg_rotation.vector().data.into_slice().to_vec(),
+            avg_translation.vector.data.as_slice().to_vec(),
+            avg_rotation.vector().data.into_slice().to_vec(),
         ))
     }
 }
