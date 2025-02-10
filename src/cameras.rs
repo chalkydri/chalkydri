@@ -112,7 +112,7 @@ impl<'cam> CamWrapper<'cam> {
         for req in reqs {
             self.cam.queue_request(req).unwrap();
         }
-        let properties::Model(_model) = self.cam.properties().get::<properties::Model>().unwrap();
+        //let properties::Model(_model) = self.cam.properties().get::<properties::Model>().unwrap();
     }
 
     /// Get a frame and request another
