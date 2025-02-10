@@ -11,6 +11,7 @@ apriltags = ["dep:chalkydri-apriltags"]
 ml = ["dep:tfledge"]
 python = ["dep:pyo3"]
 mjpeg = ["dep:mozjpeg"]
+rpi = ["libcamera/vendor_rpi"]
 #libcamera = ["dep:libcamera"]
 
 # AprilTags C library
