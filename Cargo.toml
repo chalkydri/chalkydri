@@ -13,6 +13,7 @@ python = ["dep:pyo3"]
 mjpeg = ["dep:mozjpeg"]
 rpi = ["libcamera/vendor_rpi"]
 #libcamera = ["dep:libcamera"]
+__bindgen = ["libcamera/__bindgen"]
 
 # AprilTags C library
 capriltags = ["dep:apriltag", "dep:apriltag-image"]
