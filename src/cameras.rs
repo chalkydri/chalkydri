@@ -89,14 +89,14 @@ impl<'cam> CamWrapper<'cam> {
                     // Autofocus
                     (*ctrl).set(AfMode::Auto)?;
                     (*ctrl).set(AfSpeed::Fast)?;
-                    (*ctrl).set(AfRange::Full)?;
+                    //(*ctrl).set(AfRange::Full)?;
                     // Autoexposure
-                    (*ctrl).set(AeEnable(true))?;
+                    //(*ctrl).set(AeEnable(true))?;
                     // TODO: make autoexposure constraint an option in the config UI
                     // Maybe some logic to automatically set it based on lighting conditions?
-                    (*ctrl).set(AeConstraintMode::ConstraintShadows)?;
-                    (*ctrl).set(AeMeteringMode::MeteringCentreWeighted)?;
-                    (*ctrl).set(FrameDuration(1000i64 / 60i64))?;
+                    //(*ctrl).set(AeConstraintMode::ConstraintShadows)?;
+                    //(*ctrl).set(AeMeteringMode::MeteringCentreWeighted)?;
+                    //(*ctrl).set(FrameDuration(1000i64 / 60i64))?;
                 }
                 // Add buffer to the request
                 req.add_buffer(&stream, buf)?;
