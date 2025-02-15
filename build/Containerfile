@@ -37,7 +37,9 @@ RUN apt update
 RUN apt install -y build-essential git bash make \
         cmake autoconf automake g++ binutils libtool \
         libabsl-dev libusb-1.0-0-dev xxd \
-        libcamera-dev libclang-dev
+				libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+				gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+				gstreamer1.0-libav libcamera-gstreamer libclang-dev
 
 # Set command line shell
 SHELL [ "/bin/bash", "-c" ]
