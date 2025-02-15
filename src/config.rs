@@ -4,6 +4,7 @@ use std::{collections::HashMap, fs::File, io::Read, path::Path};
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     pub team_number: u16,
+    pub ntables_ip: Option<String>,
     //pub version: String,
     pub rerun: Option<RerunConfig>,
     pub camera: HashMap<String, CameraConfig>,
@@ -18,7 +19,6 @@ impl Config {
         toml::from_str(&buf).map_err(|_| Error::InvalidConfig)
     }
 }
-
 
 #[derive(Deserialize, Serialize)]
 pub struct RerunConfig {

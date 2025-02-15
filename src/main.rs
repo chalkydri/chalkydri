@@ -50,7 +50,7 @@ use re_sdk::{MemoryLimit, RecordingStream};
 use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
-use std::{error::Error, path::Path, sync::Arc, time::Duration};
+use std::{error::Error, net::Ipv4Addr, path::Path, sync::Arc, time::Duration};
 #[cfg(feature = "capriltags")]
 use subsys::capriltags::CApriltagsDetector;
 use tokio::{
@@ -101,7 +101,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Chalkydri starting up...");
 
-    let roborio_ip = gen_team_ip(Cfg.read().await.team_number).expect("failed to generate team ip");
+    let roborio_ip = {
+        let Config {
+            ntables_ip,
+            team_number,
+            ..
+        } = &*Cfg.read().await;
+
+        ntables_ip
+            .clone()
+            .map(|s| {
+                s.parse::<Ipv4Addr>()
+                    .expect("failed to parse ip address")
+                    .octets()
+            })
+            .unwrap_or_else(|| gen_team_ip(*team_number).expect("failed to generate team ip"))
+    };
     // Generate a random device id
     let dev_id = fastrand::u32(..);
 
@@ -145,60 +160,59 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local = LocalSet::new();
     #[cfg(feature = "ntables")]
     let nt_ = nt.clone();
-    local
-        .spawn_local(async move {
-            #[cfg(feature = "ntables")]
-            let nt = nt_;
+    local.spawn_local(async move {
+        #[cfg(feature = "ntables")]
+        let nt = nt_;
 
-            // Initialize the apriltag C library subsystem
-            let mut at = CApriltagsDetector::init().await.unwrap();
+        // Initialize the apriltag C library subsystem
+        let mut at = CApriltagsDetector::init().await.unwrap();
 
-            // Publish NT topics
+        // Publish NT topics
 
-            #[cfg(feature = "ntables")]
-            let mut translation = nt
-                .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
-                .await
-                .unwrap();
-            #[cfg(feature = "ntables")]
-            let mut rotation = nt
-                .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
-                .await
-                .unwrap();
-            #[cfg(feature = "ntables")]
-            let mut timestamp = nt
-                .publish::<String>(&format!("/chalkydri/robot_pose/timestamp"))
-                .await
-                .unwrap();
+        #[cfg(feature = "ntables")]
+        let mut translation = nt
+            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
+            .await
+            .unwrap();
+        #[cfg(feature = "ntables")]
+        let mut rotation = nt
+            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
+            .await
+            .unwrap();
+        #[cfg(feature = "ntables")]
+        let mut timestamp = nt
+            .publish::<String>(&format!("/chalkydri/robot_pose/timestamp"))
+            .await
+            .unwrap();
 
-            loop {
-                // Wait for a new image from the camera
-                if rx.changed().await.is_ok() {
-                    // Get timestamp for the image
-                    let ts = chrono::Utc::now().to_rfc3339();
-                    // Borrow the buffer and let the channel know we've seen this value
-                    let buf = rx.borrow_and_update();
+        loop {
+            // Wait for a new image from the camera
+            if rx.changed().await.is_ok() {
+                // Get timestamp for the image
+                let ts = chrono::Utc::now().to_rfc3339();
+                // Borrow the buffer and let the channel know we've seen this value
+                let buf = rx.borrow_and_update();
 
-                    // Make a copy of the buffer and release the borrow of the original
-                    let buf_ = buf.clone();
-                    drop(buf);
+                // Make a copy of the buffer and release the borrow of the original
+                let buf_ = buf.clone();
+                drop(buf);
 
-                    // Send the buffer to AprilTag detector
-                    let pose = at.process(buf_).unwrap();
+                // Send the buffer to AprilTag detector
+                let pose = at.process(buf_).unwrap();
 
-                    // Unpack the pose into translation and rotation
-                    let (t, r) = pose;
+                // Unpack the pose into translation and rotation
+                let (t, r) = pose;
 
-                    // Update the translation, rotation, and timestamp on NetworkTables
-                    #[cfg(feature = "ntables")]
-                    {
-                        translation.set(t.clone()).await.unwrap();
-                        rotation.set(r.clone()).await.unwrap();
-                        timestamp.set(ts).await.unwrap();
-                    }
+                // Update the translation, rotation, and timestamp on NetworkTables
+                #[cfg(feature = "ntables")]
+                {
+                    translation.set(t.clone()).await.unwrap();
+                    rotation.set(r.clone()).await.unwrap();
+                    timestamp.set(ts).await.unwrap();
                 }
             }
-        });
+        }
+    });
     local.await;
 
     // Have to let NT topics get dropped before calling nt.stop()
