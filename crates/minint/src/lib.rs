@@ -167,7 +167,7 @@ impl NtConn {
                                 }
                             }
                             Ok(Message::Binary(bin)) => {
-                                Self::read_bin_frame(bin).unwrap();
+                                Self::read_bin_frame(bin.to_vec()).unwrap();
                             },
                             Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
                             Err(err) => error!("error reading incoming message: {err:?}"),
@@ -259,7 +259,7 @@ impl NtConn {
             }),
         }])?;
 
-        self.c2s.send(Message::Text(buf)).unwrap();
+        self.c2s.send(Message::Text(buf.into())).unwrap();
 
         debug!(
             "{name} ({data_type}): publishing with pubuid {pubuid}",
@@ -282,7 +282,7 @@ impl NtConn {
     /// This method is typically called when an `NtTopic` is dropped.
     fn unpublish(&self, pubuid: i32) -> Result<(), Box<dyn Error>> {
         let buf = serde_json::to_string(&[ClientMsg::Unpublish { pubuid }])?;
-        self.c2s.send(Message::Text(buf))?;
+        self.c2s.send(Message::Text(buf.into()))?;
 
         Ok(())
     }
@@ -317,7 +317,7 @@ impl NtConn {
             subuid,
             options: BTreeMap::new(),
         }])?;
-        self.c2s.send(Message::Text(buf))?;
+        self.c2s.send(Message::Text(buf.into()))?;
 
         Ok(NtSubscription {
             conn: &*self,
@@ -330,7 +330,7 @@ impl NtConn {
     /// This method is typically called when an `NtSubscription` is dropped.
     fn unsubscribe(&self, subuid: i32) -> Result<(), Box<dyn Error>> {
         let buf = serde_json::to_string(&[ClientMsg::Unsubscribe { subuid }])?;
-        self.c2s.send(Message::Text(buf))?;
+        self.c2s.send(Message::Text(buf.into()))?;
 
         Ok(())
     }
@@ -373,7 +373,7 @@ impl NtConn {
         rmp::encode::write_u8(&mut buf, T::MSGPCK)?;
         T::encode(&mut buf, value).map_err(|_| std::io::Error::other("i don't fucking know"))?;
 
-        self.c2s.send(Message::Binary(buf))?;
+        self.c2s.send(Message::Binary(buf.into()))?;
 
         Ok(())
     }

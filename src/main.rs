@@ -11,9 +11,8 @@
 extern crate log;
 //extern crate actix_web;
 extern crate env_logger;
+#[cfg(feature = "ntables")]
 extern crate minint;
-#[cfg(feature = "mjpeg")]
-extern crate mozjpeg;
 extern crate tokio;
 //extern crate utoipa as utopia;
 #[macro_use]
@@ -42,6 +41,7 @@ use cameras::load_cameras;
 use config::Config;
 use logger::Logger;
 use mimalloc::MiMalloc;
+#[cfg(feature = "ntables")]
 use minint::NtConn;
 use once_cell::sync::Lazy;
 #[cfg(feature = "rerun")]
@@ -107,10 +107,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Attempt to connect to the NT server, retrying until successful
 
+    #[cfg(feature = "ntables")]
     let nt: NtConn;
 
+    #[cfg(feature = "ntables")]
     let mut retry = false;
 
+    #[cfg(feature = "ntables")]
     loop {
         match NtConn::new(roborio_ip, format!("chalkydri{dev_id}")).await {
             Ok(conn) => {
@@ -140,23 +143,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // apriltag C library subsystem
     let local = LocalSet::new();
+    #[cfg(feature = "ntables")]
     let nt_ = nt.clone();
     local
         .spawn_local(async move {
+            #[cfg(feature = "ntables")]
             let nt = nt_;
 
             // Initialize the apriltag C library subsystem
             let mut at = CApriltagsDetector::init().await.unwrap();
 
             // Publish NT topics
+
+            #[cfg(feature = "ntables")]
             let mut translation = nt
                 .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
                 .await
                 .unwrap();
+            #[cfg(feature = "ntables")]
             let mut rotation = nt
                 .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
                 .await
                 .unwrap();
+            #[cfg(feature = "ntables")]
             let mut timestamp = nt
                 .publish::<String>(&format!("/chalkydri/robot_pose/timestamp"))
                 .await
@@ -181,14 +190,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let (t, r) = pose;
 
                     // Update the translation, rotation, and timestamp on NetworkTables
-                    translation.set(t.clone()).await.unwrap();
-                    rotation.set(r.clone()).await.unwrap();
-                    timestamp.set(ts).await.unwrap();
+                    #[cfg(feature = "ntables")]
+                    {
+                        translation.set(t.clone()).await.unwrap();
+                        rotation.set(r.clone()).await.unwrap();
+                        timestamp.set(ts).await.unwrap();
+                    }
                 }
             }
-        })
-        .await
-        .unwrap();
+        });
+    local.await;
 
     // Have to let NT topics get dropped before calling nt.stop()
     {
@@ -196,6 +207,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Shut down NT connection
+    #[cfg(feature = "ntables")]
     nt.stop();
 
     Ok(())

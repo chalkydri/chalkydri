@@ -61,8 +61,10 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
         let img_rgb = DynamicImage::ImageRgb8(RgbImage::from_vec(1280, 720, buf.to_vec()).unwrap());
         let img_gray = img_rgb.grayscale();
         let buf = img_gray.as_luma8().unwrap();
+        img_gray.save("out.png").unwrap();
         let img = Image::from_image_buffer(buf);
         let dets = self.det.detect(&img);
+        dbg!(&dets);
 
         let poses: Vec<_> = dets
             .iter()

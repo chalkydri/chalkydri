@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "net", "time", "macros"] }
 serde_json = "1"
-tokio-tungstenite = "0.24.0"
+tokio-tungstenite = { git = "https://github.com/chalkydri/tokio-tungstenite.git", branch = "master" }
 serde = { version = "1", features = ["derive"] }
 log = "0.4.21"
 fastrand = "2.1.0"
