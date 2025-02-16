@@ -5,3 +5,18 @@ book/book/
 
 networktables.json
 tools/.python-version
+
+ui/node_modules
+
+# Output
+ui/.output
+ui/.svelte-kit
+ui/build
+
+# OS
+ui/.DS_Store
+ui/Thumbs.db
+
+# Vite
+ui/vite.config.js.timestamp-*
+ui/vite.config.ts.timestamp-*
