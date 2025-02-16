@@ -1,10 +1,2 @@
 team_number = 4533
-
-[rerun]
-# If not specified, Chalkydri will host a local web viewer on port 8080
-server_address = "127.0.0.1:9876"
-
-[camera.front]
-kind = "pi_cam"
-id = 0
-resolution = { width = 1920, height = 1080 }
+ntables_ip = '192.168.0.211'

@@ -9,12 +9,14 @@
 
 #[macro_use]
 extern crate log;
-//extern crate actix_web;
+#[cfg(feature = "web")]
+extern crate actix_web;
 extern crate env_logger;
 #[cfg(feature = "ntables")]
 extern crate minint;
 extern crate tokio;
-//extern crate utoipa as utopia;
+#[cfg(feature = "web")]
+extern crate utoipa as utopia;
 #[macro_use]
 extern crate serde;
 #[cfg(feature = "capriltags")]
@@ -26,7 +28,8 @@ extern crate pyo3;
 #[cfg(feature = "ml")]
 extern crate tfledge;
 
-//mod api;
+#[cfg(feature = "web")]
+mod api;
 mod calibration;
 mod cameras;
 mod config;
@@ -36,7 +39,8 @@ mod subsys;
 mod subsystem;
 mod utils;
 
-//use api::run_api;
+#[cfg(feature = "web")]
+use api::run_api;
 use cameras::load_cameras;
 use config::Config;
 use logger::Logger;
@@ -210,14 +214,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     rotation.set(r.clone()).await.unwrap();
                     timestamp.set(ts).await.unwrap();
                 }
+
+                debug!("set vals");
             }
         }
     });
     local.await;
 
     // Have to let NT topics get dropped before calling nt.stop()
+    #[cfg(feature = "web")]
     {
-        //run_api(nt.clone()).await;
+        run_api(nt.clone()).await;
     }
 
     // Shut down NT connection

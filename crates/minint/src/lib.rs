@@ -266,9 +266,10 @@ impl NtConn {
             data_type = T::STRING.to_string()
         );
 
-        while !(*self.pubuid_topics.read().await).contains_key(&pubuid) {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+        //while !(*self.pubuid_topics.read().await).contains_key(&pubuid) {
+        //    trace!("waiting for topic to be published");
+        //    tokio::time::sleep(Duration::from_millis(100)).await;
+        //}
 
         Ok(NtTopic {
             conn: &*self,
