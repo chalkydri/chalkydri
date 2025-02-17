@@ -1,26 +1,19 @@
 <script lang="ts">
 	import { Button, Card, P, Select, Toggle } from "flowbite-svelte";
-	import { type Config } from "$lib/config";
+	import { _loadConfig } from "./+page";
+	import { onMount } from "svelte";
+	import type { Config } from "$lib/config";
 
-	let saving = $state(false);
-	let config = $state({
-		subsystems: {
-			capriltags: {
-				enabled: true,
-				tag_family: 'tag36h11',
-			},
-			apriltags: {
-				enabled: true,
-			},
-			machine_learning: {
-				enabled: true,
-			},
-		},
-	} as Config);
+let saving = $state(false);
 
-	function save() {
-		saving = true;
-	}
+function save() {
+	saving = true;
+}
+
+	let config = $state({} as Config);
+	onMount(async () => {
+		config = await _loadConfig();
+	});
 </script>
 
 <Card padding="sm">

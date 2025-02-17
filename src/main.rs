@@ -219,12 +219,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     });
+
+    #[cfg(not(feature = "web"))]
     local.await;
 
     // Have to let NT topics get dropped before calling nt.stop()
     #[cfg(feature = "web")]
     {
-        run_api(nt.clone()).await;
+        tokio::join!(local, run_api(nt.clone()),);
     }
 
     // Shut down NT connection

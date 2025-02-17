@@ -3,10 +3,11 @@
 //!
 
 use actix_web::{
-    web::{self, Data},
-    App, HttpServer, Responder,
     get, post,
+    web::{self, Data},
+    App, HttpResponse, HttpServer, Responder,
 };
+use mime_guess::from_path;
 use minint::NtConn;
 use utopia::{OpenApi, ToSchema};
 
@@ -15,18 +16,46 @@ use crate::{config::Config, Cfg};
 #[derive(OpenApi)]
 #[openapi(
     info(title = "Chalkydri Manager API"),
-    paths(info, configuration, configure),
+    paths(info, configuration, configure)
 )]
 #[allow(dead_code)]
 struct ApiDoc;
 
-pub async fn run_api<'nt>(nt: NtConn) {
+#[derive(rust_embed::Embed)]
+#[folder = "ui/build/"]
+struct Assets;
+
+fn handle_embedded_file(path: &str) -> HttpResponse {
+    match Assets::get(path) {
+        Some(content) => HttpResponse::Ok()
+            .content_type(from_path(path).first_or_octet_stream().as_ref())
+            .body(content.data.into_owned()),
+        None => HttpResponse::NotFound().body("404 Not Found"),
+    }
+}
+
+#[get("/")]
+async fn index() -> impl Responder {
+    handle_embedded_file("index.html")
+}
+
+#[get("/{_:.*}")]
+async fn dist(path: web::Path<String>) -> impl Responder {
+    handle_embedded_file(path.as_str())
+}
+
+pub async fn run_api<'nt>(#[cfg(feature = "ntables")] nt: NtConn) {
     HttpServer::new(move || {
-        App::new()
-            .app_data(Data::new(nt.clone()))
+        let mut app = App::new();
+        #[cfg(feature = "ntables")]
+        {
+            app = app.app_data(Data::new(nt.clone()));
+        }
+        app.service(index)
             .service(info)
             .service(configuration)
             .service(configure)
+            .service(dist)
     })
     .bind(("0.0.0.0", 6942))
     .unwrap()
