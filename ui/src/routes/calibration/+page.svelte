@@ -1,7 +1,14 @@
 <script lang="ts">
 	import { Button, Card, Hr, P } from "flowbite-svelte";
+	import { _loadConfig } from "../settings/+page";
 
 	let calibrating = $state(false);
+	function calibrate() {
+		calibrating = !calibrating;
+		if (calibrating) {
+			console.log(_loadConfig());
+		}
+	}
 </script>
 
 <Card title="Hello">
@@ -16,5 +23,5 @@
 		<P size="lg" class="text-center mb-2">1280x720</P>
 	{/if}
 
-	<Button color={calibrating ? "red" : "blue"} on:click={() => calibrating = !calibrating}>{#if calibrating}Stop calibration{:else}Start calibration{/if}</Button>
+	<Button color={calibrating ? "red" : "blue"} on:click={calibrate}>{#if calibrating}Stop calibration{:else}Start calibration{/if}</Button>
 </Card>

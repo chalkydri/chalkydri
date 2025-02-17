@@ -7,7 +7,9 @@
 let saving = $state(false);
 
 function save() {
+
 	saving = true;
+	_saveConfig();
 }
 
 	let config = $state({} as Config);
@@ -16,6 +18,7 @@ function save() {
 	});
 </script>
 
+{#if config.subsystems}
 <Card padding="sm">
 	<P size="lg">Subsystems</P>
 	<Card padding="xs">
@@ -33,6 +36,7 @@ function save() {
 		<Toggle color="blue" disabled={saving} bind:checked={config.subsystems.machine_learning.enabled}>Machine Learning</Toggle>
 	</Card>
 </Card>
+{/if}
 
 <Card>
 	<P>{JSON.stringify(config)}</P>

@@ -21,8 +21,8 @@ pub fn load_cameras(frame_tx: watch::Sender<Arc<Vec<u8>>>) -> Result<(), Box<dyn
     // Parse pipeline description to create pipeline
     let pipeline = gst::parse::launch(
         "libcamerasrc ! \
-            video/x-raw,width=1280,height=720,framerate=60/1 ! \
-            videoconvert ! \
+            capsfilter caps=video/x-raw,width=1280,height=720 ! \
+            videoconvertscale ! \
             appsink",
     )
     .unwrap()
