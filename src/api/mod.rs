@@ -2,16 +2,20 @@
 //! JSON API used by the web UI and possibly third-party applications
 //!
 
+use std::{path::Path, sync::Arc};
+
 use actix_web::{
-    get, post,
-    web::{self, Data},
-    App, HttpResponse, HttpServer, Responder,
+    get, http::StatusCode, post, web::{self, Data, Redirect}, App, HttpResponse, HttpServer, Responder
 };
 use mime_guess::from_path;
+#[cfg(feature = "ntables")]
 use minint::NtConn;
+use tokio::sync::watch;
 use utopia::{OpenApi, ToSchema};
 
-use crate::{config::Config, Cfg};
+use crate::{
+    calibration::Calibrator, cameras::CameraManager, config::{CameraSettings, Config}, Cfg
+};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -41,17 +45,21 @@ async fn index() -> impl Responder {
 
 #[get("/{_:.*}")]
 async fn dist(path: web::Path<String>) -> impl Responder {
-    handle_embedded_file(path.as_str())
+    if Assets::get(path.as_str()).is_some() {
+        handle_embedded_file(path.as_str()).map_into_boxed_body()
+    } else {
+        HttpResponse::TemporaryRedirect()
+            .insert_header(("Location", "/"))
+            .body(())
+            .map_into_boxed_body()
+    }
 }
 
-pub async fn run_api<'nt>(#[cfg(feature = "ntables")] nt: NtConn) {
+pub async fn run_api(cam_man: CameraManager, rx: watch::Receiver<Arc<Vec<u8>>>) {
     HttpServer::new(move || {
-        let mut app = App::new();
-        #[cfg(feature = "ntables")]
-        {
-            app = app.app_data(Data::new(nt.clone()));
-        }
-        app.service(index)
+        App::new()
+            .app_data(Data::new((cam_man.clone(), rx.clone())))
+            .service(index)
             .service(info)
             .service(configuration)
             .service(configure)
@@ -93,7 +101,9 @@ pub(super) async fn info() -> impl Responder {
 )]
 #[get("/api/configuration")]
 pub(super) async fn configuration() -> impl Responder {
-    web::Json(Cfg.read().await.clone())
+    let mut cfgg = Cfg.read().await.clone();
+    cfgg.cameras = CameraManager::new().devices();
+    web::Json(cfgg)
 }
 
 /// Set configuration
@@ -102,8 +112,20 @@ pub(super) async fn configuration() -> impl Responder {
         (status = 200, body = Config),
     ),
 )]
-#[post("/api/configure")]
+#[post("/api/configuration")]
 pub(super) async fn configure(web::Json(cfgg): web::Json<Config>) -> impl Responder {
-    *Cfg.write().await = cfgg;
+    {
+        *Cfg.write().await = cfgg;
+    }
+
     web::Json(Cfg.read().await.clone())
+}
+
+#[get("/api/calibrate")]
+pub(super) async fn calibrate(data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>) -> impl Responder {
+    let (cam_man, rx) = data.get_ref();
+    let mut calib = Calibrator::new();
+    calib.collect_data(rx.clone());
+    calib.calibrate();
+    HttpResponse::new(StatusCode::OK)
 }

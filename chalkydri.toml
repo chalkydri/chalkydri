@@ -1,2 +1,4 @@
 team_number = 4533
 ntables_ip = '192.168.0.211'
+
+cameras = []

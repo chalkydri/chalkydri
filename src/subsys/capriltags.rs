@@ -30,7 +30,7 @@ use re_types::{
 use crate::calibration::CalibratedModel;
 use crate::Subsystem;
 
-const TAG_SIZE: f64 = 165.1;
+const TAG_SIZE: f64 = 0.1651;
 
 pub struct CApriltagsDetector {
     det: apriltag::Detector,
@@ -64,7 +64,6 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
         img_gray.save("out.png").unwrap();
         let img = Image::from_image_buffer(buf);
         let dets = self.det.detect(&img);
-        dbg!(&dets);
 
         let poses: Vec<_> = dets
             .iter()

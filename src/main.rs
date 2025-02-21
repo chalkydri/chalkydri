@@ -41,7 +41,7 @@ mod utils;
 
 #[cfg(feature = "web")]
 use api::run_api;
-use cameras::load_cameras;
+use cameras::{CameraManager};
 use config::Config;
 use logger::Logger;
 use mimalloc::MiMalloc;
@@ -103,7 +103,23 @@ static Rerun: Lazy<RecordingStream> = Lazy::new(|| {
 async fn main() -> Result<(), Box<dyn Error>> {
     Logger::new().with_path_prefix("logs/handler").init()?;
 
+    gstreamer_base::gst::init().unwrap();
+
     info!("Chalkydri starting up...");
+
+    let cam_man = CameraManager::new();
+
+    // Create a channel for sharing frames from the camera thread with the subsystems
+    let (tx, mut rx) = watch::channel::<Arc<Vec<u8>>>(Arc::new(Vec::new()));
+
+    // Spawn a thread to handle cameras
+    let cam_man_ = cam_man.clone();
+    std::thread::spawn(move || {
+        let tx = tx.clone();
+        cam_man_.load_camera(tx).unwrap();
+    });
+
+    let api = run_api(cam_man, rx.clone());
 
     let roborio_ip = {
         let Config {
@@ -150,15 +166,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     info!("Connected to NT server at {roborio_ip:?} successfully!");
-
-    // Create a channel for sharing frames from the camera thread with the subsystems
-    let (tx, mut rx) = watch::channel::<Arc<Vec<u8>>>(Arc::new(Vec::new()));
-
-    // Spawn a thread to handle cameras
-    std::thread::spawn(move || {
-        let tx = tx.clone();
-        load_cameras(tx).unwrap();
-    });
 
     // apriltag C library subsystem
     let local = LocalSet::new();
@@ -226,7 +233,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Have to let NT topics get dropped before calling nt.stop()
     #[cfg(feature = "web")]
     {
-        tokio::join!(local, run_api(nt.clone()),);
+        tokio::join!(
+            local,
+            api,
+        );
     }
 
     // Shut down NT connection

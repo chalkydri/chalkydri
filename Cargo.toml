@@ -6,7 +6,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["capriltags", "ntables"]
+default = ["capriltags", "web"]
 apriltags = ["dep:chalkydri-apriltags"]
 ml = ["dep:tfledge"]
 python = ["dep:pyo3"]
@@ -54,6 +54,7 @@ gstreamer-base = { version = "0.23.4", features = ["v1_22"] }
 gstreamer-app = { version = "0.23.4", features = ["v1_22"] }
 rust-embed = { version = "8.5.0", features = ["actix"] }
 mime_guess = "2.0.5"
+image = "0.25.5"
 
 [build-dependencies]
 bindgen = { version = "*", default-features = false, features = ["runtime"] }

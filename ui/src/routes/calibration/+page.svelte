@@ -6,7 +6,7 @@
 	function calibrate() {
 		calibrating = !calibrating;
 		if (calibrating) {
-			console.log(_loadConfig());
+			let 
 		}
 	}
 </script>

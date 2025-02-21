@@ -1,5 +1,5 @@
 use crate::error::Error;
-use std::{collections::HashMap, fs::File, io::Read, path::Path};
+use std::{fs::File, io::Read, path::Path};
 
 #[derive(Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "web", derive(utopia::ToSchema))]
@@ -8,6 +8,7 @@ pub struct Config {
     pub ntables_ip: Option<String>,
     //pub version: String,
     pub rerun: Option<RerunConfig>,
+    pub cameras: Vec<CameraConfig>,
     //pub camera: HashMap<String, CameraConfig>,
     //pub tpu: Option<TpuConfig>,
     //pub backends: HashMap<Backend, BackendConfig>,
@@ -31,16 +32,25 @@ pub struct RerunConfig {
 #[derive(Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 pub struct CameraConfig {
-    pub kind: CameraKind,
-    pub id: Option<usize>,
-    pub resolution: Option<CameraResolution>,
+    pub name: String,
+    pub settings: Option<CameraSettings>,
+    pub caps: Vec<CameraSettings>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "web", derive(utopia::ToSchema))]
-pub struct CameraResolution {
+pub struct CameraSettings {
     pub width: u32,
     pub height: u32,
+    pub frame_rate: CfgFraction,
+    pub gamma: Option<f32>,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
+pub struct CfgFraction {
+    pub num: u32,
+    pub den: u32,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
