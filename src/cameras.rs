@@ -80,7 +80,7 @@ impl CameraManager {
         let pipeline = gst::parse::launch(&format!(
             "libcamerasrc ! \
             gamma gamma={} ! \
-            capsfilter name=caps_filter caps=video/x-raw,width={},height={},framerate={}/{} ! \
+            capsfilter name=caps_filter caps=video/x-raw,width={},height={},framerate={}/{},format=RGB ! \
             videoconvertscale ! \
             appsink",
             cam_settings.gamma.unwrap_or(1.0),
