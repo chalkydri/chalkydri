@@ -44,7 +44,7 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
     async fn init() -> Result<Self, Self::Error> {
         let model = CalibratedModel::new();
 
-        let mut path = Path::new("/boot/layout.json");
+        let mut path = Path::new("/etc/layout.json");
         if !path.exists() {
             path = Path::new("./layout.json");
         }

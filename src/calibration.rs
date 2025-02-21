@@ -24,7 +24,7 @@ pub struct CalibratedModel {
 }
 impl CalibratedModel {
     pub fn new() -> Self {
-        let mut path = Path::new("/boot/cam0.json");
+        let mut path = Path::new("/etc/cam0.json");
         if !path.exists() {
             path = Path::new("./cam0.json");
         }
