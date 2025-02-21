@@ -5,13 +5,13 @@
 	import type { CameraConfig, Config } from "$lib/config";
 	import Slide from "flowbite-svelte/Slide.svelte";
 
-let saving = $state(false);
-
-function save() {
-	saving = true;
-	_saveConfig(config);
-	saving = false;
-}
+	let saving = $state(false);
+	
+	function save() {
+		saving = true;
+		_saveConfig(config);
+		saving = false;
+	}
 
 	let config = $state({} as Config);
 	let cameras = $state({} as { name: string, value: CameraConfig }[]);
