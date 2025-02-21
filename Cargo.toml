@@ -6,7 +6,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["capriltags", "web"]
+default = ["capriltags", "ntables", "web"]
 apriltags = ["dep:chalkydri-apriltags"]
 ml = ["dep:tfledge"]
 python = ["dep:pyo3"]
