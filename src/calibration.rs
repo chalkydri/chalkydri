@@ -43,6 +43,7 @@ impl CalibratedModel {
 
 const MIN_CORNERS: usize = 24;
 
+/// A camera calibrator
 pub struct Calibrator {
     det: TagDetector,
     board: Board,
@@ -50,6 +51,7 @@ pub struct Calibrator {
     cam_model: GenericModel<f64>,
 }
 impl Calibrator {
+    /// Initialize a new calibrator
     pub fn new() -> Self {
         Self {
             det: TagDetector::new(&TagFamily::T36H11, None),
@@ -58,9 +60,13 @@ impl Calibrator {
             cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
         }
     }
-    pub fn step(&self, img: DynamicImage, time_ns: i64) -> Option<FrameFeature> {
+
+    /// Process a frame
+    fn step(&self, img: DynamicImage, time_ns: i64) -> Option<FrameFeature> {
         camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(&self.det, &img, &create_default_6x6_board(), MIN_CORNERS, time_ns)
     }
+
+    /// Collect data on some frames
     pub fn collect_data(&mut self, mut rx: watch::Receiver<Arc<Vec<u8>>>) {
         let st = Instant::now();
         while self.frame_feats.len() < 200 {
@@ -71,6 +77,8 @@ impl Calibrator {
             }
         }
     }
+
+    /// Calibrate
     pub fn calibrate(&mut self) {
         let mut calib_res = None;
     

@@ -3,10 +3,10 @@
 	import { _loadConfig } from "../settings/+page";
 
 	let calibrating = $state(false);
-	function calibrate() {
+	async function calibrate() {
 		calibrating = !calibrating;
 		if (calibrating) {
-			let 
+			let res = await fetch('/api/calibrate');
 		}
 	}
 </script>
