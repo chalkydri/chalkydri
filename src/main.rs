@@ -41,7 +41,7 @@ mod utils;
 
 #[cfg(feature = "web")]
 use api::run_api;
-use cameras::{CameraManager};
+use cameras::CameraManager;
 use config::Config;
 use logger::Logger;
 use mimalloc::MiMalloc;
@@ -113,13 +113,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (tx, mut rx) = watch::channel::<Arc<Vec<u8>>>(Arc::new(Vec::new()));
 
     // Spawn a thread to handle cameras
-    let cam_man_ = cam_man.clone();
+    let mut cam_man_ = cam_man.clone();
     std::thread::spawn(move || {
-        let tx = tx.clone();
-        cam_man_.load_camera(tx).unwrap();
+        cam_man_.load_camera(1280, 720, tx).unwrap();
     });
 
-    let api = run_api(cam_man, rx.clone());
+    let api = tokio::spawn(run_api(cam_man, rx.clone()));
 
     let roborio_ip = {
         let Config {
@@ -214,6 +213,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 // Unpack the pose into translation and rotation
                 let (t, r) = pose;
 
+                debug!("{t:?} / {r:?}");
+
                 // Update the translation, rotation, and timestamp on NetworkTables
                 #[cfg(feature = "ntables")]
                 {
@@ -233,9 +234,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Have to let NT topics get dropped before calling nt.stop()
     #[cfg(feature = "web")]
     {
-        tokio::join!(
-            local,
-            api,
+        tokio::select!(
+            _ = local => {},
+            _ = api => {},
+            _ = tokio::signal::ctrl_c() => {},
         );
     }
 

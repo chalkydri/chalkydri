@@ -6,7 +6,9 @@
 	async function calibrate() {
 		calibrating = !calibrating;
 		if (calibrating) {
-			let res = await fetch('/api/calibrate');
+			let res = await fetch('/api/calibrate?width=1280&height=720');
+			let blob = await res.blob();
+			calibrating = false;
 		}
 	}
 </script>

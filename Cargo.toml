@@ -26,7 +26,7 @@ tfledge = { version = "*", path = "crates/chalkydri-tfledge", optional = true }
 pyo3 = { version = "0.23.3", optional = true, features = [
   "generate-import-lib",
 ] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "signal"] }
 chalkydri-apriltags = { version = "*", optional = true, path = "crates/chalkydri-apriltags" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8.12"

@@ -2,19 +2,23 @@
 //! JSON API used by the web UI and possibly third-party applications
 //!
 
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 use actix_web::{
-    get, http::StatusCode, post, web::{self, Data, Redirect}, App, HttpResponse, HttpServer, Responder
+    get,
+    http::StatusCode,
+    post,
+    web::{self, Data},
+    App, HttpResponse, HttpServer, Responder,
 };
 use mime_guess::from_path;
-#[cfg(feature = "ntables")]
-use minint::NtConn;
 use tokio::sync::watch;
 use utopia::{OpenApi, ToSchema};
 
 use crate::{
-    calibration::Calibrator, cameras::CameraManager, config::{CameraSettings, Config}, Cfg
+    cameras::CameraManager,
+    config::Config,
+    Cfg,
 };
 
 #[derive(OpenApi)]
@@ -64,6 +68,7 @@ pub async fn run_api(cam_man: CameraManager, rx: watch::Receiver<Arc<Vec<u8>>>) 
             .service(configuration)
             .service(configure)
             .service(calibrate)
+            .service(calibration_step)
             .service(dist)
     })
     .bind(("0.0.0.0", 6942))
@@ -114,7 +119,10 @@ pub(super) async fn configuration() -> impl Responder {
     ),
 )]
 #[post("/api/configuration")]
-pub(super) async fn configure(web::Json(cfgg): web::Json<Config>) -> impl Responder {
+pub(super) async fn configure(data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>, web::Json(cfgg): web::Json<Config>) -> impl Responder {
+    let (cam_man, rx) = data.get_ref();
+    cam_man.start();
+
     {
         *Cfg.write().await = cfgg;
     }
@@ -123,10 +131,24 @@ pub(super) async fn configure(web::Json(cfgg): web::Json<Config>) -> impl Respon
 }
 
 #[get("/api/calibrate")]
-pub(super) async fn calibrate(data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>) -> impl Responder {
+pub(super) async fn calibrate(
+    data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>,
+) -> impl Responder {
     let (cam_man, rx) = data.get_ref();
-    let mut calib = Calibrator::new();
-    calib.collect_data(rx.clone());
-    calib.calibrate();
+    cam_man.calibrator().await.calibrate();
+
+    HttpResponse::new(StatusCode::OK)
+}
+    
+
+#[get("/api/calibrate/{width}/{height}")]
+pub(super) async fn calibration_step(
+    path: web::Path<(u32, u32)>,
+    data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>,
+) -> impl Responder {
+    let (width, height) = *path;
+    let (cam_man, rx) = data.get_ref();
+    cam_man.calibrator().await.collect_data(rx.clone());
+
     HttpResponse::new(StatusCode::OK)
 }

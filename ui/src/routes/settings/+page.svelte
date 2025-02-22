@@ -40,7 +40,9 @@
 		<Select items={getSettings(camera)} />
 
 		<Label class="mt-4 mb-2" for="gamma">Gamma</Label>
+		<!--
 		<Range id="gamma" title="Gamma" color="blue" />
+		-->
 	{/if}
 </Card>
 

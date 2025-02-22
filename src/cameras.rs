@@ -1,7 +1,7 @@
 use gst::prelude::*;
 use gstreamer_app::{
-    glib::{self, Class},
-    gst::{Device, DeviceMonitor, FlowSuccess, Fraction, State},
+    glib::MainLoop,
+    gst::{DeviceMonitor, FlowSuccess, Fraction, State},
     AppSink, AppSinkCallbacks,
 };
 use gstreamer_base::gst::{self, Caps, Pipeline};
@@ -9,19 +9,20 @@ use gstreamer_base::gst::{self, Caps, Pipeline};
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
 use std::{error::Error, sync::Arc};
-use tokio::sync::watch;
+use tokio::sync::{watch, Mutex, MutexGuard};
 
 #[cfg(feature = "rerun")]
 use crate::Rerun;
 use crate::{
-    config::{self, CameraConfig, CameraSettings, CfgFraction},
-    Cfg,
+    calibration::Calibrator, config::{self, CameraConfig, CameraSettings, CfgFraction}, Cfg
 };
 
 #[derive(Clone)]
 pub struct CameraManager {
     dev_mon: DeviceMonitor,
     pipeline: Pipeline,
+    main_loop: MainLoop,
+    calibrator: Arc<Mutex<Calibrator>>,
 }
 impl CameraManager {
     pub fn new() -> Self {
@@ -33,7 +34,11 @@ impl CameraManager {
 
         let pipeline = Pipeline::new();
 
-        Self { dev_mon, pipeline }
+        let main_loop = MainLoop::new(None, false);
+
+        let calibrator = Arc::new(Mutex::new(Calibrator::new()));
+
+        Self { dev_mon, pipeline, main_loop, calibrator }
     }
     pub fn devices(&self) -> Vec<config::CameraConfig> {
         self.dev_mon
@@ -65,25 +70,33 @@ impl CameraManager {
     }
     // gamma gamma=2.0 ! fpsdisplaysink ! videorate drop-only=true ! omxh264enc ! mpegtsenc !
     // rtspserversink port=1234
-    pub fn load_camera(&self, frame_tx: watch::Sender<Arc<Vec<u8>>>) -> Result<(), Box<dyn Error>> {
-        let cam_settings = Cfg.blocking_read().clone();
-        let config = CameraConfig { name: String::new(), settings: Some(CameraSettings {
-            width: 1280,
-            height: 720,
-            gamma: None,
-            frame_rate: CfgFraction { num: 50, den: 1 },
-        }), caps: Vec::new() };
+    pub fn load_camera(&mut self, width: u32, height: u32, frame_tx: watch::Sender<Arc<Vec<u8>>>) -> Result<(), Box<dyn Error>> {
+        let cam_settings = {
+            let cfgg = Cfg.blocking_read();
+            let ret = (*cfgg).clone();
+            drop(cfgg);
+            ret
+        };
+        let config = CameraConfig {
+            name: String::new(),
+            settings: Some(CameraSettings {
+                width,
+                height,
+                gamma: None,
+                frame_rate: CfgFraction { num: 50, den: 1 },
+            }),
+            caps: Vec::new(),
+        };
         let cam_settings = cam_settings.cameras.first().unwrap_or(&config);
         let cam_settings = cam_settings.settings.clone().unwrap();
 
         // Parse pipeline description to create pipeline
-        let pipeline = gst::parse::launch(&format!(
+        self.pipeline = gst::parse::launch(&format!(
             "libcamerasrc ! \
-            gamma gamma={} ! \
-            capsfilter name=caps_filter caps=video/x-raw,width={},height={},framerate={}/{} ! \
+            capsfilter name=caps_filter caps=video/x-raw,width={},height={},framerate={}/{},format=RGB ! \
             videoconvertscale ! \
             appsink",
-            cam_settings.gamma.unwrap_or(1.0),
+            //cam_settings.gamma.unwrap_or(1.0),
             cam_settings.width,
             cam_settings.height,
             cam_settings.frame_rate.num,
@@ -94,7 +107,7 @@ impl CameraManager {
         .unwrap();
 
         // Get the sink
-        let appsink = pipeline
+        let appsink = self.pipeline
             .iterate_sinks()
             .next()
             .unwrap()
@@ -121,13 +134,10 @@ impl CameraManager {
                 .build(),
         );
 
-        // Create the event loop
-        let main_loop = glib::MainLoop::new(None, false);
-        let main_loop_ = main_loop.clone();
-        let bus = pipeline.bus().unwrap();
+        let main_loop = self.main_loop.clone();
 
         // Define the event loop or something?
-        bus.connect_message(Some("error"), move |_, msg| match msg.view() {
+        self.pipeline.bus().unwrap().connect_message(Some("error"), move |_, msg| match msg.view() {
             gst::MessageView::Error(err) => {
                 error!(
                     "error received from element {:?}: {}",
@@ -137,29 +147,35 @@ impl CameraManager {
                 debug!("{:?}", err.debug());
 
                 // Kill event loop
-                main_loop_.quit();
+                main_loop.quit();
             }
             _ => unimplemented!(),
         });
-        // idk
-        bus.add_signal_watch();
+
+        self.start();
+
+        self.main_loop.run();
+
+        Ok(())
+    }
+    pub fn start(&self) {
+        self.pipeline.bus().unwrap().add_signal_watch();
 
         // Start the pipeline
-        pipeline
+        self.pipeline
             .set_state(State::Playing)
             .expect("Unable to set the pipeline to the `Playing` state.");
-
-        // Execute the event loop
-        main_loop.run();
-
-        // I think this junk runs if it encounters an error
-
-        pipeline
+    }
+    pub fn stop(&self) {
+        self.pipeline
             .set_state(gst::State::Null)
             .expect("Unable to set the pipeline to the `Null` state.");
 
-        bus.remove_signal_watch();
+        self.pipeline.bus().unwrap().remove_signal_watch();
 
-        Ok(())
+        self.pipeline.remove_many(self.pipeline.iterate_elements().into_iter().map(|x| x.unwrap())).unwrap();
+    }
+    pub async fn calibrator(&self) -> MutexGuard<Calibrator> {
+        self.calibrator.lock().await
     }
 }
