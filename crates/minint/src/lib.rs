@@ -102,7 +102,7 @@ impl NtConn {
         // Add header as specified in WPILib's spec
         req.headers_mut().append(
             header::SEC_WEBSOCKET_PROTOCOL,
-            HeaderValue::from_static("networktables.first.wpi.edu"),
+            HeaderValue::from_static("v4.1.networktables.first.wpi.edu"),
         );
 
         // Setup channels for control
@@ -129,17 +129,14 @@ impl NtConn {
                                 for msg in messages {
                                     match msg {
                                         ServerMsg::Announce { name, id, r#type, pubuid, .. } => {
+                                            trace!("inserting to topics");
                                             (*topics.write().await).insert(id, name.clone());
 
                                             if let Some(pubuid) = pubuid {
-                                                let mut pubuid_topics = pubuid_topics.write().await;
-                                                let mut topic_pubuids = topic_pubuids.write().await;
-
-                                                (*pubuid_topics).insert(pubuid, id);
-                                                (*topic_pubuids).insert(id, pubuid);
-
-                                                drop(pubuid_topics);
-                                                drop(topic_pubuids);
+                                                trace!("inserting to pubuid_topics");
+                                                (*pubuid_topics.write().await).insert(pubuid, id);
+                                                trace!("inserting to topic_pubuids");
+                                                (*topic_pubuids.write().await).insert(id, pubuid);
 
                                                 debug!("{name} ({type}): published successfully with topic id {id}");
                                             } else {
@@ -184,7 +181,9 @@ impl NtConn {
             tokio::spawn(async move {
                 loop {
                     while let Some(outgoing) = c2s_rx.recv().await {
+                        trace!("sending {outgoing:?}");
                         sock_wr.send(outgoing).await.unwrap();
+                        trace!("sent");
                     }
                     tokio::task::yield_now().await;
                 }
@@ -249,13 +248,15 @@ impl NtConn {
         let pubuid = self.next_id().await;
         let name = name.into();
 
+        trace!("publishing {name} with pubuid {pubuid}");
+
         let buf = serde_json::to_string(&[ClientMsg::Publish {
             pubuid,
             name: name.clone(),
             r#type: T::STRING.to_string(),
             properties: Some(PublishProps {
                 persistent: Some(true),
-                retained: Some(true),
+                retained: Some(false),
             }),
         }])?;
 
@@ -266,7 +267,13 @@ impl NtConn {
             data_type = T::STRING.to_string()
         );
 
-        //while !(*self.pubuid_topics.read().await).contains_key(&pubuid) {
+        //let mut published = false;
+        //while !published {
+        //    published = if (*self.pubuid_topics.read().await).contains_key(&pubuid) {
+        //        true
+        //    } else {
+        //        false
+        //    };
         //    trace!("waiting for topic to be published");
         //    tokio::time::sleep(Duration::from_millis(100)).await;
         //}
@@ -445,7 +452,9 @@ impl<T: DataWrap + std::fmt::Debug> NtTopic<'_, T> {
     /// }
     /// ```
     pub async fn set(&mut self, val: T) -> Result<(), Box<dyn Error>> {
+        trace!("getting read lock pubuid_topics");
         if let Some(id) = (*self.conn.pubuid_topics.read().await).get(&self.pubuid) {
+            trace!("getting read lock topics");
             if let Some(name) = (*self.conn.topics.read().await).get(&id) {
                 debug!(
                     "{name} ({data_type}): set to {val:?}",
@@ -454,6 +463,7 @@ impl<T: DataWrap + std::fmt::Debug> NtTopic<'_, T> {
             }
         }
 
+        trace!("writing binary frame");
         (*self.conn).write_bin_frame(self.pubuid, 0, val)?;
 
         Ok(())

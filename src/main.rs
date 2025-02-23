@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         cam_man_.load_camera(1280, 720, tx).unwrap();
     });
 
-    let api = tokio::spawn(run_api(cam_man, rx.clone()));
+    let api = tokio::spawn(run_api(cam_man.clone(), rx.clone()));
 
     let roborio_ip = {
         let Config {
@@ -237,7 +237,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tokio::select!(
             _ = local => {},
             _ = api => {},
-            _ = tokio::signal::ctrl_c() => {},
+            _ = tokio::signal::ctrl_c() => {
+                cam_man.stop();
+            },
         );
     }
 

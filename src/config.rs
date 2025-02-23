@@ -1,18 +1,68 @@
 use crate::error::Error;
 use std::{fs::File, io::Read, path::Path};
 
-#[derive(Deserialize, Serialize, Clone)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
-pub struct Config {
-    pub team_number: u16,
-    pub ntables_ip: Option<String>,
-    //pub version: String,
-    pub rerun: Option<RerunConfig>,
-    pub cameras: Vec<CameraConfig>,
-    //pub camera: HashMap<String, CameraConfig>,
-    //pub tpu: Option<TpuConfig>,
-    //pub backends: HashMap<Backend, BackendConfig>,
+macro_rules! def_cfg {
+    ($(
+        $struct_ident:ident {
+            $(
+            $(# [ $attr:ident $( ( $tt:tt ) )* ])?
+            $ident:ident : $ty:ty ,
+            )*
+        }
+    )*) => {
+       $(
+           #[derive(Deserialize, Serialize, Clone)]
+           #[cfg_attr(feature = "web", derive(utopia::ToSchema))]
+           pub struct $struct_ident {
+               $(
+                $(#[$attr $( ($tt) )?])?
+                pub $ident: $ty,
+               )*
+           }
+       )*
+    };
 }
+
+def_cfg! {
+    Config {
+        team_number: u16,
+        ntables_ip: Option<String>,
+        rerun: Option<Rerun>,
+        cameras: Vec<Camera>,
+        subsystems: Subsystems,
+    }
+    Rerun {
+        server_address: Option<String>,
+    }
+    Camera {
+        name: String,
+        display_name: String,
+        settings: Option<CameraSettings>,
+        #[serde(skip_deserializing)]
+        possible_settings: Option<Vec<CameraSettings>>,
+    }
+    CameraSettings {
+        width: u32,
+        height: u32,
+        frame_rate: CfgFraction,
+        gamma: Option<f32>,
+    }
+    CfgFraction {
+        num: u32,
+        den: u32,
+    }
+    Subsystems {
+        capriltags: CAprilTagsSubsys,
+        ml: MlSubsys,
+    }
+    CAprilTagsSubsys {
+        enabled: bool,
+    }
+    MlSubsys {
+        enabled: bool,
+    }
+}
+
 impl Config {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Error> {
         let mut f = File::open(path).map_err(|_| Error::FailedToReadConfig)?;
@@ -25,44 +75,9 @@ impl Config {
 
 #[derive(Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "web", derive(utopia::ToSchema))]
-pub struct RerunConfig {
-    pub server_address: Option<String>,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
-pub struct CameraConfig {
-    pub name: String,
-    pub settings: Option<CameraSettings>,
-    pub caps: Vec<CameraSettings>,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
-pub struct CameraSettings {
-    pub width: u32,
-    pub height: u32,
-    pub frame_rate: CfgFraction,
-    pub gamma: Option<f32>,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
-pub struct CfgFraction {
-    pub num: u32,
-    pub den: u32,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum CameraKind {
     PiCam,
     Usb,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
-pub struct TpuConfig {
-    //pub kind: tfledge::CoralDeviceKind,
-}

@@ -13,25 +13,22 @@ export interface CameraSettings {
 
 export interface CameraConfig {
 	name: string,
+	display_name: string,
 	settings: CameraSettings|null,
-	caps: CameraSettings[],
+	possible_settings: CameraSettings[],
 }
 
 export interface Config {
 	team_number: number,
 	cameras: [CameraConfig],
-	//subsystems: {
-	//	capriltags: {
-	//		enabled: boolean,
-	//		tag_family: TagFamily,
-	//	},
-	//	apriltags: {
-	//		enabled: boolean,
-	//	},
-	//	machine_learning: {
-	//		enabled: boolean,
-	//	},
-	//},
+	subsystems: {
+		capriltags: {
+			enabled: boolean,
+		},
+		ml: {
+			enabled: boolean,
+		},
+	},
 }
 
 export { }

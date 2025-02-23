@@ -15,11 +15,7 @@ use mime_guess::from_path;
 use tokio::sync::watch;
 use utopia::{OpenApi, ToSchema};
 
-use crate::{
-    cameras::CameraManager,
-    config::Config,
-    Cfg,
-};
+use crate::{cameras::CameraManager, config::Config, Cfg};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -67,7 +63,8 @@ pub async fn run_api(cam_man: CameraManager, rx: watch::Receiver<Arc<Vec<u8>>>) 
             .service(info)
             .service(configuration)
             .service(configure)
-            .service(calibrate)
+            .service(calibration_intrinsics)
+            .service(calibration_status)
             .service(calibration_step)
             .service(dist)
     })
@@ -119,9 +116,11 @@ pub(super) async fn configuration() -> impl Responder {
     ),
 )]
 #[post("/api/configuration")]
-pub(super) async fn configure(data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>, web::Json(cfgg): web::Json<Config>) -> impl Responder {
+pub(super) async fn configure(
+    data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>,
+    web::Json(cfgg): web::Json<Config>,
+) -> impl Responder {
     let (cam_man, rx) = data.get_ref();
-    cam_man.start();
 
     {
         *Cfg.write().await = cfgg;
@@ -130,8 +129,8 @@ pub(super) async fn configure(data: web::Data<(CameraManager, watch::Receiver<Ar
     web::Json(Cfg.read().await.clone())
 }
 
-#[get("/api/calibrate")]
-pub(super) async fn calibrate(
+#[get("/api/calibrate/intrinsics")]
+pub(super) async fn calibration_intrinsics(
     data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>,
 ) -> impl Responder {
     let (cam_man, rx) = data.get_ref();
@@ -139,16 +138,40 @@ pub(super) async fn calibrate(
 
     HttpResponse::new(StatusCode::OK)
 }
-    
 
-#[get("/api/calibrate/{width}/{height}")]
-pub(super) async fn calibration_step(
-    path: web::Path<(u32, u32)>,
+#[derive(Serialize)]
+struct CalibrationStatus {
+    width: u32,
+    height: u32,
+    current_step: usize,
+    total_steps: usize,
+}
+
+#[get("/api/calibrate/status")]
+pub(super) async fn calibration_status(
     data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>,
 ) -> impl Responder {
-    let (width, height) = *path;
     let (cam_man, rx) = data.get_ref();
-    cam_man.calibrator().await.collect_data(rx.clone());
 
-    HttpResponse::new(StatusCode::OK)
+    web::Json(CalibrationStatus {
+        width: 1280,
+        height: 720,
+        current_step: 0,
+        total_steps: 200,
+    })
+}
+
+#[get("/api/calibrate/step")]
+pub(super) async fn calibration_step(
+    data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>,
+) -> impl Responder {
+    let (cam_man, rx) = data.get_ref();
+    let current_step = cam_man.calibrator().await.step(rx.clone());
+
+    web::Json(CalibrationStatus {
+        width: 1280,
+        height: 720,
+        current_step,
+        total_steps: 200,
+    })
 }
