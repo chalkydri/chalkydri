@@ -57,6 +57,7 @@ def_cfg! {
     }
     CAprilTagsSubsys {
         enabled: bool,
+        gamma: Option<f64>,
     }
     MlSubsys {
         enabled: bool,
@@ -80,4 +81,3 @@ pub enum CameraKind {
     PiCam,
     Usb,
 }
-

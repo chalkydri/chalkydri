@@ -1,6 +1,28 @@
 team_number = 4533
 
-cameras = []
+[[cameras]]
+name = "pipewiredevice0"
+display_name = "Integrated_Webcam_HD (V4L2)"
+
+[cameras.settings]
+width = 1280
+height = 720
+
+[cameras.settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras]]
+name = "pipewiredevice2"
+display_name = "Microsoft® LifeCam HD-3000 (V4L2)"
+
+[cameras.settings]
+width = 1280
+height = 720
+
+[cameras.settings.frame_rate]
+num = 30
+den = 1
 
 [subsystems.capriltags]
 enabled = true

@@ -1,39 +1,50 @@
-use gst::prelude::*;
-use gstreamer_app::{
-    glib::MainLoop,
-    gst::{DeviceMonitor, ElementFactory, FlowSuccess, Fraction, State, Structure},
-    AppSink, AppSinkCallbacks,
+use gstreamer::{
+    Caps, DeviceMonitor, Element, ElementFactory, FlowSuccess, Fraction, MessageView, Pipeline,
+    Sample, SampleRef, State, Stream,
+    glib::{MainLoop, WeakRef},
+    prelude::*,
 };
-use gstreamer_base::gst::{self, Caps, Pipeline};
 
+use gstreamer_app::{AppSink, AppSinkCallbacks, app_sink::AppSinkStream};
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
 use std::{error::Error, sync::Arc};
-use tokio::sync::{watch, Mutex, MutexGuard};
+use tokio::sync::{Mutex, MutexGuard, watch};
 
 #[cfg(feature = "rerun")]
 use crate::Rerun;
 use crate::{
+    Cfg,
     calibration::Calibrator,
     config::{self, CameraSettings, CfgFraction},
-    Cfg,
+    subsys::capriltags,
 };
+
+#[derive(Clone)]
+pub struct CameraCtx {
+    cfgg: config::Camera,
+    tee: WeakRef<Element>,
+}
 
 #[derive(Clone)]
 pub struct CameraManager {
     dev_mon: DeviceMonitor,
     pipeline: Pipeline,
-    main_loop: MainLoop,
+    pub main_loop: MainLoop,
     calibrator: Arc<Mutex<Calibrator>>,
+
+    pub capriltags: Vec<watch::Receiver<Option<Vec<u8>>>>,
+    cameras: Vec<CameraCtx>,
 }
 impl CameraManager {
     pub fn new() -> Self {
-        gst::assert_initialized();
+        gstreamer::assert_initialized();
 
         let dev_mon = DeviceMonitor::new();
         let caps = Caps::builder("video/x-raw").any_features().build();
-        dev_mon.add_filter(Some("Video/Source"), Some(&caps)).unwrap();
-        dev_mon.start().unwrap();
+        dev_mon
+            .add_filter(Some("Video/Source"), Some(&caps))
+            .unwrap();
 
         let pipeline = Pipeline::new();
 
@@ -46,6 +57,9 @@ impl CameraManager {
             pipeline,
             main_loop,
             calibrator,
+
+            cameras: Vec::new(),
+            capriltags: Vec::new(),
         }
     }
     pub fn devices(&self) -> Vec<config::Camera> {
@@ -57,54 +71,91 @@ impl CameraManager {
 
         self.dev_mon.start().unwrap();
 
-        for dev in self.dev_mon
-            .devices()
-            .iter() {
+        for dev in self.dev_mon.devices().iter() {
             devices.push(config::Camera {
                 name: dev.name().to_string(),
                 display_name: dev.display_name().to_string(),
                 settings: None,
-                possible_settings: Some(dev
-                    .caps()
-                    .unwrap()
-                    .iter()
-                    .map(|cap| {
-                        let frame_rate = cap.get::<Fraction>("framerate").unwrap_or_else(|_| Fraction::new(30, 1));
-                        CameraSettings {
-                            width: cap.get::<i32>("width").unwrap() as u32,
-                            height: cap.get::<i32>("height").unwrap() as u32,
-                            frame_rate: CfgFraction {
-                                num: frame_rate.numer() as u32,
-                                den: frame_rate.denom() as u32,
-                            },
-                            gamma: None,
-                        }
-                    })
-                    .collect()),
+                possible_settings: Some(
+                    dev.caps()
+                        .unwrap()
+                        .iter()
+                        .map(|cap| {
+                            let frame_rate = cap
+                                .get::<Fraction>("framerate")
+                                .unwrap_or_else(|_| Fraction::new(30, 1));
+                            CameraSettings {
+                                width: cap.get::<i32>("width").unwrap() as u32,
+                                height: cap.get::<i32>("height").unwrap() as u32,
+                                frame_rate: CfgFraction {
+                                    num: frame_rate.numer() as u32,
+                                    den: frame_rate.denom() as u32,
+                                },
+                                gamma: None,
+                            }
+                        })
+                        .collect(),
+                ),
             });
         }
 
         self.dev_mon.stop();
-
-        self.start();
+        //if self.pipeline.current_state() == State::Paused {
+        //    self.start();
+        //}
 
         devices
     }
     // gamma gamma=2.0 ! fpsdisplaysink ! videorate drop-only=true ! omxh264enc ! mpegtsenc !
     // rtspserversink port=1234
-    pub fn load_camera(
-        &mut self,
-        width: u32,
-        height: u32,
-        frame_tx: watch::Sender<Arc<Vec<u8>>>,
-    ) -> Result<(), Box<dyn Error>> {
-        let cam_settings = {
+
+    pub fn add_subsys(
+        &self,
+        func: impl Fn(&Pipeline) -> (Element, Element),
+    ) -> Vec<watch::Receiver<Option<Vec<u8>>>> {
+        let mut appsinks = Vec::new();
+
+        for cam in &self.cameras {
+            let (input, output) = func(&self.pipeline);
+
+            cam.tee.upgrade().unwrap().link(&input).unwrap();
+
+            let appsink = ElementFactory::make("appsink").build().unwrap();
+            self.pipeline.add(&appsink).unwrap();
+            output.link(&appsink).unwrap();
+            let appsink = appsink.dynamic_cast::<AppSink>().unwrap();
+
+            let (tx, rx) = watch::channel(None);
+
+            let appsink_ = appsink.clone();
+            appsink.set_callbacks(
+                AppSinkCallbacks::builder()
+                    .new_sample(move |_| {
+                        let sample = appsink_.pull_sample().unwrap();
+                        println!("{:?}", sample.info());
+                        let buf = sample.buffer().unwrap().map_readable().unwrap();
+                        tx.send(Some(buf.to_vec())).unwrap();
+
+                        Ok(FlowSuccess::Ok)
+                    })
+                    .build(),
+            );
+            appsinks.push(rx);
+        }
+
+        appsinks
+    }
+
+    pub fn load_camera(&mut self, width: u32, height: u32) -> Result<(), Box<dyn Error>> {
+        // Get a copy of the global configuration
+        let config = {
             let cfgg = Cfg.blocking_read();
             let ret = (*cfgg).clone();
             drop(cfgg);
             ret
         };
-        let config = config::Camera {
+
+        let default_config = config::Camera {
             name: String::new(),
             display_name: String::new(),
             settings: Some(CameraSettings {
@@ -115,63 +166,105 @@ impl CameraManager {
             }),
             possible_settings: None,
         };
-        let cam_settings = cam_settings.cameras.first().unwrap_or(&config);
-        let cam_settings = cam_settings.settings.clone().unwrap();
 
-        let devices = self.dev_mon.devices();
-        let dev = devices.front().unwrap();
+        for cam_config in config.cameras {
+            let cam_settings = cam_config.settings.clone().unwrap();
 
-        let elem = dev.create_element(None).unwrap();
+            let devices = self.dev_mon.devices();
+            if let Some(dev) = devices
+                .iter()
+                .filter(|cam| cam_config.name == cam.name())
+                .next()
+            {
+                let cam = dev.create_element(None).unwrap();
+                dbg!(cam.name());
 
-        let filter = ElementFactory::make("capsfilter").property("caps", dev.caps().iter().next().unwrap()).build().unwrap();
+                //let mut caps_ = dev.caps().clone().unwrap();
+                //let mut caps = caps_.iter().filter(|cap| {
+                //    cap.name().as_str() == "video/x-raw"
+                //        && cap.get::<i32>("width").unwrap() == cam_settings.width as i32
+                //});
+                //dev.caps()
+                //    .unwrap()
+                //    .merge_structure(caps.next().unwrap().to_owned());
+                //let caps = Caps::builder("video/x-raw")
+                //    .field("width", &cam_settings.width)
+                //    .field("height", &cam_settings.height)
+                //    .field(
+                //        "framerate",
+                //        &Fraction::new(
+                //            cam_settings.frame_rate.num as i32,
+                //            cam_settings.frame_rate.den as i32,
+                //        ),
+                //    )
+                //    .any_features()
+                //    .build();
 
-        let convertscale = ElementFactory::make("videoconvertscale").build().unwrap();
+                let filter = ElementFactory::make("capsfilter")
+                    .property("caps", &dev.caps().unwrap())
+                    .build()
+                    .unwrap();
 
-        let appsink = ElementFactory::make("appsink").build().unwrap();
+                //cam.link_filtered(&convertscale, &caps).unwrap();
+                let queue = ElementFactory::make("queue").build().unwrap();
+                let tee = ElementFactory::make("tee").build().unwrap();
 
-        self.pipeline.add_many([&elem, &convertscale, &filter, &appsink]).unwrap();
-        elem.link_filtered(&convertscale, &Caps::builder("video/x-raw").field("width", 1280).field("height", 720).build()).unwrap();
-        convertscale.link(&appsink).unwrap();
+                self.pipeline
+                    .add_many([&cam, &filter, &queue, &tee])
+                    .unwrap();
+                cam.link(&filter).unwrap();
+                filter.link(&queue).unwrap();
+                queue.link(&tee).unwrap();
 
-        // Parse pipeline description to create pipeline
-        //self.pipeline = gst::parse::launch(&format!(
-        //    "libcamerasrc ! \
-        //    capsfilter name=caps_filter caps=video/x-raw,width={},height={} ! \
-        //    videoconvertscale ! \
-        //    appsink",
-        //    //cam_settings.gamma.unwrap_or(1.0),
-        //    cam_settings.width,
-        //    cam_settings.height,
-        //    //cam_settings.frame_rate.num,
-        //    //cam_settings.frame_rate.den,
-        //))
-        //.unwrap()
-        //.dynamic_cast::<Pipeline>()
-        //.unwrap();
+                self.cameras.push(CameraCtx {
+                    tee: tee.downgrade(),
+                    cfgg: cam_config,
+                });
+            }
+        }
 
-        // Get the sink
-        let appsink = appsink.dynamic_cast::<AppSink>()
-            .unwrap();
+        let capriltags_streams = self.add_subsys(|pipeline| {
+            let gamma = ElementFactory::make("gamma")
+                .property("gamma", &config.subsystems.capriltags.gamma.unwrap_or(1.0))
+                .build()
+                .unwrap();
+            let videoconvertscale = ElementFactory::make("videoconvertscale").build().unwrap();
+            let filter = ElementFactory::make("capsfilter")
+                .property(
+                    "caps",
+                    &Caps::builder("video/x-raw")
+                        .field("width", &1280)
+                        .field("height", &720)
+                        .field("format", "GRAY8")
+                        .build(),
+                )
+                .build()
+                .unwrap();
+            pipeline
+                .add_many([&gamma, &videoconvertscale, &filter])
+                .unwrap();
 
-        // Force conversion to RGB pixel format
-        let caps = Caps::builder("video/x-raw").field("format", "RGB").build();
-        appsink.set_caps(Some(&caps));
+            gamma.link(&videoconvertscale).unwrap();
+            videoconvertscale.link(&filter).unwrap();
+            (gamma, filter)
+        });
 
-        // Register a callback to handle new samples
-        let appsink_clone = appsink.clone();
-        appsink.set_callbacks(
-            AppSinkCallbacks::builder()
-                .new_sample(move |_| {
-                    let sample = appsink_clone.pull_sample().unwrap();
-                    let buf = sample.buffer().unwrap().map_readable().unwrap();
+        for (i, stream) in capriltags_streams.iter().enumerate() {
+            let mut rx = stream.clone();
+            tokio::spawn(async move {
+                loop {
+                    rx.changed().await.unwrap();
+                    let buf = rx.borrow_and_update().clone().unwrap();
+                    println!("{i}: {}", buf.len());
+                }
+            });
+        }
 
-                    frame_tx.send(Arc::new(buf.to_vec())).unwrap();
+        self.capriltags = capriltags_streams;
 
-                    Ok(FlowSuccess::Ok)
-                })
-                .build(),
-        );
-
+        Ok(())
+    }
+    pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let main_loop = self.main_loop.clone();
 
         // Define the event loop or something?
@@ -179,7 +272,7 @@ impl CameraManager {
             .bus()
             .unwrap()
             .connect_message(Some("error"), move |_, msg| match msg.view() {
-                gst::MessageView::Error(err) => {
+                MessageView::Error(err) => {
                     error!(
                         "error received from element {:?}: {}",
                         err.src().map(|s| s.path_string()),
@@ -192,35 +285,35 @@ impl CameraManager {
                 }
                 _ => unimplemented!(),
             });
-
-
-        self.start();
-
         self.main_loop.run();
 
         Ok(())
     }
+
     pub fn start(&self) {
+        //trace!("waiting for pipeline to be ready");
+        //while self.pipeline.current_state() != State::Ready {}
+        //trace!("pipeline ready!");
 
         // Start the pipeline
-        self.pipeline
-            .set_state(State::Playing)
-            .expect("Unable to set the pipeline to the `Playing` state.");
+        self.pipeline.set_state(State::Playing).unwrap();
+        //.expect("Unable to set the pipeline to the `Playing` state.");
     }
     pub fn pause(&self) {
         self.pipeline
-            .set_state(gst::State::Paused)
+            .set_state(State::Paused)
             .expect("Unable to set the pipeline to the `Null` state.");
     }
     pub fn stop(&self) {
-        //self.pipeline
-        //    .remove_many(
-        //        self.pipeline
-        //            .iterate_elements()
-        //            .into_iter()
-        //            .map(|x| x.unwrap()),
-        //    )
-        //    .unwrap();
+        self.pause();
+        self.pipeline
+            .remove_many(
+                self.pipeline
+                    .iterate_elements()
+                    .into_iter()
+                    .map(|x| x.unwrap()),
+            )
+            .unwrap();
     }
     pub async fn calibrator(&self) -> MutexGuard<Calibrator> {
         self.calibrator.lock().await

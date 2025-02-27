@@ -2,20 +2,19 @@
 //! JSON API used by the web UI and possibly third-party applications
 //!
 
-use std::sync::Arc;
+use std::{fs::File, io::Write, sync::Arc};
 
 use actix_web::{
-    get,
+    App, HttpResponse, HttpServer, Responder, get,
     http::StatusCode,
     post,
     web::{self, Data},
-    App, HttpResponse, HttpServer, Responder,
 };
 use mime_guess::from_path;
 use tokio::sync::watch;
 use utopia::{OpenApi, ToSchema};
 
-use crate::{cameras::CameraManager, config::Config, Cfg};
+use crate::{Cfg, cameras::CameraManager, config::Config};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -123,7 +122,12 @@ pub(super) async fn configure(
     let (cam_man, rx) = data.get_ref();
 
     {
-        *Cfg.write().await = cfgg;
+        *Cfg.write().await = cfgg.clone();
+
+        let mut f = File::create("chalkydri.toml").unwrap();
+        let toml_cfgg = toml::to_string_pretty(&cfgg).unwrap();
+        f.write_all(toml_cfgg.as_bytes()).unwrap();
+        f.flush().unwrap();
     }
 
     web::Json(Cfg.read().await.clone())

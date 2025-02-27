@@ -1,12 +1,12 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use aprilgrid::{
-    detector::{DetectorParams, TagDetector},
     TagFamily,
+    detector::{DetectorParams, TagDetector},
 };
 use apriltag_image::image::ColorType;
 use camera_intrinsic_calibration::{
-    board::{create_default_6x6_board, Board},
+    board::{Board, create_default_6x6_board},
     detected_points::{FeaturePoint, FrameFeature},
     io::write_report,
     types::{CalibParams, RvecTvec, ToRvecTvec},
@@ -69,18 +69,18 @@ impl Calibrator {
             let mut frame_feat = None;
             while frame_feat.is_none() {
                 if rx.has_changed().is_ok() && rx.has_changed().unwrap() {
-                let img = DynamicImage::ImageRgb8(
-                    RgbImage::from_vec(1280, 720, rx.borrow_and_update().to_vec()).unwrap(),
-                );
-
-                frame_feat =
-                    camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(
-                        &self.det,
-                        &img,
-                        &create_default_6x6_board(),
-                        MIN_CORNERS,
-                        self.start.elapsed().as_nanos() as i64,
+                    let img = DynamicImage::ImageRgb8(
+                        RgbImage::from_vec(1280, 720, rx.borrow_and_update().to_vec()).unwrap(),
                     );
+
+                    frame_feat =
+                        camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(
+                            &self.det,
+                            &img,
+                            &create_default_6x6_board(),
+                            MIN_CORNERS,
+                            self.start.elapsed().as_nanos() as i64,
+                        );
                 }
             }
 

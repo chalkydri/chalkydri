@@ -8,7 +8,7 @@ use crate::Rerun;
 use env_logger::Builder;
 use log::Log;
 #[cfg(feature = "rerun")]
-use re_sdk::{external::re_log, RecordingStream};
+use re_sdk::{RecordingStream, external::re_log};
 #[cfg(feature = "rerun")]
 use re_types::{archetypes::TextLog, components::TextLogLevel};
 
