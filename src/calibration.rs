@@ -4,7 +4,7 @@ use aprilgrid::{
     TagFamily,
     detector::{DetectorParams, TagDetector},
 };
-use apriltag_image::image::ColorType;
+use image::{ColorType, GrayImage, DynamicImage};
 use camera_intrinsic_calibration::{
     board::{Board, create_default_6x6_board},
     detected_points::{FeaturePoint, FrameFeature},
@@ -15,7 +15,7 @@ use camera_intrinsic_calibration::{
 };
 use camera_intrinsic_model::{self as model, CameraModel, GenericModel, OpenCVModel5};
 
-use image::{DynamicImage, RgbImage};
+use gstreamer::Buffer;
 use model::model_from_json;
 use tokio::{sync::watch, time::Instant};
 
@@ -64,14 +64,20 @@ impl Calibrator {
     }
 
     /// Process a frame
-    pub fn step(&mut self, mut rx: watch::Receiver<Arc<Vec<u8>>>) -> usize {
+    pub fn step(&mut self, mut rx: watch::Receiver<Option<Buffer>>) -> usize {
         if self.frame_feats.len() < 200 {
             let mut frame_feat = None;
             while frame_feat.is_none() {
                 if rx.has_changed().is_ok() && rx.has_changed().unwrap() {
-                    let img = DynamicImage::ImageRgb8(
-                        RgbImage::from_vec(1280, 720, rx.borrow_and_update().to_vec()).unwrap(),
-                    );
+                    let val = rx.borrow_and_update().clone();
+                    let img = DynamicImage::ImageRgb8(DynamicImage::ImageLuma8(
+                        GrayImage::from_vec(
+                            1280,
+                            720,
+                            val.unwrap().into_mapped_buffer_readable().unwrap().to_vec(),
+                        )
+                        .unwrap(),
+                    ).to_rgb8());
 
                     frame_feat =
                         camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(

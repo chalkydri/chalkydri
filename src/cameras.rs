@@ -48,7 +48,7 @@ pub struct CameraManager {
     pub main_loop: MainLoop,
     calibrator: Arc<Mutex<Calibrator>>,
 
-    pub capriltags: Vec<watch::Receiver<Option<Vec<u8>>>>,
+    pub capriltags: watch::Receiver<Option<Buffer>>,
 }
 impl CameraManager {
     pub async fn new(#[cfg(feature = "ntables")] nt: NtConn) -> Self {
@@ -72,8 +72,11 @@ impl CameraManager {
 
         let main_loop = MainLoop::new(None, false);
 
+        let extra_thing_for_calib = Arc::new(Mutex::new(None));
+
         let pipeline_ = pipeline.downgrade();
         let bus = dev_mon.bus();
+        let extra_thing_for_calib_ = extra_thing_for_calib.clone();
         bus.set_sync_handler(move |_, msg| {
             let pipeline = pipeline_.upgrade().unwrap();
             match msg.view() {
@@ -132,6 +135,8 @@ impl CameraManager {
                             videoconvertscale.link(&filter).unwrap();
                             (gamma, filter)
                         });
+
+                        *extra_thing_for_calib_.blocking_lock() = Some(capriltags_rx.clone());
 
                         let cam_config_ = cam_config.clone();
 
@@ -230,7 +235,7 @@ impl CameraManager {
             main_loop,
             calibrator,
 
-            capriltags: Vec::new(),
+            capriltags: extra_thing_for_calib.lock().await.clone().unwrap(),
         }
     }
     pub fn devices(&self) -> Vec<config::Camera> {
@@ -276,6 +281,9 @@ impl CameraManager {
         }
 
         devices
+    }
+    pub async fn calib_step(&self) -> usize {
+        self.calibrator().await.step(self.capriltags.clone())
     }
     // gamma gamma=2.0 ! fpsdisplaysink ! videorate drop-only=true ! omxh264enc ! mpegtsenc !
     // rtspserversink port=1234
