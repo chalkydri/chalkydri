@@ -47,6 +47,7 @@ impl CameraManager {
             .unwrap();
 
         let pipeline = Pipeline::new();
+        pipeline.set_async_handling(true);
 
         let main_loop = MainLoop::new(None, false);
 
@@ -170,6 +171,7 @@ impl CameraManager {
         for cam_config in config.cameras {
             let cam_settings = cam_config.settings.clone().unwrap();
 
+            self.dev_mon.start().unwrap();
             let devices = self.dev_mon.devices();
             if let Some(dev) = devices
                 .iter()
@@ -255,7 +257,7 @@ impl CameraManager {
                 loop {
                     rx.changed().await.unwrap();
                     let buf = rx.borrow_and_update().clone().unwrap();
-                    println!("{i}: {}", buf.len());
+                    println!("{i}: {:?}", buf.get(0..10));
                 }
             });
         }

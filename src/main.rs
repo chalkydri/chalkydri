@@ -170,68 +170,72 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "ntables")]
     let nt_ = nt.clone();
     let cam_man_ = cam_man.clone();
-    local.spawn_local(async move {
-        #[cfg(feature = "ntables")]
-        let nt = nt_;
-
-        // Initialize the apriltag C library subsystem
-        let mut at = CApriltagsDetector::init(&cam_man_).await.unwrap();
-
-        // Publish NT topics
-
-        #[cfg(feature = "ntables")]
-        let mut translation = nt
-            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
-            .await
-            .unwrap();
-        #[cfg(feature = "ntables")]
-        let mut rotation = nt
-            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
-            .await
-            .unwrap();
-        #[cfg(feature = "ntables")]
-        let mut timestamp = nt
-            .publish::<String>(&format!("/chalkydri/robot_pose/timestamp"))
-            .await
-            .unwrap();
-        #[cfg(feature = "ntables")]
-        let mut tag_detected = nt
-            .publish::<bool>("/chalkydri/robot_pose/tag_detected")
-            .await
-            .unwrap();
-
-        loop {
-            // Wait for a new image from the camera
-            //if rx.changed().await.is_ok() {
-            // Get timestamp for the image
-            let ts = chrono::Utc::now().to_rfc3339();
-            // Borrow the buffer and let the channel know we've seen this value
-            let buf = rx.borrow_and_update();
-
-            // Make a copy of the buffer and release the borrow of the original
-            let buf_ = buf.clone();
-            drop(buf);
-
-            // Send the buffer to AprilTag detector
-            let pose = at.process().unwrap();
-
-            // Unpack the pose into translation and rotation
-            let (t, r) = pose;
-
-            debug!("{t:?} / {r:?}");
-
-            // Update the translation, rotation, and timestamp on NetworkTables
+    local
+        .spawn_local(async move {
             #[cfg(feature = "ntables")]
-            {
-                translation.set(t.clone()).await.unwrap();
-                rotation.set(r.clone()).await.unwrap();
-                timestamp.set(ts).await.unwrap();
-            }
+            let nt = nt_;
 
-            debug!("set vals");
+            // Initialize the apriltag C library subsystem
+            let mut at = CApriltagsDetector::init(&cam_man_).await.unwrap();
+
+            // Publish NT topics
+
+            #[cfg(feature = "ntables")]
+            let mut translation = nt
+                .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
+                .await
+                .unwrap();
+            #[cfg(feature = "ntables")]
+            let mut rotation = nt
+                .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
+                .await
+                .unwrap();
+            #[cfg(feature = "ntables")]
+            let mut timestamp = nt
+                .publish::<String>(&format!("/chalkydri/robot_pose/timestamp"))
+                .await
+                .unwrap();
+            #[cfg(feature = "ntables")]
+            let mut tag_detected = nt
+                .publish::<bool>("/chalkydri/robot_pose/tag_detected")
+                .await
+                .unwrap();
+
+            //let pose = at.process().await.unwrap();
+            //loop {
+            //    // Wait for a new image from the camera
+            //    //if rx.changed().await.is_ok() {
+            //    // Get timestamp for the image
+            //    let ts = chrono::Utc::now().to_rfc3339();
+            //    // Borrow the buffer and let the channel know we've seen this value
+            //    let buf = rx.borrow_and_update();
+
+            //    // Make a copy of the buffer and release the borrow of the original
+            //    let buf_ = buf.clone();
+            //    drop(buf);
+
+            //    // Send the buffer to AprilTag detector
+            //    let pose = at.process().await.unwrap();
+
+            //    // Unpack the pose into translation and rotation
+            //    let (t, r) = pose;
+
+            //    debug!("{t:?} / {r:?}");
+
+            //    // Update the translation, rotation, and timestamp on NetworkTables
+            //    #[cfg(feature = "ntables")]
+            //    {
+            //        translation.set(t.clone()).await.unwrap();
+            //        rotation.set(r.clone()).await.unwrap();
+            //        timestamp.set(ts).await.unwrap();
+            //    }
+
+            //    debug!("set vals");
+            //    //}
             //}
-        }
-    });
+        })
+        .await
+        .unwrap();
 
     let cam_man_ = cam_man.clone();
     std::thread::spawn(move || {
@@ -246,7 +250,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "web")]
     {
         tokio::select!(
-            _ = local => {},
+            //_ = local => {},
             _ = api => {},
             _ = tokio::signal::ctrl_c() => {
                 cam_man.stop();

@@ -23,7 +23,7 @@ pub trait Subsystem<'fr>: Sized {
     /// Initialize the subsystem
     async fn init(cam_man: &CameraManager) -> Result<Self, Self::Error>;
     /// Process a frame
-    fn process(&mut self) -> Result<Self::Output, Self::Error>;
+    async fn process(&mut self) -> Result<Self::Output, Self::Error>;
 }
 
 pub struct SubsysHandle<T: Sized> {
