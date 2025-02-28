@@ -13,9 +13,14 @@
 		SidebarWrapper
 	} from 'flowbite-svelte';
 
-	function test() {
-		alert(2);
+	async function _reboot() {
+		let res = await fetch('/api/sys/reboot', {
+			method: 'POST'
+		});
+		await res.blob();
 	}
 </script>
 
 <h1>Hello, world!</h1>
+
+<Button on:click={_reboot} color="red">Reboot</Button>

@@ -11,6 +11,7 @@ use actix_web::{
     web::{self, Data},
 };
 use mime_guess::from_path;
+use rustix::system::RebootCommand;
 use tokio::sync::watch;
 use utopia::{OpenApi, ToSchema};
 
@@ -66,6 +67,7 @@ pub async fn run_api(cam_man: CameraManager, rx: watch::Receiver<Arc<Vec<u8>>>) 
             .service(calibration_status)
             .service(calibration_step)
             .service(dist)
+            .service(sys_reboot)
     })
     .bind(("0.0.0.0", 6942))
     .unwrap()
@@ -102,9 +104,13 @@ pub(super) async fn info() -> impl Responder {
     ),
 )]
 #[get("/api/configuration")]
-pub(super) async fn configuration() -> impl Responder {
+pub(super) async fn configuration(
+    data: web::Data<(CameraManager, watch::Receiver<Arc<Vec<u8>>>)>,
+) -> impl Responder {
+    let (cam_man, rx) = data.get_ref();
+
     let mut cfgg = Cfg.read().await.clone();
-    cfgg.cameras = CameraManager::new().devices();
+    cfgg.cameras = cam_man.devices();
     web::Json(cfgg)
 }
 
@@ -120,6 +126,12 @@ pub(super) async fn configure(
     web::Json(cfgg): web::Json<Config>,
 ) -> impl Responder {
     let (cam_man, rx) = data.get_ref();
+
+    let old_config = Cfg.read().await.clone();
+
+    if cfgg.device_name != old_config.device_name {
+        rustix::system::sethostname(cfgg.device_name.clone().unwrap().as_bytes()).unwrap();
+    }
 
     {
         *Cfg.write().await = cfgg.clone();
@@ -178,4 +190,11 @@ pub(super) async fn calibration_step(
         current_step,
         total_steps: 200,
     })
+}
+
+#[post("/api/sys/reboot")]
+pub(super) async fn sys_reboot() -> impl Responder {
+    rustix::system::reboot(RebootCommand::Restart).unwrap();
+
+    web::Json(())
 }

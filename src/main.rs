@@ -2,6 +2,7 @@
 //! Chalkydri core
 //!
 
+#![feature(duration_millis_float)]
 // Unsafe code is NOT allowed in Chalkydri core.
 // If unsafe code is required, it should be part of a different crate.
 #![forbid(unsafe_code)]
@@ -107,15 +108,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Chalkydri starting up...");
 
-    let mut cam_man = CameraManager::new();
+    let mut cam_man = CameraManager::new().await;
 
     // Create a channel for sharing frames from the camera thread with the subsystems
     let (tx, mut rx) = watch::channel::<Arc<Vec<u8>>>(Arc::new(Vec::new()));
-
-    // Spawn a thread to handle cameras
-    tokio::task::block_in_place(|| {
-        cam_man.load_camera(1280, 720).unwrap();
-    });
 
     let api = tokio::spawn(run_api(cam_man.clone(), rx.clone()));
 
@@ -169,73 +165,71 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local = LocalSet::new();
     #[cfg(feature = "ntables")]
     let nt_ = nt.clone();
-    let cam_man_ = cam_man.clone();
-    local
-        .spawn_local(async move {
-            #[cfg(feature = "ntables")]
-            let nt = nt_;
+    local.spawn_local(async move {
+        #[cfg(feature = "ntables")]
+        let nt = nt_;
 
-            // Initialize the apriltag C library subsystem
-            let mut at = CApriltagsDetector::init(&cam_man_).await.unwrap();
+        // Initialize the apriltag C library subsystem
+        //let mut at = CApriltagsDetector::init(&cam_man_).await.unwrap();
 
-            // Publish NT topics
+        // Publish NT topics
 
-            #[cfg(feature = "ntables")]
-            let mut translation = nt
-                .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
-                .await
-                .unwrap();
-            #[cfg(feature = "ntables")]
-            let mut rotation = nt
-                .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
-                .await
-                .unwrap();
-            #[cfg(feature = "ntables")]
-            let mut timestamp = nt
-                .publish::<String>(&format!("/chalkydri/robot_pose/timestamp"))
-                .await
-                .unwrap();
-            #[cfg(feature = "ntables")]
-            let mut tag_detected = nt
-                .publish::<bool>("/chalkydri/robot_pose/tag_detected")
-                .await
-                .unwrap();
+        #[cfg(feature = "ntables")]
+        let mut translation = nt
+            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
+            .await
+            .unwrap();
+        #[cfg(feature = "ntables")]
+        let mut rotation = nt
+            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
+            .await
+            .unwrap();
+        #[cfg(feature = "ntables")]
+        let mut timestamp = nt
+            .publish::<String>(&format!("/chalkydri/robot_pose/timestamp"))
+            .await
+            .unwrap();
+        #[cfg(feature = "ntables")]
+        let mut tag_detected = nt
+            .publish::<bool>("/chalkydri/robot_pose/tag_detected")
+            .await
+            .unwrap();
 
-            //let pose = at.process().await.unwrap();
-            //loop {
-            //    // Wait for a new image from the camera
-            //    //if rx.changed().await.is_ok() {
-            //    // Get timestamp for the image
-            //    let ts = chrono::Utc::now().to_rfc3339();
-            //    // Borrow the buffer and let the channel know we've seen this value
-            //    let buf = rx.borrow_and_update();
+        //let pose = at.process().await.unwrap();
+        //loop {
+        //    // Wait for a new image from the camera
+        //    //if rx.changed().await.is_ok() {
+        //    // Get timestamp for the image
+        //    let ts = chrono::Utc::now().to_rfc3339();
+        //    // Borrow the buffer and let the channel know we've seen this value
+        //    let buf = rx.borrow_and_update();
 
-            //    // Make a copy of the buffer and release the borrow of the original
-            //    let buf_ = buf.clone();
-            //    drop(buf);
+        //    // Make a copy of the buffer and release the borrow of the original
+        //    let buf_ = buf.clone();
+        //    drop(buf);
 
-            //    // Send the buffer to AprilTag detector
-            //    let pose = at.process().await.unwrap();
+        //    // Send the buffer to AprilTag detector
+        //    let pose = at.process().await.unwrap();
 
-            //    // Unpack the pose into translation and rotation
-            //    let (t, r) = pose;
+        //    // Unpack the pose into translation and rotation
+        //    let (t, r) = pose;
 
-            //    debug!("{t:?} / {r:?}");
+        //    debug!("{t:?} / {r:?}");
 
-            //    // Update the translation, rotation, and timestamp on NetworkTables
-            //    #[cfg(feature = "ntables")]
-            //    {
-            //        translation.set(t.clone()).await.unwrap();
-            //        rotation.set(r.clone()).await.unwrap();
-            //        timestamp.set(ts).await.unwrap();
-            //    }
+        //    // Update the translation, rotation, and timestamp on NetworkTables
+        //    #[cfg(feature = "ntables")]
+        //    {
+        //        translation.set(t.clone()).await.unwrap();
+        //        rotation.set(r.clone()).await.unwrap();
+        //        timestamp.set(ts).await.unwrap();
+        //    }
 
-            //    debug!("set vals");
-            //    //}
-            //}
-        })
-        .await
-        .unwrap();
+        //    debug!("set vals");
+        //    //}
+        //}
+    });
+    //.await
+    //.unwrap();
 
     let cam_man_ = cam_man.clone();
     std::thread::spawn(move || {

@@ -45,13 +45,12 @@ pub struct CApriltagsDetector {
     det: apriltag::Detector,
     layout: HashMap<u64, (Translation<f64>, Rotation<f64>)>,
     model: CalibratedModel,
-    capriltags: Vec<watch::Receiver<Option<Vec<u8>>>>,
 }
 impl<'fr> Subsystem<'fr> for CApriltagsDetector {
-    type Output = (Vec<f64>, Vec<f64>);
+    type Output = Option<(Vec<f64>, Vec<f64>)>;
     type Error = Box<dyn std::error::Error + Send>;
 
-    async fn init(cam_man: &crate::cameras::CameraManager) -> Result<Self, Self::Error> {
+    fn init(cam_config: &crate::config::Camera) -> Result<Self, Self::Error> {
         let model = CalibratedModel::new();
 
         let mut path = Path::new("/etc/layout.json");
@@ -65,122 +64,87 @@ impl<'fr> Subsystem<'fr> for CApriltagsDetector {
             .build()
             .unwrap();
 
-        Ok(Self {
-            det,
-            layout,
-            model,
-            capriltags: cam_man.capriltags.clone(),
-        })
+        Ok(Self { det, layout, model })
     }
-    async fn process(&mut self) -> Result<Self::Output, Self::Error> {
-        let mut capriltags = self.capriltags.clone();
-        for mut buf in capriltags {
-            tokio::task::spawn_local(async move {
-                let model = CalibratedModel::new();
+    fn process(&mut self, frame: gstreamer::Buffer) -> Result<Self::Output, Self::Error> {
+        let img = GrayImage::from_vec(1280, 720, frame.map_readable().unwrap().to_vec()).unwrap();
+        let img = Image::from_image_buffer(&img);
+        let dets = self.det.detect(&img);
 
-                let mut path = Path::new("/etc/layout.json");
-                if !path.exists() {
-                    path = Path::new("./layout.json");
-                }
+        let poses: Vec<_> = dets
+            .iter()
+            .filter_map(|det| {
+                // Extract camera calibration values from the [CalibratedModel]
+                let OpenCVModel5 { fx, fy, cx, cy, .. } =
+                    if let GenericModel::OpenCVModel5(model) = self.model.inner_model() {
+                        model
+                    } else {
+                        panic!("camera model type not supported yet");
+                    };
 
-                let layout = AprilTagFieldLayout::load(path);
-                let mut det = Detector::builder()
-                    .add_family_bits(Family::tag_36h11(), 3)
-                    .build()
+                // Estimate tag pose with the camera calibration values
+                let pose = det
+                    .estimate_tag_pose(&TagParams {
+                        fx,
+                        fy,
+                        cx,
+                        cy,
+                        tagsize: TAG_SIZE,
+                    })
                     .unwrap();
 
-                loop {
-                    let mut changed = buf.has_changed();
-                    while changed.is_err() || !changed.unwrap() {
-                        changed = buf.has_changed();
-                    }
-                    let buf = buf.borrow_and_update().clone().unwrap();
-                    println!("{}", buf.len());
+                // Extract the camera's translation and rotation matrices from the [Pose]
+                let cam_translation = pose.translation().data().to_vec();
+                let cam_rotation = pose.rotation().data().to_vec();
 
-                    let img = GrayImage::from_vec(1280, 720, buf).unwrap();
-                    img.save("out.png").unwrap();
-                    let img = Image::from_image_buffer(&img);
-                    let dets = det.detect(&img);
+                // Convert the camera's translation and rotation matrices into proper Rust datatypes
+                let cam_translation =
+                    Translation::new(cam_translation[0], cam_translation[1], cam_translation[2]);
+                let cam_rotation = Rotation::from_matrix(&Matrix::from_vec(cam_rotation));
 
-                    let poses: Vec<_> = dets
-                        .iter()
-                        .filter_map(|det| {
-                            // Extract camera calibration values from the [CalibratedModel]
-                            let OpenCVModel5 { fx, fy, cx, cy, .. } =
-                                if let GenericModel::OpenCVModel5(model) = model.inner_model() {
-                                    model
-                                } else {
-                                    panic!("camera model type not supported yet");
-                                };
-
-                            // Estimate tag pose with the camera calibration values
-                            let pose = det
-                                .estimate_tag_pose(&TagParams {
-                                    fx,
-                                    fy,
-                                    cx,
-                                    cy,
-                                    tagsize: TAG_SIZE,
-                                })
-                                .unwrap();
-
-                            // Extract the camera's translation and rotation matrices from the [Pose]
-                            let cam_translation = pose.translation().data().to_vec();
-                            let cam_rotation = pose.rotation().data().to_vec();
-
-                            // Convert the camera's translation and rotation matrices into proper Rust datatypes
-                            let cam_translation = Translation::new(
-                                cam_translation[0],
-                                cam_translation[1],
-                                cam_translation[2],
-                            );
-                            let cam_rotation =
-                                Rotation::from_matrix(&Matrix::from_vec(cam_rotation));
-
-                            // Try to get the tag's pose from the field layout
-                            if let Some((tag_translation, tag_rotation)) =
-                                layout.get(&(det.id() as u64))
-                            {
-                                let translation = tag_translation * cam_translation;
-                                let rotation = tag_rotation * cam_rotation;
-                                return Some((translation, rotation, det.decision_margin() as f64));
-                            }
-
-                            None
-                        })
-                        .collect();
-
-                    let mut avg_translation = Translation::new(0.0f64, 0.0, 0.0);
-                    let mut avg_rotation = Quaternion::new(0.0f64, 0.0, 0.0, 0.0);
-
-                    for pose in poses.iter() {
-                        avg_translation.x += pose.0.x;
-                        avg_translation.y += pose.0.y;
-                        avg_translation.z += pose.0.z;
-
-                        avg_rotation.w += pose.1.w;
-                        avg_rotation.i += pose.1.i;
-                        avg_rotation.j += pose.1.j;
-                        avg_rotation.k += pose.1.k;
-                    }
-
-                    avg_translation.x /= poses.len() as f64;
-                    avg_translation.x /= poses.len() as f64;
-                    avg_translation.x /= poses.len() as f64;
-
-                    avg_rotation.w /= poses.len() as f64;
-                    avg_rotation.i /= poses.len() as f64;
-                    avg_rotation.j /= poses.len() as f64;
-                    avg_rotation.k /= poses.len() as f64;
-
-                    dbg!((
-                        avg_translation.vector.data.as_slice().to_vec(),
-                        avg_rotation.vector().data.into_slice().to_vec(),
-                    ));
+                // Try to get the tag's pose from the field layout
+                if let Some((tag_translation, tag_rotation)) = self.layout.get(&(det.id() as u64)) {
+                    let translation = tag_translation * cam_translation;
+                    let rotation = tag_rotation * cam_rotation;
+                    return Some((translation, rotation, det.decision_margin() as f64));
                 }
-            });
+
+                None
+            })
+            .collect();
+
+        if poses.len() > 0 {
+            let mut avg_translation = Translation::new(0.0f64, 0.0, 0.0);
+            let mut avg_rotation = Quaternion::new(0.0f64, 0.0, 0.0, 0.0);
+
+            for pose in poses.iter() {
+                avg_translation.x += pose.0.x;
+                avg_translation.y += pose.0.y;
+                avg_translation.z += pose.0.z;
+
+                avg_rotation.w += pose.1.w;
+                avg_rotation.i += pose.1.i;
+                avg_rotation.j += pose.1.j;
+                avg_rotation.k += pose.1.k;
+            }
+
+            avg_translation.x /= poses.len() as f64;
+            avg_translation.x /= poses.len() as f64;
+            avg_translation.x /= poses.len() as f64;
+
+            avg_rotation.w /= poses.len() as f64;
+            avg_rotation.i /= poses.len() as f64;
+            avg_rotation.j /= poses.len() as f64;
+            avg_rotation.k /= poses.len() as f64;
+
+            dbg!((
+                avg_translation.vector.data.as_slice().to_vec(),
+                avg_rotation.vector().data.into_slice().to_vec(),
+            ));
+            Ok(Some((Vec::new(), Vec::new())))
+        } else {
+            Ok(None)
         }
-        Ok((Vec::new(), Vec::new()))
     }
 }
 

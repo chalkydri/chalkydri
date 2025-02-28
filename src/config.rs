@@ -30,6 +30,7 @@ def_cfg! {
         rerun: Option<Rerun>,
         cameras: Vec<Camera>,
         subsystems: Subsystems,
+        device_name: Option<String>,
     }
     Rerun {
         server_address: Option<String>,

@@ -1,10 +1,11 @@
 use std::{fmt::Debug, sync::Arc};
 
+use gstreamer::{Buffer, BufferRef, SampleRef};
 use tokio::sync::{broadcast, watch};
 
-use crate::cameras::CameraManager;
+use crate::{cameras::CameraManager, config};
 
-pub type Buffer = Arc<Vec<u8>>;
+//pub type Buffer = Arc<Vec<u8>>;
 
 /// A processing subsystem
 ///
@@ -21,9 +22,9 @@ pub trait Subsystem<'fr>: Sized {
     type Error: Debug + Send + 'static;
 
     /// Initialize the subsystem
-    async fn init(cam_man: &CameraManager) -> Result<Self, Self::Error>;
+    fn init(cam_config: &config::Camera) -> Result<Self, Self::Error>;
     /// Process a frame
-    async fn process(&mut self) -> Result<Self::Output, Self::Error>;
+    fn process(&mut self, frame: Buffer) -> Result<Self::Output, Self::Error>;
 }
 
 pub struct SubsysHandle<T: Sized> {
