@@ -4,7 +4,6 @@ use aprilgrid::{
     TagFamily,
     detector::{DetectorParams, TagDetector},
 };
-use image::{ColorType, GrayImage, DynamicImage};
 use camera_intrinsic_calibration::{
     board::{Board, create_default_6x6_board},
     detected_points::{FeaturePoint, FrameFeature},
@@ -13,7 +12,8 @@ use camera_intrinsic_calibration::{
     util::*,
     visualization::*,
 };
-use camera_intrinsic_model::{self as model, CameraModel, GenericModel, OpenCVModel5};
+use camera_intrinsic_model::{self as model, model_to_json, CameraModel, GenericModel, OpenCVModel5};
+use image::{ColorType, DynamicImage, GrayImage};
 
 use gstreamer::Buffer;
 use model::model_from_json;
@@ -70,14 +70,17 @@ impl Calibrator {
             while frame_feat.is_none() {
                 if rx.has_changed().is_ok() && rx.has_changed().unwrap() {
                     let val = rx.borrow_and_update().clone();
-                    let img = DynamicImage::ImageRgb8(DynamicImage::ImageLuma8(
-                        GrayImage::from_vec(
-                            1280,
-                            720,
-                            val.unwrap().into_mapped_buffer_readable().unwrap().to_vec(),
+                    let img = DynamicImage::ImageRgb8(
+                        DynamicImage::ImageLuma8(
+                            GrayImage::from_vec(
+                                1280,
+                                720,
+                                val.unwrap().into_mapped_buffer_readable().unwrap().to_vec(),
+                            )
+                            .unwrap(),
                         )
-                        .unwrap(),
-                    ).to_rgb8());
+                        .to_rgb8(),
+                    );
 
                     frame_feat =
                         camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(
@@ -141,6 +144,8 @@ impl Calibrator {
 
         if calib_res.is_none() {
             error!("failed to calibrate camera");
+        } else {
+            model_to_json("cam0.json", &calib_res.unwrap().0);
         }
 
         self.frame_feats.clear();
