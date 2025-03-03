@@ -1,5 +1,5 @@
-use crate::error::Error;
-use std::{fs::File, io::Read, path::Path};
+use crate::{error::Error, subsys::capriltags::AprilTagFieldLayout};
+use std::{collections::HashMap, fs::File, io::Read, path::Path};
 
 macro_rules! def_cfg {
     ($(
@@ -11,7 +11,7 @@ macro_rules! def_cfg {
         }
     )*) => {
        $(
-           #[derive(Deserialize, Serialize, Clone)]
+           #[derive(Deserialize, Serialize, Debug, Clone)]
            #[cfg_attr(feature = "web", derive(utopia::ToSchema))]
            pub struct $struct_ident {
                $(
@@ -29,7 +29,6 @@ def_cfg! {
         ntables_ip: Option<String>,
         rerun: Option<Rerun>,
         cameras: Vec<Camera>,
-        subsystems: Subsystems,
         device_name: Option<String>,
     }
     Rerun {
@@ -41,6 +40,7 @@ def_cfg! {
         settings: Option<CameraSettings>,
         #[serde(skip_deserializing)]
         possible_settings: Option<Vec<CameraSettings>>,
+        subsystems: Subsystems,
     }
     CameraSettings {
         width: u32,
@@ -59,6 +59,8 @@ def_cfg! {
     CAprilTagsSubsys {
         enabled: bool,
         gamma: Option<f64>,
+        field_layout: Option<String>,
+        field_layouts: HashMap<String, AprilTagFieldLayout>,
     }
     MlSubsys {
         enabled: bool,

@@ -12,7 +12,9 @@ use camera_intrinsic_calibration::{
     util::*,
     visualization::*,
 };
-use camera_intrinsic_model::{self as model, model_to_json, CameraModel, GenericModel, OpenCVModel5};
+use camera_intrinsic_model::{
+    self as model, CameraModel, GenericModel, OpenCVModel5, model_to_json,
+};
 use image::{ColorType, DynamicImage, GrayImage};
 
 use gstreamer::Buffer;

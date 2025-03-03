@@ -11,17 +11,20 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
-		"lint": "prettier --check ."
+		"lint": "prettier --check .",
+		"gen_api": "openapi-ts -i openapi.json -o src/lib/api -c @hey-api/client-fetch"
 	},
 	"dependencies": {
+		"@hey-api/client-fetch": "^0.8.2",
 		"flowbite": "^3.1.2",
 		"flowbite-svelte": "^0.47.4",
 		"flowbite-svelte-icons": "^2.0.2",
 		"lucide-svelte": "^0.477.0"
 	},
 	"devDependencies": {
-		"@sveltejs/kit": "^2.16.0",
+		"@hey-api/openapi-ts": "^0.64.8",
 		"@sveltejs/adapter-static": "^3.0.8",
+		"@sveltejs/kit": "^2.16.0",
 		"@sveltejs/vite-plugin-svelte": "^5.0.0",
 		"@tailwindcss/vite": "^4.0.0",
 		"prettier": "^3.4.2",

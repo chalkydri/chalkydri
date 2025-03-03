@@ -3,17 +3,18 @@
  * PLES SEND HELP
  */
 
+use futures_executor::LocalPool;
 use futures_util::StreamExt;
 use gstreamer::{
-    Buffer, BufferRef, BusSyncReply, Caps, DeviceMonitor, Element, ElementFactory, FlowSuccess,
-    Fraction, MessageView, PadTemplate, Pipeline, Sample, SampleRef, State, Stream,
+    Bin, Buffer, BusSyncReply, Caps, DeviceMonitor, Element, ElementFactory, FlowSuccess, Fraction,
+    MessageView, Pipeline, Sample, SampleRef, State, Stream,
     bus::BusWatchGuard,
     glib::{ControlFlow, MainLoop, Value, WeakRef},
     message::DeviceAdded,
     prelude::*,
 };
 
-use gstreamer_app::{AppSink, AppSinkCallbacks, app_sink::AppSinkStream};
+use gstreamer_app::{AppSink, AppSinkCallbacks};
 #[cfg(feature = "ntables")]
 use minint::NtConn;
 #[cfg(feature = "rerun")]
@@ -30,9 +31,9 @@ use crate::Rerun;
 use crate::{
     Cfg,
     calibration::Calibrator,
-    config::{self, CameraSettings, CfgFraction},
+    config::{self, CAprilTagsSubsys, CameraSettings, CfgFraction},
     subsys::capriltags::CApriltagsDetector,
-    subsystem::Subsystem,
+    subsystem::{SubsysCtx, Subsystem},
 };
 
 #[derive(Clone)]
@@ -45,13 +46,11 @@ pub struct CameraCtx {
 pub struct CameraManager {
     dev_mon: DeviceMonitor,
     pipeline: Pipeline,
-    pub main_loop: MainLoop,
     calibrator: Arc<Mutex<Calibrator>>,
-
-    pub capriltags: watch::Receiver<Option<Buffer>>,
 }
 impl CameraManager {
     pub async fn new(#[cfg(feature = "ntables")] nt: NtConn) -> Self {
+        // Make sure gstreamer is initialized
         gstreamer::assert_initialized();
 
         // Get a copy of the global configuration
@@ -62,23 +61,25 @@ impl CameraManager {
             ret
         };
 
+        // Create a device monitor to watch for new devices
         let dev_mon = DeviceMonitor::new();
         let caps = Caps::builder("video/x-raw").any_features().build();
         dev_mon
             .add_filter(Some("Video/Source"), Some(&caps))
             .unwrap();
 
+        // Create the pipeline
         let pipeline = Pipeline::new();
 
-        let main_loop = MainLoop::new(None, false);
-
-        let extra_thing_for_calib = Arc::new(Mutex::new(None));
-
-        let pipeline_ = pipeline.downgrade();
         let bus = dev_mon.bus();
-        let extra_thing_for_calib_ = extra_thing_for_calib.clone();
+
+        // Create weak ref to pipeline we can give away
+        let pipeline_ = pipeline.downgrade();
+
         bus.set_sync_handler(move |_, msg| {
+            // Upgrade the weak ref to work with the pipeline
             let pipeline = pipeline_.upgrade().unwrap();
+
             match msg.view() {
                 MessageView::DeviceAdded(msg) => {
                     let dev = msg.device();
@@ -93,7 +94,13 @@ impl CameraManager {
                     {
                         debug!("found a config");
 
+                        // Create the camera source
                         let cam = dev.create_element(Some(dev.name().as_str())).unwrap();
+
+                        // The camera preprocessing part:
+                        //   [src]> capsfilter -> queue -> tee -> ...
+
+                        // Create the elements
                         let filter = ElementFactory::make("capsfilter")
                             .property("caps", &dev.caps().unwrap())
                             .build()
@@ -101,114 +108,24 @@ impl CameraManager {
                         let queue = ElementFactory::make("queue").build().unwrap();
                         let tee = ElementFactory::make("tee").build().unwrap();
 
+                        // Add them to the pipeline
                         pipeline.add_many([&cam, &filter, &queue, &tee]).unwrap();
-                        cam.link(&filter).unwrap();
-                        filter.link(&queue).unwrap();
-                        queue.link(&tee).unwrap();
 
-                        let mut capriltags_rx = Self::add_subsys(&pipeline, &tee, |pipeline| {
-                            let gamma = ElementFactory::make("gamma")
-                                .property(
-                                    "gamma",
-                                    &config.subsystems.capriltags.gamma.unwrap_or(1.0),
-                                )
-                                .build()
-                                .unwrap();
-                            let videoconvertscale =
-                                ElementFactory::make("videoconvertscale").build().unwrap();
-                            let filter = ElementFactory::make("capsfilter")
-                                .property(
-                                    "caps",
-                                    &Caps::builder("video/x-raw")
-                                        .field("width", &1280)
-                                        .field("height", &720)
-                                        .field("format", "GRAY8")
-                                        .build(),
-                                )
-                                .build()
-                                .unwrap();
-                            pipeline
-                                .add_many([&gamma, &videoconvertscale, &filter])
-                                .unwrap();
-
-                            gamma.link(&videoconvertscale).unwrap();
-                            videoconvertscale.link(&filter).unwrap();
-                            (gamma, filter)
-                        });
-
-                        *extra_thing_for_calib_.blocking_lock() = Some(capriltags_rx.clone());
+                        // Link them
+                        Element::link_many([&cam, &filter, &queue, &tee]).unwrap();
 
                         let cam_config_ = cam_config.clone();
 
+                        // Copy the NT conn to give away
                         #[cfg(feature = "ntables")]
                         let nt_ = nt.clone();
-                        std::thread::spawn(move || {
-                            use futures_executor::LocalPool;
 
-                        #[cfg(feature = "ntables")]
-                            let nt = nt_;
-
-                            let mut local = LocalPool::new();
-
-                            local.run_until(async move {
-                                #[cfg(feature = "ntables")]
-                                let mut translation = nt
-                                    .publish::<Vec<f64>>(&format!(
-                                        "/chalkydri/robot_pose/translation"
-                                    ))
-                                    .await
-                                    .unwrap();
-                                #[cfg(feature = "ntables")]
-                                let mut rotation = nt
-                                    .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
-                                    .await
-                                    .unwrap();
-                                #[cfg(feature = "ntables")]
-                                let mut delay = nt
-                                    .publish::<f64>(&format!("/chalkydri/robot_pose/delay"))
-                                    .await
-                                    .unwrap();
-                                #[cfg(feature = "ntables")]
-                                let mut tag_detected = nt
-                                    .publish::<bool>("/chalkydri/robot_pose/tag_detected")
-                                    .await
-                                    .unwrap();
-
-                                let mut capriltags =
-                                    CApriltagsDetector::init(&cam_config_).unwrap();
-
-                                loop {
-                                    let changed = capriltags_rx.has_changed();
-                                    if changed.is_ok() && changed.unwrap() {
-                                        match capriltags_rx.borrow_and_update().clone() {
-                                            Some(frame) => {
-                                                info!("got frame");
-
-                                                let proc_st_time = Instant::now();
-
-                                                if let Some((t, r)) = capriltags.process(frame).unwrap() {
-                                                    #[cfg(feature = "ntables")]
-                                                    {
-                                                        translation.set(t).await;
-                                                        rotation.set(r).await;
-                                                        tag_detected.set(true).await;
-                                                        delay.set(proc_st_time.elapsed().as_millis_f64()).await;
-                                                    }
-                                                } else {
-                                                    #[cfg(feature = "ntables")]
-                                                    if let Err(err) = tag_detected.set(false).await {
-                                                        error!("error communicating that we could'nt detect a tag somethign really bad: {err:?}");
-                                                    }
-                                                }
-                                            }
-                                            None => {
-                                                warn!("waiting on first frame...");
-                                            }
-                                        }
-                                    }
-                                }
-                            });
-                        });
+                        Self::add_subsys::<CApriltagsDetector>(
+                            &pipeline,
+                            &tee,
+                            cam_config.clone(),
+                            nt.clone(),
+                        );
                     }
                 }
                 _ => {}
@@ -216,26 +133,24 @@ impl CameraManager {
 
             BusSyncReply::Pass
         });
+
+        // Start the device monitor
         dev_mon.start().unwrap();
 
+        // Start the pipeline
         pipeline.set_state(State::Playing).unwrap();
 
+        // Get the pipeline's bus
         let bus = pipeline.bus().unwrap();
-        bus.set_sync_handler(|_, msg| {
-            dbg!(msg);
-
-            BusSyncReply::Pass
-        });
+        // Hook up event handler for the pipeline
+        bus.set_sync_handler(|_, _| BusSyncReply::Pass);
 
         let calibrator = Arc::new(Mutex::new(Calibrator::new()));
 
         Self {
             dev_mon,
             pipeline,
-            main_loop,
             calibrator,
-
-            capriltags: extra_thing_for_calib.lock().await.clone().unwrap(),
         }
     }
     pub fn devices(&self) -> Vec<config::Camera> {
@@ -283,28 +198,37 @@ impl CameraManager {
         devices
     }
     pub async fn calib_step(&self) -> usize {
-        self.calibrator().await.step(self.capriltags.clone())
+        //self.calibrator().await.step(self.capriltags.clone())
+        0
     }
     // gamma gamma=2.0 ! fpsdisplaysink ! videorate drop-only=true ! omxh264enc ! mpegtsenc !
     // rtspserversink port=1234
 
-    pub fn add_subsys(
+    pub(crate) fn add_subsys<S: Subsystem>(
         pipeline: &Pipeline,
         cam: &Element,
-        func: impl Fn(&Pipeline) -> (Element, Element),
-    ) -> watch::Receiver<Option<Buffer>> {
-        let (input, output) = func(pipeline);
+        cam_config: config::Camera,
+        nt: NtConn,
+    ) -> SubsysCtx {
+        let target = format!("chalkydri::subsys::{}", S::NAME);
 
-        cam.link(&input).unwrap();
+        debug!(target: &target, "initializing preproc pipeline chunk subsystem...");
+        let (input, output) = S::preproc(config.clone(), pipeline).unwrap();
 
         let appsink = ElementFactory::make("appsink").build().unwrap();
         pipeline.add(&appsink).unwrap();
+
+        debug!(target: &target, "linking preproc pipeline chunk...");
+        cam.link(&input).unwrap();
         output.link(&appsink).unwrap();
+
         let appsink = appsink.dynamic_cast::<AppSink>().unwrap();
 
         let (tx, rx) = watch::channel(None);
 
         let appsink_ = appsink.clone();
+
+        debug!(target: &target, "setting appsink callbacks...");
         appsink.set_callbacks(
             AppSinkCallbacks::builder()
                 .new_sample(move |_| {
@@ -316,11 +240,23 @@ impl CameraManager {
                 })
                 .build(),
         );
-        appsink.sync_state_with_parent().unwrap();
 
         debug!("linked subsys junk");
 
-        rx
+        let nt_ = nt.clone();
+        let config = config.clone();
+        let cam_config = cam_config.clone();
+        std::thread::spawn(move || {
+            let nt = nt_;
+            let mut local = LocalPool::new();
+
+            local.run_until(async move {
+                let mut subsys = S::init(cam_config, config).await.unwrap();
+                subsys.process(nt, rx).await.unwrap();
+            });
+        });
+
+        SubsysCtx {}
     }
 
     pub fn load_camera(&mut self, width: u32, height: u32) -> Result<(), Box<dyn Error>> {
@@ -433,8 +369,6 @@ impl CameraManager {
         Ok(())
     }
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        let main_loop = self.main_loop.clone();
-
         // Define the event loop or something?
         self.pipeline
             .bus()
@@ -447,13 +381,9 @@ impl CameraManager {
                         err.error()
                     );
                     debug!("{:?}", err.debug());
-
-                    // Kill event loop
-                    main_loop.quit();
                 }
                 _ => unimplemented!(),
             });
-        self.main_loop.run();
 
         Ok(())
     }

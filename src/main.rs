@@ -55,13 +55,10 @@ use re_sdk::{MemoryLimit, RecordingStream};
 use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
-use std::{error::Error, net::Ipv4Addr, path::Path, sync::Arc, time::Duration};
+use std::{error::Error, net::Ipv4Addr, path::Path, time::Duration};
 #[cfg(feature = "capriltags")]
 use subsys::capriltags::CApriltagsDetector;
-use tokio::{
-    sync::{RwLock, watch},
-    task::LocalSet,
-};
+use tokio::sync::RwLock;
 
 // mimalloc is a very good general purpose allocator
 #[global_allocator]
@@ -104,10 +101,12 @@ static Rerun: Lazy<RecordingStream> = Lazy::new(|| {
 async fn main() -> Result<(), Box<dyn Error>> {
     Logger::new().with_path_prefix("logs/handler").init()?;
 
+    info!("starting up...");
+
     gstreamer::init().unwrap();
+    debug!("initialized gstreamer");
 
-    info!("Chalkydri starting up...");
-
+    // Come up with an IP address for the roboRIO based on the team number or specified IP
     let roborio_ip = {
         let Config {
             ntables_ip,
@@ -124,8 +123,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
             })
             .unwrap_or_else(|| gen_team_ip(*team_number).expect("failed to generate team ip"))
     };
-    // Generate a random device id
-    let dev_id = fastrand::u32(..);
+
+    // Get the device's name or generate one if not set
+    let dev_name = if let Some(dev_name) = (*Cfg.read().await).device_name.clone() {
+        dev_name
+    } else {
+        warn!("device name not set! generating one...");
+
+        // Generate & save it
+        let dev_name = format!("chalkydri{}", fastrand::u32(..));
+        (*Cfg.write().await).device_name = Some(dev_name.clone());
+
+        dev_name
+    };
 
     // Attempt to connect to the NT server, retrying until successful
 
@@ -137,7 +147,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     #[cfg(feature = "ntables")]
     loop {
-        match NtConn::new(roborio_ip, format!("chalkydri{dev_id}")).await {
+        match NtConn::new(roborio_ip, dev_name.clone()).await {
             Ok(conn) => {
                 nt = conn;
                 break;
@@ -154,7 +164,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Connected to NT server at {roborio_ip:?} successfully!");
 
-    let mut cam_man = CameraManager::new(#[cfg(feature = "ntables")] nt.clone()).await;
+    let cam_man = CameraManager::new(
+        #[cfg(feature = "ntables")]
+        nt.clone(),
+    )
+    .await;
     let api = tokio::spawn(run_api(cam_man.clone()));
 
     let cam_man_ = cam_man.clone();
