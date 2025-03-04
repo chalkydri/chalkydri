@@ -83,8 +83,8 @@ opt-level = 3
 # TODO: do that testing
 opt-level = 3
 # Link Time Optimization
-lto = true
+#lto = true
 # Strip extra symbols (used for debugging and such)
-strip = true
+#strip = true
 # Code generation-- only 1 worker generates more optimized code in theory
-codegen-units = 1
+#codegen-units = 1
