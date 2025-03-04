@@ -41,7 +41,7 @@ struct ApiDoc;
 struct Assets;
 
 fn handle_embedded_file(path: &str) -> HttpResponse {
-    match Assets::get(path) {
+    match <Assets as Embed>::get(path) {
         Some(content) => HttpResponse::Ok()
             .content_type(from_path(path).first_or_octet_stream().as_ref())
             .body(content.data.into_owned()),
