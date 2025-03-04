@@ -2,6 +2,7 @@
 	import {
 		Button,
 		Card,
+		Fileupload,
 		Input,
 		Label,
 		MultiSelect,
@@ -63,6 +64,11 @@
 			}
 		}
 	}
+
+	let field_layout_files: FileList | undefined = $state();
+	async function add_field_layouts() {
+		console.log("bs");
+	}
 </script>
 
 {#if config}
@@ -110,6 +116,7 @@
 								>
 		{#if camera.subsystems.capriltags.enabled}
 			<Select bind:value={camera.subsystems.capriltags.field_layout} />
+			<Fileupload on:input={add_field_layouts} bind:files={field_layout_files} />
 		{/if}
 							</Card>
 							<!--

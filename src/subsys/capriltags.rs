@@ -108,7 +108,12 @@ impl Subsystem for CApriltagsDetector {
             .build()
             .unwrap();
 
-        Ok(Self { model, layout, det, name: cam_config.name })
+        Ok(Self {
+            model,
+            layout,
+            det,
+            name: cam_config.name,
+        })
     }
     async fn process(
         &mut self,
@@ -140,11 +145,12 @@ impl Subsystem for CApriltagsDetector {
             let proc_st_time = Instant::now();
 
             debug!("loading image...");
-            let img = GrayImage::from_vec(1280, 720, frame.map_readable().unwrap().to_vec()).unwrap();
-                
+            let img =
+                GrayImage::from_vec(1280, 720, frame.map_readable().unwrap().to_vec()).unwrap();
+
             debug!("loading the image more...");
             let img = Image::from_image_buffer(&img.clone());
-            
+
             let dets = self.det.detect(&img);
 
             let poses: Vec<_> = dets
@@ -180,6 +186,11 @@ impl Subsystem for CApriltagsDetector {
                         cam_translation[2],
                     );
                     let cam_rotation = Rotation::from_matrix(&Matrix::from_vec(cam_rotation));
+
+                    debug!(
+                        "detected tag id {}: tl={cam_translation} ro={cam_rotation}",
+                        det.id()
+                    );
 
                     // Try to get the tag's pose from the field layout
                     if let Some((tag_translation, tag_rotation)) =
@@ -233,7 +244,7 @@ impl Subsystem for CApriltagsDetector {
             }
         })
         .await;
-    debug!("loop done?");
+        debug!("loop done?");
 
         Ok(())
     }

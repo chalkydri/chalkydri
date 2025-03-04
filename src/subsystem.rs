@@ -1,6 +1,6 @@
 use std::{fmt::Debug, sync::Arc};
 
-use gstreamer::{glib::WeakRef, Buffer, BufferRef, Element, Pipeline, SampleRef};
+use gstreamer::{Buffer, BufferRef, Element, Pipeline, SampleRef, glib::WeakRef};
 use gstreamer_app::AppSink;
 use minint::NtConn;
 use tokio::{

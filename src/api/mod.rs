@@ -167,11 +167,33 @@ pub(super) async fn configure(
     ),
 )]
 #[get("/api/calibrate/{cam_name}/intrinsics")]
-pub(super) async fn calibration_intrinsics(path: web::Path<String>, data: web::Data<CameraManager>) -> impl Responder {
+pub(super) async fn calibration_intrinsics(
+    path: web::Path<String>,
+    data: web::Data<CameraManager>,
+) -> impl Responder {
     let cam_name = path.to_string();
 
     let cam_man = data.get_ref();
-    cam_man.calibrators().await.get_mut(&cam_name).unwrap().calibrate();
+    let calibrated_model = cam_man
+        .calibrators()
+        .await
+        .get_mut(&cam_name)
+        .unwrap()
+        .calibrate()
+        .unwrap();
+    {
+        let json = serde_json::to_value(calibrated_model).unwrap();
+        let cfgg = &mut (*Cfg.write().await);
+        if let Some(cams) = &mut cfgg.cameras {
+            (*cams)
+                .iter_mut()
+                .filter(|cam| cam.name == cam_name)
+                .next()
+                .unwrap()
+                .calib = Some(json);
+        }
+        drop(cfgg);
+    }
 
     HttpResponse::new(StatusCode::OK)
 }
@@ -207,7 +229,10 @@ pub(super) async fn calibration_status(data: web::Data<CameraManager>) -> impl R
     ),
 )]
 #[get("/api/calibrate/{cam_name}/step")]
-pub(super) async fn calibration_step(path: web::Path<String>, data: web::Data<CameraManager>) -> impl Responder {
+pub(super) async fn calibration_step(
+    path: web::Path<String>,
+    data: web::Data<CameraManager>,
+) -> impl Responder {
     let cam_name = path.to_string();
 
     let cam_man = data.get_ref();

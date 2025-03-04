@@ -18,7 +18,11 @@ use camera_intrinsic_model::{
 use gstreamer_app::AppSink;
 use image::{ColorType, DynamicImage, GrayImage, RgbImage};
 
-use gstreamer::{glib::{object::ObjectExt, WeakRef}, prelude::{ElementExt, ElementExtManual}, Buffer, Element, State};
+use gstreamer::{
+    Buffer, Element, State,
+    glib::{WeakRef, object::ObjectExt},
+    prelude::{ElementExt, ElementExtManual},
+};
 use model::model_from_json;
 use tokio::{sync::watch, time::Instant};
 
@@ -54,7 +58,7 @@ pub struct Calibrator {
     frame_feats: Vec<FrameFeature>,
     cam_model: GenericModel<f64>,
     start: Instant,
-rx: watch::Receiver<Option<Buffer>>,
+    rx: watch::Receiver<Option<Buffer>>,
 }
 impl Calibrator {
     /// Initialize a new calibrator
@@ -72,9 +76,8 @@ impl Calibrator {
 
     /// Process a frame
     pub fn step(&mut self) -> usize {
-
-        //let valve = self.valve.upgrade().unwrap();
-        //valve.set_property("drop", false);
+        let valve = self.valve.upgrade().unwrap();
+        valve.set_property("drop", false);
 
         if self.frame_feats.len() < 200 {
             let mut frame_feat = None;
@@ -84,12 +87,12 @@ impl Calibrator {
                     debug!("got frame");
                     //valve.set_property("drop", true);
                     let img = DynamicImage::ImageRgb8(
-                            RgbImage::from_vec(
-                                1280,
-                                720,
-                                val.unwrap().into_mapped_buffer_readable().unwrap().to_vec(),
-                            )
-                            .unwrap(),
+                        RgbImage::from_vec(
+                            1280,
+                            720,
+                            val.unwrap().into_mapped_buffer_readable().unwrap().to_vec(),
+                        )
+                        .unwrap(),
                     );
 
                     frame_feat =
@@ -109,29 +112,12 @@ impl Calibrator {
         self.frame_feats.len()
     }
 
-    /// Collect data on some frames
-    //pub fn collect_data(&mut self, mut rx: watch::Receiver<Arc<Vec<u8>>>) {
-    //    self.frame_feats.clear();
-
-    //    let st = Instant::now();
-    //    while self.frame_feats.len() < 200 {
-    //        if rx.has_changed().is_ok() && rx.has_changed().unwrap() {
-    //            if let Some(frame_feat) = self.step(
-    //                ,
-    //                st.elapsed().as_nanos().try_into().unwrap(),
-    //            ) {
-    //                self.frame_feats.push(frame_feat);
-    //            }
-    //        }
-    //    }
-    //}
-
     /// Calibrate
-    pub fn calibrate(&mut self) {
+    pub fn calibrate(&mut self) -> Option<GenericModel<f64>> {
         let mut calib_res = None;
 
-        //let valve = self.valve.upgrade().unwrap();
-        //valve.set_property("drop", true);
+        let valve = self.valve.upgrade().unwrap();
+        valve.set_property("drop", true);
 
         for i in 0..5 {
             calib_res = init_and_calibrate_one_camera(
@@ -155,12 +141,13 @@ impl Calibrator {
             }
         }
 
+        self.frame_feats.clear();
+
         if calib_res.is_none() {
             error!("failed to calibrate camera");
+            None
         } else {
-            model_to_json("cam0.json", &calib_res.unwrap().0);
+            Some(calib_res.unwrap().0)
         }
-
-        self.frame_feats.clear();
     }
 }

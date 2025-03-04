@@ -6,7 +6,12 @@
 use futures_executor::LocalPool;
 use futures_util::StreamExt;
 use gstreamer::{
-    bus::BusWatchGuard, glib::{future_with_timeout, ControlFlow, MainLoop, Type, Value, WeakRef}, message::DeviceAdded, prelude::*, Bin, Buffer, BusSyncReply, Caps, DeviceMonitor, Element, ElementFactory, FlowSuccess, Fraction, MessageView, Pipeline, Sample, SampleRef, State, Stream, Structure
+    Bin, Buffer, BusSyncReply, Caps, DeviceMonitor, Element, ElementFactory, FlowSuccess, Fraction,
+    MessageView, Pipeline, Sample, SampleRef, State, Stream, Structure,
+    bus::BusWatchGuard,
+    glib::{ControlFlow, MainLoop, Type, Value, WeakRef, future_with_timeout},
+    message::DeviceAdded,
+    prelude::*,
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
@@ -71,7 +76,8 @@ impl CameraManager {
         // Create weak ref to pipeline we can give away
         let pipeline_ = pipeline.downgrade();
 
-        let calibrators: Arc<Mutex<HashMap<String, Calibrator>>> = Arc::new(Mutex::new(HashMap::new()));
+        let calibrators: Arc<Mutex<HashMap<String, Calibrator>>> =
+            Arc::new(Mutex::new(HashMap::new()));
 
         let calibrators_ = calibrators.clone();
         bus.set_sync_handler(move |_, msg| {
@@ -116,14 +122,14 @@ impl CameraManager {
 
                             debug!("initializing calibrator");
                             let calibrator = Self::add_calib(&pipeline, &tee, cam_config.clone());
-                            
-                             {
-                                 debug!("adding calibrator");
-                                 let mut calibrators = calibrators.blocking_lock();
-                                 (*calibrators).insert(cam_config.name.clone(), calibrator);
-                                 drop(calibrators);
-                                 debug!("dropped lock");
-                             }
+
+                            {
+                                debug!("adding calibrator");
+                                let mut calibrators = calibrators.blocking_lock();
+                                (*calibrators).insert(cam_config.name.clone(), calibrator);
+                                drop(calibrators);
+                                debug!("dropped lock");
+                            }
 
                             Self::add_subsys::<CApriltagsDetector>(
                                 &pipeline,
@@ -167,7 +173,10 @@ impl CameraManager {
         for dev in self.dev_mon.devices().iter() {
             let mut name = dev.name().to_string();
             if dev.has_property("properties", Some(Type::PARAM_SPEC)) {
-                name = dev.property::<Structure>("properties").get::<String>("node.name").unwrap();
+                name = dev
+                    .property::<Structure>("properties")
+                    .get::<String>("node.name")
+                    .unwrap();
             }
             devices.push(config::Camera {
                 name,
@@ -202,6 +211,7 @@ impl CameraManager {
                     },
                     ml: config::MlSubsys { enabled: false },
                 },
+                calib: None,
             });
         }
 
@@ -279,7 +289,10 @@ impl CameraManager {
     ) -> Calibrator {
         let target = format!("chalkydri::camera::{}", cam_config.name);
 
-        let valve = ElementFactory::make("valve").property("drop", false).build().unwrap();
+        let valve = ElementFactory::make("valve")
+            .property("drop", false)
+            .build()
+            .unwrap();
         let queue = ElementFactory::make("queue").build().unwrap();
         let videoconvertscale = ElementFactory::make("videoconvertscale").build().unwrap();
         let filter = ElementFactory::make("capsfilter")
@@ -295,7 +308,9 @@ impl CameraManager {
             .unwrap();
         let appsink = ElementFactory::make("appsink").build().unwrap();
 
-        pipeline.add_many([&valve, &queue, &videoconvertscale, &filter, &appsink]).unwrap();
+        pipeline
+            .add_many([&valve, &queue, &videoconvertscale, &filter, &appsink])
+            .unwrap();
         Element::link_many([&cam, &valve, &queue, &videoconvertscale, &filter, &appsink]).unwrap();
 
         let appsink = appsink.dynamic_cast::<AppSink>().unwrap();
@@ -348,6 +363,7 @@ impl CameraManager {
                 },
                 ml: config::MlSubsys { enabled: false },
             },
+            calib: None,
         };
 
         if let Some(cam_configs) = &config.cameras {

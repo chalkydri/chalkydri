@@ -55,7 +55,7 @@ use re_sdk::{MemoryLimit, RecordingStream};
 use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
-use std::{error::Error, net::Ipv4Addr, path::Path, time::Duration};
+use std::{error::Error, fs::File, io::Write, net::Ipv4Addr, path::Path, time::Duration};
 #[cfg(feature = "capriltags")]
 use subsys::capriltags::CApriltagsDetector;
 use tokio::sync::RwLock;
@@ -188,6 +188,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             _ = api => {},
             _ = tokio::signal::ctrl_c() => {
                 cam_man.stop();
+         let mut f = File::create("chalkydri.toml").unwrap();
+        let toml_cfgg = toml::to_string_pretty(&*Cfg.read().await).unwrap();
+        f.write_all(toml_cfgg.as_bytes()).unwrap();
+        f.flush().unwrap();
+
             },
         );
     }

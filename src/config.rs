@@ -41,6 +41,7 @@ def_cfg! {
         #[serde(skip_deserializing)]
         possible_settings: Option<Vec<CameraSettings>>,
         subsystems: Subsystems,
+        calib: Option<serde_json::Value>,
     }
     CameraSettings {
         width: u32,
