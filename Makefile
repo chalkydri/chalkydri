@@ -8,6 +8,7 @@ target/release/chalkydri:
 ##
 # UI
 ui/src/lib/api: ui/openapi.json
+	cd ui/ && bun install
 	cd ui/ && bun run gen_api
 
 ui/build: ui/src/lib/api
