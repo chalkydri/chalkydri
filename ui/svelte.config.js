@@ -13,15 +13,15 @@ const config = {
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		router: {
 			type: 'pathname',
-			resolution: 'client',
+			resolution: 'client'
 		},
 		adapter: adapter({
 			strict: 'build',
 			assets: 'build',
 			fallback: undefined,
 			precompress: false,
-			strict: true,
-		}),
+			strict: true
+		})
 	}
 };
 

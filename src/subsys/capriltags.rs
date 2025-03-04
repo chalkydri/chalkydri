@@ -14,7 +14,7 @@ use std::fs::File;
 use std::path::Path;
 
 use apriltag::{Detector, Family, Image, TagParams};
-use apriltag_image::image::{DynamicImage, GrayImage, RgbImage};
+use apriltag_image::image::{DynamicImage, GrayImage};
 use apriltag_image::prelude::*;
 use camera_intrinsic_model::{GenericModel, OpenCVModel5};
 use gstreamer::prelude::GstBinExtManual;
@@ -22,7 +22,7 @@ use gstreamer::{Buffer, Caps, Element};
 use gstreamer::{ElementFactory, FlowSuccess, State};
 use minint::{NtConn, NtTopic};
 use rapier3d::math::{Matrix, Rotation, Translation};
-use rapier3d::na::{Quaternion, Translation};
+use rapier3d::na::Quaternion;
 #[cfg(feature = "rerun")]
 use re_sdk::external::re_types_core;
 #[cfg(feature = "rerun")]
@@ -42,6 +42,7 @@ pub struct CApriltagsDetector {
     det: apriltag::Detector,
     layout: HashMap<u64, (Translation<f64>, Rotation<f64>)>,
     model: CalibratedModel,
+    name: String,
 }
 impl Subsystem for CApriltagsDetector {
     const NAME: &'static str = "capriltags";
@@ -51,9 +52,10 @@ impl Subsystem for CApriltagsDetector {
     type Error = Box<dyn std::error::Error + Send>;
 
     fn preproc(
-        config: Self::Config,
+        cam_config: config::Camera,
         pipeline: &gstreamer::Pipeline,
     ) -> Result<(gstreamer::Element, gstreamer::Element), Self::Error> {
+        let config = cam_config.subsystems.capriltags;
         // The AprilTag preprocessing part:
         //  tee ! gamma ! videoconvertscale ! capsfilter ! appsink
 
@@ -106,37 +108,43 @@ impl Subsystem for CApriltagsDetector {
             .build()
             .unwrap();
 
-        Ok(Self { model, layout, det })
+        Ok(Self { model, layout, det, name: cam_config.name })
     }
     async fn process(
         &mut self,
         nt: NtConn,
         rx: watch::Receiver<Option<Buffer>>,
     ) -> Result<Self::Output, Self::Error> {
+        let cam_name = self.name.clone();
+
         // Publish NT topics we'll use
         let mut translation = nt
-            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/translation"))
+            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/{cam_name}/translation"))
             .await
             .unwrap();
         let mut rotation = nt
-            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/rotation"))
+            .publish::<Vec<f64>>(&format!("/chalkydri/robot_pose/{cam_name}/rotation"))
             .await
             .unwrap();
         let mut delay = nt
-            .publish::<f64>(&format!("/chalkydri/robot_pose/delay"))
+            .publish::<f64>(&format!("/chalkydri/robot_pose/{cam_name}/delay"))
             .await
             .unwrap();
         let mut tag_detected = nt
-            .publish::<bool>(&format!("/chalkydri/robot_pose/tag_detected"))
+            .publish::<bool>(&format!("/chalkydri/robot_pose/{cam_name}/tag_detected"))
             .await
             .unwrap();
 
+        debug!("running frame processing loop...");
         frame_proc_loop(rx, async |frame| {
             let proc_st_time = Instant::now();
 
-            let img =
-                GrayImage::from_vec(1280, 720, frame.map_readable().unwrap().to_vec()).unwrap();
-            let img = Image::from_image_buffer(&img);
+            debug!("loading image...");
+            let img = GrayImage::from_vec(1280, 720, frame.map_readable().unwrap().to_vec()).unwrap();
+                
+            debug!("loading the image more...");
+            let img = Image::from_image_buffer(&img.clone());
+            
             let dets = self.det.detect(&img);
 
             let poses: Vec<_> = dets
@@ -213,21 +221,26 @@ impl Subsystem for CApriltagsDetector {
                 let t = avg_translation.vector.data.as_slice().to_vec();
                 let r = avg_rotation.vector().data.into_slice().to_vec();
 
+                debug!("tag detected : {t:?} / {r:?}");
+
                 translation.set(t).await;
                 rotation.set(r).await;
                 tag_detected.set(true).await;
                 delay.set(proc_st_time.elapsed().as_millis_f64()).await;
             } else {
+                debug!("no tag detected");
                 tag_detected.set(false).await.unwrap();
             }
         })
         .await;
+    debug!("loop done?");
 
         Ok(())
     }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AprilTagFieldLayout {
     pub tags: Vec<LayoutTag>,
@@ -262,6 +275,7 @@ impl AprilTagFieldLayout {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutTag {
     #[serde(rename = "ID")]
@@ -270,6 +284,7 @@ pub struct LayoutTag {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutPose {
     pub translation: LayoutTranslation,
@@ -277,6 +292,7 @@ pub struct LayoutPose {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutTranslation {
     pub x: f64,
@@ -285,12 +301,14 @@ pub struct LayoutTranslation {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutRotation {
     pub quaternion: LayoutQuaternion,
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutQuaternion {
     #[serde(rename = "W")]
@@ -304,6 +322,7 @@ pub struct LayoutQuaternion {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Field {
     pub length: f64,

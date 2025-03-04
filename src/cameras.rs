@@ -6,12 +6,7 @@
 use futures_executor::LocalPool;
 use futures_util::StreamExt;
 use gstreamer::{
-    Bin, Buffer, BusSyncReply, Caps, DeviceMonitor, Element, ElementFactory, FlowSuccess, Fraction,
-    MessageView, Pipeline, Sample, SampleRef, State, Stream,
-    bus::BusWatchGuard,
-    glib::{ControlFlow, MainLoop, Value, WeakRef},
-    message::DeviceAdded,
-    prelude::*,
+    bus::BusWatchGuard, glib::{future_with_timeout, ControlFlow, MainLoop, Type, Value, WeakRef}, message::DeviceAdded, prelude::*, Bin, Buffer, BusSyncReply, Caps, DeviceMonitor, Element, ElementFactory, FlowSuccess, Fraction, MessageView, Pipeline, Sample, SampleRef, State, Stream, Structure
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
@@ -19,7 +14,7 @@ use gstreamer_app::{AppSink, AppSinkCallbacks};
 use minint::NtConn;
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
-use std::{error::Error, sync::Arc};
+use std::{collections::HashMap, error::Error, sync::Arc};
 use tokio::{
     sync::{Mutex, MutexGuard, watch},
     task::LocalSet,
@@ -46,7 +41,7 @@ pub struct CameraCtx {
 pub struct CameraManager {
     dev_mon: DeviceMonitor,
     pipeline: Pipeline,
-    calibrator: Arc<Mutex<Calibrator>>,
+    calibrators: Arc<Mutex<HashMap<String, Calibrator>>>,
 }
 impl CameraManager {
     pub async fn new(#[cfg(feature = "ntables")] nt: NtConn) -> Self {
@@ -76,7 +71,12 @@ impl CameraManager {
         // Create weak ref to pipeline we can give away
         let pipeline_ = pipeline.downgrade();
 
+        let calibrators: Arc<Mutex<HashMap<String, Calibrator>>> = Arc::new(Mutex::new(HashMap::new()));
+
+        let calibrators_ = calibrators.clone();
         bus.set_sync_handler(move |_, msg| {
+            let calibrators = &calibrators_;
+
             // Upgrade the weak ref to work with the pipeline
             let pipeline = pipeline_.upgrade().unwrap();
 
@@ -85,47 +85,53 @@ impl CameraManager {
                     let dev = msg.device();
                     debug!("got a new device");
 
-                    if let Some(cam_config) = config
-                        .cameras
-                        .clone()
-                        .iter()
-                        .filter(|cam| cam.display_name == dev.display_name().to_string())
-                        .next()
-                    {
-                        debug!("found a config");
+                    if let Some(cam_configs) = &config.cameras {
+                        if let Some(cam_config) = cam_configs
+                            .clone()
+                            .iter()
+                            .filter(|cam| cam.display_name == dev.display_name().to_string())
+                            .next()
+                        {
+                            debug!("found a config");
 
-                        // Create the camera source
-                        let cam = dev.create_element(Some(dev.name().as_str())).unwrap();
+                            // Create the camera source
+                            let cam = dev.create_element(Some(&cam_config.name)).unwrap();
 
-                        // The camera preprocessing part:
-                        //   [src]> capsfilter -> queue -> tee -> ...
+                            // The camera preprocessing part:
+                            //   [src]> capsfilter -> queue -> tee -> ...
 
-                        // Create the elements
-                        let filter = ElementFactory::make("capsfilter")
-                            .property("caps", &dev.caps().unwrap())
-                            .build()
-                            .unwrap();
-                        let queue = ElementFactory::make("queue").build().unwrap();
-                        let tee = ElementFactory::make("tee").build().unwrap();
+                            // Create the elements
+                            let filter = ElementFactory::make("capsfilter")
+                                .property("caps", &dev.caps().unwrap())
+                                .build()
+                                .unwrap();
+                            //let queue = ElementFactory::make("queue").build().unwrap();
+                            let tee = ElementFactory::make("tee").build().unwrap();
 
-                        // Add them to the pipeline
-                        pipeline.add_many([&cam, &filter, &queue, &tee]).unwrap();
+                            // Add them to the pipeline
+                            pipeline.add_many([&cam, &filter, &tee]).unwrap();
 
-                        // Link them
-                        Element::link_many([&cam, &filter, &queue, &tee]).unwrap();
+                            // Link them
+                            Element::link_many([&cam, &filter, &tee]).unwrap();
 
-                        let cam_config_ = cam_config.clone();
+                            debug!("initializing calibrator");
+                            let calibrator = Self::add_calib(&pipeline, &tee, cam_config.clone());
+                            
+                             {
+                                 debug!("adding calibrator");
+                                 let mut calibrators = calibrators.blocking_lock();
+                                 (*calibrators).insert(cam_config.name.clone(), calibrator);
+                                 drop(calibrators);
+                                 debug!("dropped lock");
+                             }
 
-                        // Copy the NT conn to give away
-                        #[cfg(feature = "ntables")]
-                        let nt_ = nt.clone();
-
-                        Self::add_subsys::<CApriltagsDetector>(
-                            &pipeline,
-                            &tee,
-                            cam_config.clone(),
-                            nt.clone(),
-                        );
+                            Self::add_subsys::<CApriltagsDetector>(
+                                &pipeline,
+                                &tee,
+                                cam_config.clone(),
+                                nt.clone(),
+                            );
+                        }
                     }
                 }
                 _ => {}
@@ -145,26 +151,26 @@ impl CameraManager {
         // Hook up event handler for the pipeline
         bus.set_sync_handler(|_, _| BusSyncReply::Pass);
 
-        let calibrator = Arc::new(Mutex::new(Calibrator::new()));
-
         Self {
             dev_mon,
             pipeline,
-            calibrator,
+            calibrators,
         }
     }
     pub fn devices(&self) -> Vec<config::Camera> {
-        if self.pipeline.current_state() == State::Playing {
-            self.pause();
-        }
+        //if self.pipeline.current_state() == State::Playing {
+        //    self.pause();
+        //}
 
         let mut devices = Vec::new();
 
-        self.dev_mon.start().unwrap();
-
         for dev in self.dev_mon.devices().iter() {
+            let mut name = dev.name().to_string();
+            if dev.has_property("properties", Some(Type::PARAM_SPEC)) {
+                name = dev.property::<Structure>("properties").get::<String>("node.name").unwrap();
+            }
             devices.push(config::Camera {
-                name: dev.name().to_string(),
+                name,
                 display_name: dev.display_name().to_string(),
                 settings: None,
                 possible_settings: Some(
@@ -187,19 +193,26 @@ impl CameraManager {
                         })
                         .collect(),
                 ),
+                subsystems: config::Subsystems {
+                    capriltags: config::CAprilTagsSubsys {
+                        enabled: false,
+                        field_layout: None,
+                        gamma: None,
+                        field_layouts: HashMap::new(),
+                    },
+                    ml: config::MlSubsys { enabled: false },
+                },
             });
         }
 
-        self.dev_mon.stop();
-        if self.pipeline.current_state() == State::Paused {
-            self.start();
-        }
+        //if self.pipeline.current_state() == State::Paused {
+        //    self.start();
+        //}
 
         devices
     }
-    pub async fn calib_step(&self) -> usize {
-        //self.calibrator().await.step(self.capriltags.clone())
-        0
+    pub async fn calib_step(&self, name: String) -> usize {
+        self.calibrators().await.get_mut(&name).unwrap().step()
     }
     // gamma gamma=2.0 ! fpsdisplaysink ! videorate drop-only=true ! omxh264enc ! mpegtsenc !
     // rtspserversink port=1234
@@ -209,11 +222,11 @@ impl CameraManager {
         cam: &Element,
         cam_config: config::Camera,
         nt: NtConn,
-    ) -> SubsysCtx {
+    ) {
         let target = format!("chalkydri::subsys::{}", S::NAME);
 
         debug!(target: &target, "initializing preproc pipeline chunk subsystem...");
-        let (input, output) = S::preproc(config.clone(), pipeline).unwrap();
+        let (input, output) = S::preproc(cam_config.clone(), pipeline).unwrap();
 
         let appsink = ElementFactory::make("appsink").build().unwrap();
         pipeline.add(&appsink).unwrap();
@@ -244,19 +257,67 @@ impl CameraManager {
         debug!("linked subsys junk");
 
         let nt_ = nt.clone();
-        let config = config.clone();
         let cam_config = cam_config.clone();
         std::thread::spawn(move || {
+            debug!("capriltags worker thread started");
             let nt = nt_;
-            let mut local = LocalPool::new();
 
-            local.run_until(async move {
-                let mut subsys = S::init(cam_config, config).await.unwrap();
+            futures_executor::block_on(async move {
+                debug!("initializing subsystem...");
+                let mut subsys = S::init(cam_config).await.unwrap();
+
+                debug!("starting subsystem...");
                 subsys.process(nt, rx).await.unwrap();
             });
         });
+    }
 
-        SubsysCtx {}
+    pub(crate) fn add_calib(
+        pipeline: &Pipeline,
+        cam: &Element,
+        cam_config: config::Camera,
+    ) -> Calibrator {
+        let target = format!("chalkydri::camera::{}", cam_config.name);
+
+        let valve = ElementFactory::make("valve").property("drop", false).build().unwrap();
+        let queue = ElementFactory::make("queue").build().unwrap();
+        let videoconvertscale = ElementFactory::make("videoconvertscale").build().unwrap();
+        let filter = ElementFactory::make("capsfilter")
+            .property(
+                "caps",
+                &Caps::builder("video/x-raw")
+                    .field("width", &1280)
+                    .field("height", &720)
+                    .field("format", "RGB")
+                    .build(),
+            )
+            .build()
+            .unwrap();
+        let appsink = ElementFactory::make("appsink").build().unwrap();
+
+        pipeline.add_many([&valve, &queue, &videoconvertscale, &filter, &appsink]).unwrap();
+        Element::link_many([&cam, &valve, &queue, &videoconvertscale, &filter, &appsink]).unwrap();
+
+        let appsink = appsink.dynamic_cast::<AppSink>().unwrap();
+
+        let (tx, rx) = watch::channel(None);
+
+        debug!(target: &target, "setting appsink callbacks...");
+        appsink.set_callbacks(
+            AppSinkCallbacks::builder()
+                .new_sample(move |appsink| {
+                    let sample = appsink.pull_sample().unwrap();
+                    let buf = sample.buffer().unwrap();
+                    tx.send(Some(buf.to_owned())).unwrap();
+
+                    Ok(FlowSuccess::Ok)
+                })
+                .build(),
+        );
+
+        debug!("linked subsys junk");
+
+        Calibrator::new(valve.downgrade(), rx)
     }
 
     pub fn load_camera(&mut self, width: u32, height: u32) -> Result<(), Box<dyn Error>> {
@@ -278,93 +339,60 @@ impl CameraManager {
                 frame_rate: CfgFraction { num: 50, den: 1 },
             }),
             possible_settings: None,
+            subsystems: config::Subsystems {
+                capriltags: config::CAprilTagsSubsys {
+                    enabled: false,
+                    field_layout: None,
+                    gamma: None,
+                    field_layouts: HashMap::new(),
+                },
+                ml: config::MlSubsys { enabled: false },
+            },
         };
 
-        for cam_config in config.cameras {
-            let cam_settings = cam_config.settings.clone().unwrap();
+        if let Some(cam_configs) = &config.cameras {
+            for cam_config in cam_configs {
+                let cam_settings = cam_config.settings.clone().unwrap();
 
-            self.dev_mon.start().unwrap();
-            let devices = self.dev_mon.devices();
-            if let Some(dev) = devices
-                .iter()
-                .filter(|cam| cam_config.name == cam.name())
-                .next()
-            {
-                let cam = dev.create_element(None).unwrap();
-                dbg!(cam.name());
+                self.dev_mon.start().unwrap();
+                let devices = self.dev_mon.devices();
+                if let Some(dev) = devices
+                    .iter()
+                    .filter(|cam| cam_config.name == cam.name())
+                    .next()
+                {
+                    let cam = dev.create_element(None).unwrap();
+                    dbg!(cam.name());
 
-                let caps = Caps::builder("video/x-raw")
-                    .field("width", &cam_settings.width)
-                    .field("height", &cam_settings.height)
-                    .field(
-                        "framerate",
-                        &Fraction::new(
-                            cam_settings.frame_rate.num as i32,
-                            cam_settings.frame_rate.den as i32,
-                        ),
-                    )
-                    .any_features()
-                    .build();
+                    let caps = Caps::builder("video/x-raw")
+                        .field("width", &cam_settings.width)
+                        .field("height", &cam_settings.height)
+                        .field(
+                            "framerate",
+                            &Fraction::new(
+                                cam_settings.frame_rate.num as i32,
+                                cam_settings.frame_rate.den as i32,
+                            ),
+                        )
+                        .any_features()
+                        .build();
 
-                let filter = ElementFactory::make("capsfilter")
-                    .property("caps", &caps)
-                    .build()
-                    .unwrap();
+                    let filter = ElementFactory::make("capsfilter")
+                        .property("caps", &caps)
+                        .build()
+                        .unwrap();
 
-                //cam.link_filtered(&convertscale, &caps).unwrap();
-                //let queue = ElementFactory::make("queue").build().unwrap();
-                let tee = ElementFactory::make("tee").build().unwrap();
+                    //cam.link_filtered(&convertscale, &caps).unwrap();
+                    //let queue = ElementFactory::make("queue").build().unwrap();
+                    let tee = ElementFactory::make("tee").build().unwrap();
 
-                self.pipeline.add_many([&cam, &filter, &tee]).unwrap();
-                cam.link(&filter).unwrap();
-                //filter.link(&queue).unwrap();
-                filter.link(&tee).unwrap();
-
-                //self.cameras.push(CameraCtx {
-                //    tee: tee.downgrade(),
-                //    cfgg: cam_config,
-                //});
+                    self.pipeline.add_many([&cam, &filter, &tee]).unwrap();
+                    cam.link(&filter).unwrap();
+                    //filter.link(&queue).unwrap();
+                    filter.link(&tee).unwrap();
+                }
             }
         }
-
-        //let capriltags_streams = self.add_subsys(|pipeline| {
-        //    let gamma = ElementFactory::make("gamma")
-        //        .property("gamma", &config.subsystems.capriltags.gamma.unwrap_or(1.0))
-        //        .build()
-        //        .unwrap();
-        //    let videoconvertscale = ElementFactory::make("videoconvertscale").build().unwrap();
-        //    let filter = ElementFactory::make("capsfilter")
-        //        .property(
-        //            "caps",
-        //            &Caps::builder("video/x-raw")
-        //                .field("width", &1280)
-        //                .field("height", &720)
-        //                .field("format", "GRAY8")
-        //                .build(),
-        //        )
-        //        .build()
-        //        .unwrap();
-        //    pipeline
-        //        .add_many([&gamma, &videoconvertscale, &filter])
-        //        .unwrap();
-
-        //    gamma.link(&videoconvertscale).unwrap();
-        //    videoconvertscale.link(&filter).unwrap();
-        //    (gamma, filter)
-        //});
-
-        //for (i, stream) in capriltags_streams.iter().enumerate() {
-        //    let mut rx = stream.clone();
-        //    tokio::spawn(async move {
-        //        loop {
-        //            rx.changed().await.unwrap();
-        //            let buf = rx.borrow_and_update().clone().unwrap();
-        //            println!("{i}: {:?}", buf.get(0..10));
-        //        }
-        //    });
-        //}
-
-        //self.capriltags = capriltags_streams;
 
         Ok(())
     }
@@ -413,7 +441,7 @@ impl CameraManager {
             )
             .unwrap();
     }
-    pub async fn calibrator(&self) -> MutexGuard<Calibrator> {
-        self.calibrator.lock().await
+    pub async fn calibrators(&self) -> MutexGuard<HashMap<String, Calibrator>> {
+        self.calibrators.lock().await
     }
 }

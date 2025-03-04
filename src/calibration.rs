@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 
 use aprilgrid::{
     TagFamily,
@@ -15,9 +15,10 @@ use camera_intrinsic_calibration::{
 use camera_intrinsic_model::{
     self as model, CameraModel, GenericModel, OpenCVModel5, model_to_json,
 };
-use image::{ColorType, DynamicImage, GrayImage};
+use gstreamer_app::AppSink;
+use image::{ColorType, DynamicImage, GrayImage, RgbImage};
 
-use gstreamer::Buffer;
+use gstreamer::{glib::{object::ObjectExt, WeakRef}, prelude::{ElementExt, ElementExtManual}, Buffer, Element, State};
 use model::model_from_json;
 use tokio::{sync::watch, time::Instant};
 
@@ -47,41 +48,48 @@ const MIN_CORNERS: usize = 24;
 
 /// A camera calibrator
 pub struct Calibrator {
+    valve: WeakRef<Element>,
     det: TagDetector,
     board: Board,
     frame_feats: Vec<FrameFeature>,
     cam_model: GenericModel<f64>,
     start: Instant,
+rx: watch::Receiver<Option<Buffer>>,
 }
 impl Calibrator {
     /// Initialize a new calibrator
-    pub fn new() -> Self {
+    pub fn new(valve: WeakRef<Element>, rx: watch::Receiver<Option<Buffer>>) -> Self {
         Self {
             det: TagDetector::new(&TagFamily::T36H11, None),
             board: create_default_6x6_board(),
             frame_feats: Vec::new(),
             cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
             start: Instant::now(),
+            rx,
+            valve,
         }
     }
 
     /// Process a frame
-    pub fn step(&mut self, mut rx: watch::Receiver<Option<Buffer>>) -> usize {
+    pub fn step(&mut self) -> usize {
+
+        //let valve = self.valve.upgrade().unwrap();
+        //valve.set_property("drop", false);
+
         if self.frame_feats.len() < 200 {
             let mut frame_feat = None;
             while frame_feat.is_none() {
-                if rx.has_changed().is_ok() && rx.has_changed().unwrap() {
-                    let val = rx.borrow_and_update().clone();
+                if self.rx.has_changed().is_ok() && self.rx.has_changed().unwrap() {
+                    let val = self.rx.borrow_and_update().clone();
+                    debug!("got frame");
+                    //valve.set_property("drop", true);
                     let img = DynamicImage::ImageRgb8(
-                        DynamicImage::ImageLuma8(
-                            GrayImage::from_vec(
+                            RgbImage::from_vec(
                                 1280,
                                 720,
                                 val.unwrap().into_mapped_buffer_readable().unwrap().to_vec(),
                             )
                             .unwrap(),
-                        )
-                        .to_rgb8(),
                     );
 
                     frame_feat =
@@ -121,6 +129,9 @@ impl Calibrator {
     /// Calibrate
     pub fn calibrate(&mut self) {
         let mut calib_res = None;
+
+        //let valve = self.valve.upgrade().unwrap();
+        //valve.set_property("drop", true);
 
         for i in 0..5 {
             calib_res = init_and_calibrate_one_camera(

@@ -1,21 +1,15 @@
 team_number = 4533
-ntables_ip = "192.168.0.211"
+ntables_ip = "127.0.0.1"
 device_name = "chalkydri3372531970"
 
 [[cameras]]
 name = "pipewiredevice0"
 display_name = "Integrated_Webcam_HD (V4L2)"
 
-[cameras.settings]
-width = 1280
-height = 720
-
-[cameras.settings.frame_rate]
-num = 30
-den = 1
-
-[subsystems.capriltags]
+[cameras.subsystems.capriltags]
 enabled = true
 
-[subsystems.ml]
+[cameras.subsystems.capriltags.field_layouts]
+
+[cameras.subsystems.ml]
 enabled = false

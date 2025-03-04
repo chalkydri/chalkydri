@@ -26,9 +26,7 @@
 <div class="bg-slate-50 dark:bg-slate-900 p-4 w-full h-screen">
 	<header>
 		<Navbar class="rounded-md bg-slate-200 dark:bg-slate-800" let:NavContainer>
-			<NavHamburger
-				on:click={toggleSidebar}
-			/>
+			<NavHamburger on:click={toggleSidebar} />
 			<NavBrand href="/">
 				<P size="xl">Chalkydri Manager</P>
 			</NavBrand>

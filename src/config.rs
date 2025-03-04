@@ -28,7 +28,7 @@ def_cfg! {
         team_number: u16,
         ntables_ip: Option<String>,
         rerun: Option<Rerun>,
-        cameras: Vec<Camera>,
+        cameras: Option<Vec<Camera>>,
         device_name: Option<String>,
     }
     Rerun {

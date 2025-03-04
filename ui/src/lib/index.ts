@@ -1,3 +1,3 @@
-import "./config";
-import "./api";
+import './config';
+import './api';
 export {};

@@ -14,7 +14,6 @@ def main():
     inst.startServer()
 
     while True:
-        print(inst.getClients())
         topics = inst.getTopics('/')
         if len(topics) > 0:
             print(topics)

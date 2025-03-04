@@ -1,6 +1,7 @@
 use std::{fmt::Debug, sync::Arc};
 
-use gstreamer::{Buffer, BufferRef, Element, Pipeline, SampleRef};
+use gstreamer::{glib::WeakRef, Buffer, BufferRef, Element, Pipeline, SampleRef};
+use gstreamer_app::AppSink;
 use minint::NtConn;
 use tokio::{
     sync::{broadcast, watch},
@@ -33,7 +34,7 @@ pub trait Subsystem: Sized {
 
     /// Initialize the subsystem's preprocessing pipeline chunk
     fn preproc(
-        config: Self::Config,
+        config: config::Camera,
         pipeline: &Pipeline,
     ) -> Result<(Element, Element), Self::Error>;
 
@@ -45,7 +46,9 @@ pub trait Subsystem: Sized {
     ) -> Result<Self::Output, Self::Error>;
 }
 
-pub struct SubsysCtx {}
+pub struct SubsysCtx {
+    pub appsink: WeakRef<AppSink>,
+}
 
 pub async fn frame_proc_loop(
     mut rx: watch::Receiver<Option<Buffer>>,
