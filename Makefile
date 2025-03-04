@@ -23,9 +23,9 @@ clean_ui:
 
 clean: clean_rust clean_ui
 
-ui: clean_ui ui/build
+ui: ui/build
 
-rust: clean_rust ui target/release/chalkydri
+rust: ui/build target/release/chalkydri
 
 all: rust
 
