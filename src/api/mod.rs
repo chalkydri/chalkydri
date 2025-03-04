@@ -4,6 +4,7 @@
 
 use std::{fs::File, io::Write, sync::Arc};
 
+use rust_embed::Embed;
 use actix_web::{
     App, HttpResponse, HttpServer, Responder, get,
     http::StatusCode,
