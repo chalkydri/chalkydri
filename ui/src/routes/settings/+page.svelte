@@ -23,11 +23,12 @@
 
 	let saving = $state(false);
 
-	function save() {
+	async function save() {
 		saving = true;
-		configure({
+		
+		config = (await configure({
 			body: config ? config : ({} as Config)
-		});
+		})).data;
 		saving = false;
 	}
 
@@ -42,7 +43,6 @@
 		}
 	});
 
-	let camera: Camera | null = $state(null);
 
 	function getSettings(camera: Camera) {
 		if (camera.possible_settings) {
@@ -55,20 +55,31 @@
 		}
 	}
 	function getFieldLayouts(camera: Camera) {
-		if (camera.possible_settings) {
-			for ([key] in camera.subsystems.capriltags.field_layouts) {
-				return {
-					name: `${s.width}x${s.height} @${s.frame_rate.num / s.frame_rate.den}fps`,
-					value: s
-				};
-			}
-		}
+		return camera.subsystems.capriltags.field_layouts.keys;
 	}
 
-	let field_layout_files: FileList | undefined = $state();
-	async function add_field_layouts() {
-		console.log("bs");
-	}
+	let files: FileList | undefined = $state();
+	let field_layout_options: { name: string, value: string }[] | undefined = $state();
+
+	$effect(() => {
+				if (config) {
+					if (config.cameras) {
+						config.cameras.forEach(async (cam) => {
+							if (cam && files) {
+								for (const file of files) {
+									if (config && config.cameras) {
+										config.cameras[config.cameras.indexOf(cam)].subsystems.capriltags.field_layouts[file.name] = JSON.parse(await file.text());
+									}
+								}
+							}
+						});
+
+						let keys = Object.keys(config.cameras[0].subsystems.capriltags.field_layouts);
+						field_layout_options = keys.map((thing) => { return { name: thing, value: thing }; });
+					}
+			}
+		});
+
 </script>
 
 {#if config}
@@ -77,6 +88,8 @@
 
 		<Label for="device_name" class="mt-2 mb-1">Device name</Label>
 		<Input id="device_name" bind:value={config.device_name} />
+
+		<Fileupload bind:files />
 	</Card>
 
 	<Card padding="sm">
@@ -108,17 +121,18 @@
 					{#if camera.subsystems}
 						<Card padding="sm" class="mt-2">
 							<P size="lg">Subsystems</P>
+							{#if camera.subsystems.capriltags}
 							<Card padding="xs" class="mt-2">
 								<Toggle
 									color="blue"
 									disabled={saving}
 									bind:checked={camera.subsystems.capriltags.enabled}>C AprilTags</Toggle
 								>
-		{#if camera.subsystems.capriltags.enabled}
-			<Select bind:value={camera.subsystems.capriltags.field_layout} />
-			<Fileupload on:input={add_field_layouts} bind:files={field_layout_files} />
+		{#if camera.subsystems.capriltags.enabled && field_layout_options}
+			<Select bind:value={camera.subsystems.capriltags.field_layout} items={field_layout_options} />
 		{/if}
 							</Card>
+							{/if}
 							<!--
 	<Card padding="xs">
 		<Toggle color="blue" disabled={saving} bind:checked={config.subsystems.apriltags.enabled}>AprilTags</Toggle>
