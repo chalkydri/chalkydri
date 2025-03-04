@@ -60,6 +60,10 @@ impl Subsystem for CApriltagsDetector {
         //  tee ! gamma ! videoconvertscale ! capsfilter ! appsink
 
         // Create the elements
+        let gaussianblur = ElementFactory::make("gaussianblur")
+            .property("sigma", &0.1)
+            .build()
+            .unwrap();
         let gamma = ElementFactory::make("gamma")
             .property("gamma", &config.gamma.unwrap_or(1.0))
             .build()

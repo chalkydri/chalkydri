@@ -172,12 +172,12 @@ impl CameraManager {
 
         for dev in self.dev_mon.devices().iter() {
             let mut name = dev.name().to_string();
-            if dev.has_property("properties", Some(Type::PARAM_SPEC)) {
-                name = dev
-                    .property::<Structure>("properties")
-                    .get::<String>("node.name")
-                    .unwrap();
-            }
+            //if dev.has_property("properties", Some(Type::PARAM_SPEC)) {
+            //    name = dev
+            //        .property::<Structure>("properties")
+            //        .get::<String>("node.name")
+            //        .unwrap();
+            //}
             devices.push(config::Camera {
                 name,
                 display_name: dev.display_name().to_string(),
@@ -335,83 +335,6 @@ impl CameraManager {
         Calibrator::new(valve.downgrade(), rx)
     }
 
-    pub fn load_camera(&mut self, width: u32, height: u32) -> Result<(), Box<dyn Error>> {
-        // Get a copy of the global configuration
-        let config = {
-            let cfgg = Cfg.blocking_read();
-            let ret = (*cfgg).clone();
-            drop(cfgg);
-            ret
-        };
-
-        let default_config = config::Camera {
-            name: String::new(),
-            display_name: String::new(),
-            settings: Some(CameraSettings {
-                width,
-                height,
-                gamma: None,
-                frame_rate: CfgFraction { num: 50, den: 1 },
-            }),
-            possible_settings: None,
-            subsystems: config::Subsystems {
-                capriltags: config::CAprilTagsSubsys {
-                    enabled: false,
-                    field_layout: None,
-                    gamma: None,
-                    field_layouts: HashMap::new(),
-                },
-                ml: config::MlSubsys { enabled: false },
-            },
-            calib: None,
-        };
-
-        if let Some(cam_configs) = &config.cameras {
-            for cam_config in cam_configs {
-                let cam_settings = cam_config.settings.clone().unwrap();
-
-                self.dev_mon.start().unwrap();
-                let devices = self.dev_mon.devices();
-                if let Some(dev) = devices
-                    .iter()
-                    .filter(|cam| cam_config.name == cam.name())
-                    .next()
-                {
-                    let cam = dev.create_element(None).unwrap();
-                    dbg!(cam.name());
-
-                    let caps = Caps::builder("video/x-raw")
-                        .field("width", &cam_settings.width)
-                        .field("height", &cam_settings.height)
-                        .field(
-                            "framerate",
-                            &Fraction::new(
-                                cam_settings.frame_rate.num as i32,
-                                cam_settings.frame_rate.den as i32,
-                            ),
-                        )
-                        .any_features()
-                        .build();
-
-                    let filter = ElementFactory::make("capsfilter")
-                        .property("caps", &caps)
-                        .build()
-                        .unwrap();
-
-                    //cam.link_filtered(&convertscale, &caps).unwrap();
-                    //let queue = ElementFactory::make("queue").build().unwrap();
-                    let tee = ElementFactory::make("tee").build().unwrap();
-
-                    self.pipeline.add_many([&cam, &filter, &tee]).unwrap();
-                    cam.link(&filter).unwrap();
-                    //filter.link(&queue).unwrap();
-                    filter.link(&tee).unwrap();
-                }
-            }
-        }
-
-        Ok(())
-    }
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         // Define the event loop or something?
         self.pipeline
