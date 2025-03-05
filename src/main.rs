@@ -131,7 +131,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         warn!("device name not set! generating one...");
 
         // Generate & save it
-        let dev_name = format!("chalkydri{}", fastrand::u32(..));
+        let dev_name = String::from("chalkydri");
         (*Cfg.write().await).device_name = Some(dev_name.clone());
 
         dev_name

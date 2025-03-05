@@ -255,7 +255,7 @@ impl NtConn {
             name: name.clone(),
             r#type: T::STRING.to_string(),
             properties: Some(PublishProps {
-                persistent: Some(true),
+                persistent: Some(false),
                 retained: Some(false),
             }),
         }])?;

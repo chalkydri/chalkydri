@@ -111,14 +111,14 @@ impl CameraManager {
                                 .property("caps", &dev.caps().unwrap())
                                 .build()
                                 .unwrap();
-                            //let queue = ElementFactory::make("queue").build().unwrap();
+                            let queue = ElementFactory::make("queue").build().unwrap();
                             let tee = ElementFactory::make("tee").build().unwrap();
 
                             // Add them to the pipeline
-                            pipeline.add_many([&cam, &filter, &tee]).unwrap();
+                            pipeline.add_many([&cam, &filter, &queue, &tee]).unwrap();
 
                             // Link them
-                            Element::link_many([&cam, &filter, &tee]).unwrap();
+                            Element::link_many([&cam, &filter, &queue, &tee]).unwrap();
 
                             debug!("initializing calibrator");
                             let calibrator = Self::add_calib(&pipeline, &tee, cam_config.clone());
@@ -238,11 +238,12 @@ impl CameraManager {
         debug!(target: &target, "initializing preproc pipeline chunk subsystem...");
         let (input, output) = S::preproc(cam_config.clone(), pipeline).unwrap();
 
+        let queue = ElementFactory::make("queue").build().unwrap();
         let appsink = ElementFactory::make("appsink").build().unwrap();
-        pipeline.add(&appsink).unwrap();
+        pipeline.add_many([&queue, &appsink]).unwrap();
 
         debug!(target: &target, "linking preproc pipeline chunk...");
-        cam.link(&input).unwrap();
+        Element::link_many([&cam, &queue, &input]).unwrap();
         output.link(&appsink).unwrap();
 
         let appsink = appsink.dynamic_cast::<AppSink>().unwrap();
