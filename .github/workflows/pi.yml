@@ -1,0 +1,71 @@
+name: Raspberry Pi 5 Build
+
+on:
+  push:
+  workflow_dispatch: # Keeping manual trigger option
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build for Raspberry Pi 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y pkg-config libssl-dev gstreamer1.0-dev
+          # Add any other dependencies your project needs
+
+      - name: Generate build info
+        id: build_info
+        run: |
+          echo "timestamp=$(date +'%Y%m%d_%H%M%S')" >> $GITHUB_OUTPUT
+          echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+          echo "commit_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build for Pi 5
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          RUSTFLAGS: "-C target-cpu=cortex-a76 -C target-feature=+fp-armv8,+neon,+crc,+crypto -C opt-level=3"
+        run: |
+          cargo build --release --target aarch64-unknown-linux-gnu
+          # Create a directory for the artifacts
+          mkdir -p pi5-build
+          # Copy the compiled binary and any needed files
+          cp target/aarch64-unknown-linux-gnu/release/your_binary_name pi5-build/
+          # If you have additional files to include
+          # cp additional-files/* pi5-build/
+          # Create a build info file
+          echo "Built from branch: ${{ steps.build_info.outputs.branch }}" > pi5-build/build_info.txt
+          echo "Commit: ${{ steps.build_info.outputs.commit_sha }}" >> pi5-build/build_info.txt
+          echo "Build timestamp: ${{ steps.build_info.outputs.timestamp }}" >> pi5-build/build_info.txt
+          echo "Target CPU: cortex-a76" >> pi5-build/build_info.txt
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi5-build-${{ steps.build_info.outputs.branch }}-${{ steps.build_info.outputs.commit_sha }}
+          path: pi5-build/
+          retention-days: 14
