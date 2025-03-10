@@ -39,7 +39,7 @@ jobs:
         run: rustup update nightly && rustup default nightly
 
       - name: Install deps
-        run: apt install -y curl jq libgstreamer1.0-dev gstreamer1.0-plugins-base-apps
+        run: apt install -y curl jq libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
       - name: Set PKG_CONFIG_PATH
         run: echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig" >> $GITHUB_ENV
