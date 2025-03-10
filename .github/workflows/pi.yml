@@ -42,7 +42,7 @@ jobs:
         run: |
           cd ui/
           bun install
-          bun install
+          bun run gen_api
           bun run build
           cd ..
           
