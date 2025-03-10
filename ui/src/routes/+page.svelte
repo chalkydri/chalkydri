@@ -68,6 +68,8 @@
 			>
 		</div>
 	</Card>
+
+	<img src="http://localhost:6942/stream/a" />
 </Layout>
 
 <Modal bind:open={req_reboot} autoclose outsideclose>

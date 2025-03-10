@@ -29,10 +29,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use datatype::{Data, DataWrap};
+use futures_util::stream::{SplitSink, SplitStream};
 use messages::*;
 
 use futures_util::{SinkExt, StreamExt};
 use rmp::decode::Bytes;
+use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 use tokio::{
     sync::{mpsc, Mutex},
@@ -41,8 +43,9 @@ use tokio::{
 use tokio_tungstenite::tungstenite::{
     client::IntoClientRequest,
     http::{header, HeaderValue},
-    Message,
+    Error as TungsteniteError, Message,
 };
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 /// A NetworkTables connection
 pub struct NtConn {
@@ -50,12 +53,18 @@ pub struct NtConn {
     next_id: Arc<Mutex<i32>>,
 
     /// Incoming request receiver event loop abort handle
-    incoming_abort: Option<AbortHandle>,
+    incoming_abort: Arc<RwLock<Option<AbortHandle>>>,
     /// Outgoing request sender event loop abort handle
-    outgoing_abort: Option<AbortHandle>,
+    outgoing_abort: Arc<RwLock<Option<AbortHandle>>>,
 
     /// Outgoing client-to-server message queue
-    c2s: mpsc::UnboundedSender<Message>,
+    c2s_tx: mpsc::UnboundedSender<Message>,
+    c2s_rx: Arc<Mutex<mpsc::UnboundedReceiver<Message>>>,
+
+    client_ident: Arc<RwLock<String>>,
+    server: Arc<RwLock<String>>,
+    sock_rd: Arc<RwLock<Option<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>>,
+    sock_wr: Arc<RwLock<Option<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>,
 
     topics: Arc<RwLock<HashMap<i32, String>>>,
     topic_pubuids: Arc<RwLock<HashMap<i32, i32>>>,
@@ -91,10 +100,157 @@ impl NtConn {
         let topic_pubuids = Arc::new(RwLock::new(HashMap::new()));
         let pubuid_topics = Arc::new(RwLock::new(HashMap::new()));
         let values = Arc::new(RwLock::new(HashMap::new()));
+        let sock_wr: Arc<
+            RwLock<Option<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+        > = Arc::new(RwLock::new(None));
+        let sock_rd: Arc<RwLock<Option<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>> =
+            Arc::new(RwLock::new(None));
 
+        // Setup channels for control
+        let (c2s_tx, c2s_rx) = mpsc::unbounded_channel::<Message>();
+
+        Ok(Self {
+            next_id: Arc::new(Mutex::const_new(0)),
+            c2s_tx,
+            c2s_rx: Arc::new(Mutex::new(c2s_rx)),
+
+            topics,
+            topic_pubuids,
+            pubuid_topics,
+            values,
+
+            client_ident: Arc::new(RwLock::new(client_ident.into())),
+            server: Arc::new(RwLock::new(server.into().to_string())),
+            sock_rd,
+            sock_wr,
+
+            incoming_abort: Arc::new(RwLock::new(None)),
+            outgoing_abort: Arc::new(RwLock::new(None)),
+        })
+    }
+
+    async fn init_background_event_loops(&self) {
+        // Spawn event loop to read and process incoming messages
+
+        let mut incoming_abort = self.incoming_abort.write().await;
+        let mut outgoing_abort = self.outgoing_abort.write().await;
+
+        if (*incoming_abort).is_none() {
+            let conn = self.clone();
+            let topics = self.topics.clone();
+            let topic_pubuids = self.topic_pubuids.clone();
+            let pubuid_topics = self.pubuid_topics.clone();
+
+            let jh = tokio::spawn(async move {
+                loop {
+                    if let Some(sock_rd) = conn.sock_rd.write().await.as_mut() {
+                        while let Some(buf) = sock_rd.next().await {
+                            match buf {
+                                Ok(Message::Text(json)) => {
+                                    let messages: Vec<ServerMsg> =
+                                        serde_json::from_str(&json).unwrap();
+
+                                    for msg in messages {
+                                        match msg {
+                                            ServerMsg::Announce {
+                                                name,
+                                                id,
+                                                r#type,
+                                                pubuid,
+                                                ..
+                                            } => {
+                                                trace!("inserting to topics");
+                                                (*topics.write().await).insert(id, name.clone());
+
+                                                if let Some(pubuid) = pubuid {
+                                                    trace!("inserting to pubuid_topics");
+                                                    (*pubuid_topics.write().await)
+                                                        .insert(pubuid, id);
+                                                    trace!("inserting to topic_pubuids");
+                                                    (*topic_pubuids.write().await)
+                                                        .insert(id, pubuid);
+
+                                                    debug!("{name} ({type}): published successfully with topic id {id}");
+                                                } else {
+                                                    debug!("{name} ({type}): announced with topic id {id}");
+                                                }
+                                            }
+                                            ServerMsg::Unannounce { name, id } => {
+                                                let mut topics = topics.write().await;
+                                                let topic_pubuids = topic_pubuids.read().await;
+                                                let mut pubuid_topics = pubuid_topics.write().await;
+
+                                                (*topics).remove(&id);
+                                                if let Some(pubuid) = (*topic_pubuids).get(&id) {
+                                                    (*pubuid_topics).remove(pubuid);
+                                                }
+
+                                                drop(pubuid_topics);
+                                                drop(topic_pubuids);
+                                                drop(topics);
+
+                                                debug!("{name}: unannounced");
+                                            }
+                                            _ => unimplemented!(),
+                                        }
+                                    }
+                                }
+                                Ok(Message::Binary(bin)) => {
+                                    Self::read_bin_frame(bin.to_vec()).unwrap();
+                                }
+                                Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
+                                Err(TungsteniteError::ConnectionClosed) => {
+                                    conn.connect().await.unwrap();
+                                }
+                                Err(err) => error!("error reading incoming message: {err:?}"),
+                            }
+                        }
+                    }
+                    tokio::task::yield_now().await;
+                }
+            });
+
+            *incoming_abort = Some(jh.abort_handle());
+        }
+
+        // Spawn event loop to send outgoing messages
+        if (*outgoing_abort).is_none() {
+            let conn = self.clone();
+
+            let jh = tokio::spawn(async move {
+                loop {
+                    while let Some(outgoing) = conn.c2s_rx.lock().await.recv().await {
+                        trace!("sending {outgoing:?}");
+
+                        if let Some(sock_wr) = conn.sock_wr.write().await.as_mut() {
+                            match sock_wr.send(outgoing).await {
+                                Ok(()) => {
+                                    trace!("sent outgoing message successfully");
+                                }
+                                Err(TungsteniteError::ConnectionClosed) => {
+                                    conn.connect().await.unwrap();
+                                }
+                                Err(err) => {
+                                    error!("error writing outgoing message: {err:?}");
+                                }
+                            }
+
+                            trace!("sent");
+                        }
+                    }
+
+                    tokio::task::yield_now().await;
+                }
+            });
+
+            *outgoing_abort = Some(jh.abort_handle());
+        }
+    }
+
+    pub async fn connect(&self) -> Result<(), Box<dyn Error>> {
         // Get server and client_ident into something we can work with
-        let server = server.into();
-        let client_ident = client_ident.into();
+        let server = self.server.read().await.clone();
+        let client_ident = self.client_ident.read().await.clone();
 
         // Build the WebSocket URL and turn it into tungstenite's client req type
         let mut req = format!("ws://{server}:5810/nt/{client_ident}").into_client_request()?;
@@ -104,105 +260,14 @@ impl NtConn {
             header::SEC_WEBSOCKET_PROTOCOL,
             HeaderValue::from_static("v4.1.networktables.first.wpi.edu"),
         );
-
-        // Setup channels for control
-        let (c2s_tx, mut c2s_rx) = mpsc::unbounded_channel::<Message>();
-
         // Connect to the server and split into read and write
         let (sock, _) = tokio_tungstenite::connect_async(req).await?;
-        let (mut sock_wr, mut sock_rd) = sock.split();
+        let (sock_wr, sock_rd) = sock.split();
 
-        // Spawn event loop to read and process incoming messages
+        *self.sock_rd.write().await = Some(sock_rd);
+        *self.sock_wr.write().await = Some(sock_wr);
 
-        let incoming_abort = Some({
-            let topics = topics.clone();
-            let topic_pubuids = topic_pubuids.clone();
-            let pubuid_topics = pubuid_topics.clone();
-
-            tokio::spawn(async move {
-                loop {
-                    while let Some(buf) = sock_rd.next().await {
-                        match buf {
-                            Ok(Message::Text(json)) => {
-                                let messages: Vec<ServerMsg> = serde_json::from_str(&json).unwrap();
-
-                                for msg in messages {
-                                    match msg {
-                                        ServerMsg::Announce { name, id, r#type, pubuid, .. } => {
-                                            trace!("inserting to topics");
-                                            (*topics.write().await).insert(id, name.clone());
-
-                                            if let Some(pubuid) = pubuid {
-                                                trace!("inserting to pubuid_topics");
-                                                (*pubuid_topics.write().await).insert(pubuid, id);
-                                                trace!("inserting to topic_pubuids");
-                                                (*topic_pubuids.write().await).insert(id, pubuid);
-
-                                                debug!("{name} ({type}): published successfully with topic id {id}");
-                                            } else {
-                                                debug!("{name} ({type}): announced with topic id {id}");
-                                            }
-                                        }
-                                        ServerMsg::Unannounce { name, id } => {
-                                            let mut topics = topics.write().await;
-                                            let topic_pubuids = topic_pubuids.read().await;
-                                            let mut pubuid_topics = pubuid_topics.write().await;
-
-                                            (*topics).remove(&id);
-                                            if let Some(pubuid) = (*topic_pubuids).get(&id) {
-                                                (*pubuid_topics).remove(pubuid);
-                                            }
-
-                                            drop(pubuid_topics);
-                                            drop(topic_pubuids);
-                                            drop(topics);
-
-                                            debug!("{name}: unannounced");
-                                        }
-                                        _ => unimplemented!()
-                                    }
-                                }
-                            }
-                            Ok(Message::Binary(bin)) => {
-                                Self::read_bin_frame(bin.to_vec()).unwrap();
-                            },
-                            Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
-                            Err(err) => error!("error reading incoming message: {err:?}"),
-                        }
-                    }
-                    tokio::task::yield_now().await;
-                }
-            })
-            .abort_handle()
-        });
-
-        // Spawn event loop to send outgoing messages
-        let outgoing_abort = Some(
-            tokio::spawn(async move {
-                loop {
-                    while let Some(outgoing) = c2s_rx.recv().await {
-                        trace!("sending {outgoing:?}");
-                        sock_wr.send(outgoing).await.unwrap();
-                        trace!("sent");
-                    }
-                    tokio::task::yield_now().await;
-                }
-            })
-            .abort_handle(),
-        );
-
-        Ok(Self {
-            next_id: Arc::new(Mutex::const_new(0)),
-            c2s: c2s_tx,
-
-            topics,
-            topic_pubuids,
-            pubuid_topics,
-            values,
-
-            incoming_abort,
-            outgoing_abort,
-        })
+        Ok(())
     }
 
     async fn next_id(&self) -> i32 {
@@ -260,7 +325,7 @@ impl NtConn {
             }),
         }])?;
 
-        self.c2s.send(Message::Text(buf.into())).unwrap();
+        self.c2s_tx.send(Message::Text(buf.into())).unwrap();
 
         debug!(
             "{name} ({data_type}): publishing with pubuid {pubuid}",
@@ -290,7 +355,7 @@ impl NtConn {
     /// This method is typically called when an `NtTopic` is dropped.
     fn unpublish(&self, pubuid: i32) -> Result<(), Box<dyn Error>> {
         let buf = serde_json::to_string(&[ClientMsg::Unpublish { pubuid }])?;
-        self.c2s.send(Message::Text(buf.into()))?;
+        self.c2s_tx.send(Message::Text(buf.into()))?;
 
         Ok(())
     }
@@ -325,7 +390,7 @@ impl NtConn {
             subuid,
             options: BTreeMap::new(),
         }])?;
-        self.c2s.send(Message::Text(buf.into()))?;
+        self.c2s_tx.send(Message::Text(buf.into()))?;
 
         Ok(NtSubscription {
             conn: &*self,
@@ -338,7 +403,7 @@ impl NtConn {
     /// This method is typically called when an `NtSubscription` is dropped.
     fn unsubscribe(&self, subuid: i32) -> Result<(), Box<dyn Error>> {
         let buf = serde_json::to_string(&[ClientMsg::Unsubscribe { subuid }])?;
-        self.c2s.send(Message::Text(buf.into()))?;
+        self.c2s_tx.send(Message::Text(buf.into()))?;
 
         Ok(())
     }
@@ -381,7 +446,7 @@ impl NtConn {
         rmp::encode::write_u8(&mut buf, T::MSGPCK)?;
         T::encode(&mut buf, value).map_err(|_| std::io::Error::other("i don't fucking know"))?;
 
-        self.c2s.send(Message::Binary(buf.into()))?;
+        self.c2s_tx.send(Message::Binary(buf.into()))?;
 
         Ok(())
     }
@@ -390,13 +455,13 @@ impl NtConn {
     ///
     /// This method stops the event loops for sending and receiving messages. All `NtTopic`
     /// instances associated with this connection must be dropped before calling this method.
-    pub fn stop(self) {
+    pub async fn stop(self) {
         // Attempt to unwrap and use incoming and outgoing abort handles
 
-        if let Some(ah) = self.incoming_abort {
+        if let Some(ah) = self.incoming_abort.read().await.as_ref() {
             ah.abort();
         }
-        if let Some(ah) = self.outgoing_abort {
+        if let Some(ah) = self.outgoing_abort.read().await.as_ref() {
             ah.abort();
         }
     }
@@ -405,9 +470,18 @@ impl Clone for NtConn {
     fn clone(&self) -> Self {
         Self {
             next_id: self.next_id.clone(),
-            incoming_abort: None,
-            outgoing_abort: None,
-            c2s: self.c2s.clone(),
+
+            incoming_abort: self.incoming_abort.clone(),
+            outgoing_abort: self.outgoing_abort.clone(),
+
+            c2s_rx: self.c2s_rx.clone(),
+            c2s_tx: self.c2s_tx.clone(),
+
+            client_ident: self.client_ident.clone(),
+            server: self.server.clone(),
+            sock_wr: self.sock_wr.clone(),
+            sock_rd: self.sock_rd.clone(),
+
             topics: self.topics.clone(),
             topic_pubuids: self.topic_pubuids.clone(),
             pubuid_topics: self.pubuid_topics.clone(),

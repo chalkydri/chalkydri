@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	import '../app.css';
 	import {
 		DarkMode,
@@ -13,6 +13,9 @@
 		SidebarItem,
 		SidebarWrapper
 	} from 'flowbite-svelte';
+	import { configuration, type Config } from '$lib/api';
+	import { writable } from 'svelte/store';
+	import { onMount } from 'svelte';
 
 	let hide_sidebar = $state(false);
 	let { children } = $props();

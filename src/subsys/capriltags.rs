@@ -33,6 +33,7 @@ use re_types::{
 use std::time::Instant;
 use tokio::sync::watch;
 
+use crate::Cfg;
 use crate::calibration::CalibratedModel;
 use crate::{Subsystem, config, subsystem::frame_proc_loop};
 
@@ -102,8 +103,8 @@ impl Subsystem for CApriltagsDetector {
                 length: 0.0,
             },
         };
-        let layout = subsys_cfg
-            .field_layouts
+        let layouts = Cfg.read().await.field_layouts.clone().unwrap();
+        let layout = layouts
             .get(&subsys_cfg.field_layout.unwrap_or_default())
             .unwrap_or(&default_layout);
         let layout = AprilTagFieldLayout::load(layout);
@@ -116,7 +117,7 @@ impl Subsystem for CApriltagsDetector {
             model,
             layout,
             det,
-            name: cam_config.name,
+            name: cam_config.id,
         })
     }
     async fn process(

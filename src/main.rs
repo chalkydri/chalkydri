@@ -13,7 +13,6 @@ extern crate log;
 #[cfg(feature = "web")]
 extern crate actix_web;
 extern crate env_logger;
-#[cfg(feature = "ntables")]
 extern crate minint;
 extern crate tokio;
 #[cfg(feature = "web")]
@@ -46,7 +45,6 @@ use cameras::CameraManager;
 use config::Config;
 use logger::Logger;
 use mimalloc::MiMalloc;
-#[cfg(feature = "ntables")]
 use minint::NtConn;
 use once_cell::sync::Lazy;
 #[cfg(feature = "rerun")]
@@ -55,9 +53,9 @@ use re_sdk::{MemoryLimit, RecordingStream};
 use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
-use std::{error::Error, fs::File, io::Write, net::Ipv4Addr, path::Path, time::Duration};
-#[cfg(feature = "capriltags")]
-use subsys::capriltags::CApriltagsDetector;
+use std::{
+    error::Error, fs::File, io::Write, net::Ipv4Addr, path::Path, sync::Arc, time::Duration,
+};
 use tokio::sync::RwLock;
 
 // mimalloc is a very good general purpose allocator
@@ -69,7 +67,7 @@ use utils::gen_team_ip;
 use subsystem::Subsystem;
 
 #[allow(non_upper_case_globals)]
-static Cfg: Lazy<RwLock<Config>> = Lazy::new(|| {
+static Cfg: Lazy<Arc<RwLock<Config>>> = Lazy::new(|| {
     let mut path = Path::new("/boot/chalkydri.toml");
     if !path.exists() {
         path = Path::new("/etc/chalkydri.toml");
@@ -78,7 +76,7 @@ static Cfg: Lazy<RwLock<Config>> = Lazy::new(|| {
         }
     }
 
-    RwLock::new(Config::load(path).unwrap())
+    Arc::new(RwLock::new(Config::load(path).unwrap()))
 });
 
 #[cfg(feature = "rerun")]
@@ -139,13 +137,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Attempt to connect to the NT server, retrying until successful
 
-    #[cfg(feature = "ntables")]
     let nt: NtConn;
 
-    #[cfg(feature = "ntables")]
     let mut retry = false;
 
-    #[cfg(feature = "ntables")]
     loop {
         match NtConn::new(roborio_ip, dev_name.clone()).await {
             Ok(conn) => {
@@ -164,11 +159,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Connected to NT server at {roborio_ip:?} successfully!");
 
-    let cam_man = CameraManager::new(
-        #[cfg(feature = "ntables")]
-        nt.clone(),
-    )
-    .await;
+    let cam_man = CameraManager::new(nt.clone()).await;
     let api = tokio::spawn(run_api(cam_man.clone()));
 
     let cam_man_ = cam_man.clone();
@@ -198,8 +189,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Shut down NT connection
-    #[cfg(feature = "ntables")]
-    nt.stop();
+    nt.stop().await;
 
     Ok(())
 }

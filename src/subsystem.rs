@@ -1,14 +1,11 @@
-use std::{fmt::Debug, sync::Arc};
+use std::fmt::Debug;
 
-use gstreamer::{Buffer, BufferRef, Element, Pipeline, SampleRef, glib::WeakRef};
+use gstreamer::{Buffer, Element, Pipeline, glib::WeakRef};
 use gstreamer_app::AppSink;
 use minint::NtConn;
-use tokio::{
-    sync::{broadcast, watch},
-    task::LocalSet,
-};
+use tokio::sync::watch;
 
-use crate::{cameras::CameraManager, config};
+use crate::config;
 
 //pub type Buffer = Arc<Vec<u8>>;
 

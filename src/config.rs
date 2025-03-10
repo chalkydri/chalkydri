@@ -30,15 +30,16 @@ def_cfg! {
         rerun: Option<Rerun>,
         cameras: Option<Vec<Camera>>,
         device_name: Option<String>,
+        field_layouts: Option<HashMap<String, AprilTagFieldLayout>>,
     }
     Rerun {
         server_address: Option<String>,
     }
     Camera {
+        id: String,
         name: String,
-        display_name: String,
         settings: Option<CameraSettings>,
-        #[serde(skip_deserializing)]
+        //#[serde(skip_deserializing)]
         possible_settings: Option<Vec<CameraSettings>>,
         subsystems: Subsystems,
         calib: Option<serde_json::Value>,
@@ -61,7 +62,6 @@ def_cfg! {
         enabled: bool,
         gamma: Option<f64>,
         field_layout: Option<String>,
-        field_layouts: HashMap<String, AprilTagFieldLayout>,
     }
     MlSubsys {
         enabled: bool,

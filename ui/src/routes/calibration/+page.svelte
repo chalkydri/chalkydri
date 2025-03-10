@@ -4,15 +4,22 @@
 	import { _getCalibStatus, _doCalibStep } from './+page';
 	import type { CalibrationStatus } from '$lib/calibration';
 	import { onMount } from 'svelte';
-	import { calibrationIntrinsics, calibrationStatus, calibrationStep, configuration, type Camera, type Config } from '$lib/api';
+	import {
+		calibrationIntrinsics,
+		calibrationStatus,
+		calibrationStep,
+		configuration,
+		type Camera,
+		type Config
+	} from '$lib/api';
 
-let config = $state(null as Config | undefined | null);
+	let config = $state(null as Config | undefined | null);
 	let camera_mapping = $state({} as { name: string; value: string }[]);
 	onMount(async () => {
 		config = (await configuration()).data;
 		if (config && config.cameras) {
 			camera_mapping = config.cameras.map((val) => {
-				return { name: val.display_name, value: val.name };
+				return { name: val.name, value: val.id };
 			});
 		}
 	});
@@ -31,7 +38,8 @@ let config = $state(null as Config | undefined | null);
 			if (status) {
 				while (status && status.current_step < status.total_steps) {
 					calibrating_state = `${status.width}x${status.height}`;
-					status = (await calibrationStep({ path: { cam_name: cam_name } })).data as CalibrationStatus;
+					status = (await calibrationStep({ path: { cam_name: cam_name } }))
+						.data as CalibrationStatus;
 					if (status) {
 						console.log(Math.round((status.current_step / status.total_steps) * 100));
 					}
@@ -42,8 +50,8 @@ let config = $state(null as Config | undefined | null);
 
 			await calibrationIntrinsics({
 				path: {
-					cam_name: cam_name,
-				},
+					cam_name: cam_name
+				}
 			});
 
 			calibrating = false;
@@ -69,8 +77,13 @@ let config = $state(null as Config | undefined | null);
 		{/if}
 	{/if}
 
-	<Button class="mt-2" color={calibrating ? 'red' : 'blue'} disabled={!cam_name} on:click={async () => {
-		await calibrate(cam_name as string);
-	}}>{#if calibrating}Stop calibration{:else}Start calibration{/if}</Button
+	<Button
+		class="mt-2"
+		color={calibrating ? 'red' : 'blue'}
+		disabled={!cam_name}
+		on:click={async () => {
+			await calibrate(cam_name as string);
+		}}
+		>{#if calibrating}Stop calibration{:else}Start calibration{/if}</Button
 	>
 </Card>

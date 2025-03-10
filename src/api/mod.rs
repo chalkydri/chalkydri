@@ -4,16 +4,21 @@
 
 use std::{fs::File, io::Write, sync::Arc};
 
-use rust_embed::Embed;
 use actix_web::{
-    App, HttpResponse, HttpServer, Responder, get,
-    http::StatusCode,
+    App, HttpResponse, HttpServer, Responder,
+    body::BodyStream,
+    get,
+    http::{
+        StatusCode,
+        header::{self, CacheDirective},
+    },
     post,
     web::{self, Data},
 };
 use mime_guess::from_path;
+use rust_embed::Embed;
 use rustix::system::RebootCommand;
-use tokio::sync::watch;
+use tokio::{io::BufStream, sync::watch};
 use utopia::{OpenApi, ToSchema};
 
 use crate::{Cfg, cameras::CameraManager, config::Config};
@@ -86,6 +91,7 @@ pub async fn run_api(cam_man: CameraManager) {
             .service(sys_shutdown)
             .service(sys_info)
             .service(openapi_json)
+            .service(stream)
             .service(dist)
     })
     .bind(("0.0.0.0", 6942))
@@ -127,7 +133,13 @@ pub(super) async fn configuration(data: web::Data<CameraManager>) -> impl Respon
     let cam_man = data.get_ref();
 
     let mut cfgg = Cfg.read().await.clone();
-    cfgg.cameras = Some(cam_man.devices());
+    for cam in cam_man.devices() {
+        if let Some(cameras) = &mut cfgg.cameras {
+            if cameras.iter().filter(|c| c.id == cam.id).next().is_none() {
+                cameras.push(cam);
+            }
+        }
+    }
     web::Json(cfgg)
 }
 
@@ -188,7 +200,7 @@ pub(super) async fn calibration_intrinsics(
         if let Some(cams) = &mut cfgg.cameras {
             (*cams)
                 .iter_mut()
-                .filter(|cam| cam.name == cam_name)
+                .filter(|cam| cam.id == cam_name)
                 .next()
                 .unwrap()
                 .calib = Some(json);
@@ -291,4 +303,25 @@ pub(super) async fn sys_info() -> impl Responder {
         (((sysinfo.totalram - sysinfo.freeram) as f32 / sysinfo.totalram as f32) * 100.0) as u8;
 
     web::Json(SysInfo { uptime, mem_usage })
+}
+
+#[get("/stream/{cam_name}")]
+pub(super) async fn stream(
+    path: web::Path<String>,
+    data: web::Data<CameraManager>,
+) -> impl Responder {
+    let cam_name = path.clone();
+
+    println!("{cam_name}");
+
+    HttpResponse::Ok()
+        .append_header(header::CacheControl(vec![CacheDirective::NoCache]))
+        .append_header((header::PRAGMA, "no-cache"))
+        .append_header((header::EXPIRES, 0))
+        .append_header((header::CONNECTION, "close"))
+        .append_header((
+            header::CONTENT_TYPE,
+            "multipart/x-mixed-replace; boundary=frame",
+        ))
+        .streaming(data.mjpeg_streams().await.values().next().unwrap().clone())
 }

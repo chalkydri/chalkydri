@@ -122,15 +122,10 @@
 			},
 			"CAprilTagsSubsys": {
 				"type": "object",
-				"required": ["enabled", "field_layouts"],
+				"required": ["enabled"],
 				"properties": {
 					"enabled": { "type": "boolean" },
 					"field_layout": { "type": ["string", "null"] },
-					"field_layouts": {
-						"type": "object",
-						"additionalProperties": { "$ref": "#/components/schemas/AprilTagFieldLayout" },
-						"propertyNames": { "type": "string" }
-					},
 					"gamma": { "type": ["number", "null"], "format": "double" }
 				}
 			},
@@ -146,10 +141,15 @@
 			},
 			"Camera": {
 				"type": "object",
-				"required": ["name", "display_name", "subsystems"],
+				"required": ["id", "name", "subsystems"],
 				"properties": {
-					"display_name": { "type": "string" },
+					"calib": {},
+					"id": { "type": "string" },
 					"name": { "type": "string" },
+					"possible_settings": {
+						"type": ["array", "null"],
+						"items": { "$ref": "#/components/schemas/CameraSettings" }
+					},
 					"settings": {
 						"oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/CameraSettings" }]
 					},
@@ -183,6 +183,11 @@
 						"items": { "$ref": "#/components/schemas/Camera" }
 					},
 					"device_name": { "type": ["string", "null"] },
+					"field_layouts": {
+						"type": ["object", "null"],
+						"additionalProperties": { "$ref": "#/components/schemas/AprilTagFieldLayout" },
+						"propertyNames": { "type": "string" }
+					},
 					"ntables_ip": { "type": ["string", "null"] },
 					"rerun": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/Rerun" }] },
 					"team_number": { "type": "integer", "format": "int32", "minimum": 0 }
