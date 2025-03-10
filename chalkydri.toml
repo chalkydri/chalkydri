@@ -4,12 +4,12 @@ device_name = "chalkydri3372531970"
 
 [[cameras]]
 id = '\_SB_.PCI0.XHC_.RHUB.HS11-11:1.0-0bda:565c'
-name = "test123"
+name = "test"
+gamma = 2.0
 
 [cameras.settings]
-width = 1280
-height = 720
-gamma = -1.0
+width = 320
+height = 240
 
 [cameras.settings.frame_rate]
 num = 30
@@ -106,7 +106,6 @@ den = 1
 [[cameras.possible_settings]]
 width = 1280
 height = 720
-gamma = -1.0
 
 [cameras.possible_settings.frame_rate]
 num = 30

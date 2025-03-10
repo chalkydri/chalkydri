@@ -5,7 +5,7 @@
 #![feature(duration_millis_float)]
 // Unsafe code is NOT allowed in Chalkydri core.
 // If unsafe code is required, it should be part of a different crate.
-#![forbid(unsafe_code)]
+//#![forbid(unsafe_code)]
 #![allow(unreachable_code)]
 
 #[macro_use]
@@ -95,15 +95,9 @@ static Rerun: Lazy<RecordingStream> = Lazy::new(|| {
         .into()
 });
 
-#[tokio::main(worker_threads = 16)]
-async fn main() -> Result<(), Box<dyn Error>> {
-    Logger::new().with_path_prefix("logs/handler").init()?;
-
-    info!("starting up...");
-
-    gstreamer::init().unwrap();
-    debug!("initialized gstreamer");
-
+#[allow(non_upper_case_globals)]
+static Nt: Lazy<NtConn> = Lazy::new(|| {
+    futures_executor::block_on(async {
     // Come up with an IP address for the roboRIO based on the team number or specified IP
     let roborio_ip = {
         let Config {
@@ -159,13 +153,40 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Connected to NT server at {roborio_ip:?} successfully!");
 
-    let cam_man = CameraManager::new(nt.clone()).await;
+    nt
+
+    })
+});
+
+#[tokio::main(worker_threads = 16)]
+async fn main() -> Result<(), Box<dyn Error>> {
+    println!(
+        r#"
+    ))       ((       ___       __               _    __  ___
+   / /       \ \     |    |  | |  | |   | / \ / | \  |  |  |
+  / \\   _   / /\    |    |__| |__| |   |/   V  |  | |__|  |
+ / / \__/6\>_/ \ \   |    |  | |  | |   |\   |  |  | | \   |
+(  __          __ )  |___ |  | |  | |__ | \  |  |_/  |  \ _|_
+ \_____     _____/        
+      //////\             High-performance vision system
+      UUUUUUU                FRC Team 4533 - Phoenix
+"#
+    );
+
+    Logger::new().with_path_prefix("logs/handler").init()?;
+
+    info!("starting up...");
+
+    gstreamer::init().unwrap();
+    debug!("initialized gstreamer");
+
+    let cam_man = CameraManager::new(Nt.clone()).await;
     let api = tokio::spawn(run_api(cam_man.clone()));
 
     let cam_man_ = cam_man.clone();
     std::thread::spawn(move || {
-        cam_man_.start();
-        cam_man_.run().unwrap();
+        //cam_man_.start();
+        //cam_man_.run().unwrap();
     });
 
     #[cfg(not(feature = "web"))]
@@ -178,7 +199,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             //_ = local => {},
             _ = api => {},
             _ = tokio::signal::ctrl_c() => {
-                cam_man.stop();
+                //cam_man.stop();
          let mut f = File::create("chalkydri.toml").unwrap();
         let toml_cfgg = toml::to_string_pretty(&*Cfg.read().await).unwrap();
         f.write_all(toml_cfgg.as_bytes()).unwrap();
@@ -187,9 +208,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             },
         );
     }
-
-    // Shut down NT connection
-    nt.stop().await;
 
     Ok(())
 }

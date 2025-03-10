@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { Button, Card, Fileupload, Input, Label, P, Skeleton } from 'flowbite-svelte';
+	import { Button, Card, Fileupload, Input, Label, Layout, P, Skeleton } from 'flowbite-svelte';
 	import { _loadConfig, _saveConfig } from './+page';
 	import { onMount } from 'svelte';
-	import { configure, configuration, type Config, type Camera } from '$lib/api';
+	import { configure, type Config, type Camera } from '$lib/api';
 	import CamConfig from './+components/CamConfig.svelte';
 	import { config, updateConfig, loadConfig } from '$lib/config';
-	import { writable } from 'svelte/store';
+	import { client } from '$lib/api/client.gen';
 
-	let cfg = $state(null);
+	let cfg: Config | null = $state(null);
 	let saving = $state(false);
 
 	async function save() {
@@ -18,7 +18,7 @@
 				body: cfg ? cfg : ({} as Config)
 			})
 		).data;
-		if (new_config) {
+		if (new_config && cfg) {
 			updateConfig(cfg);
 		}
 
@@ -39,13 +39,14 @@
 	let files: FileList | undefined = $state();
 
 	$effect(async () => {
-		if (files) {
+		if (cfg && files) {
 			for (const file of files) {
 				if (!cfg.field_layouts) {
 					cfg.field_layouts = {};
 				}
 				cfg.field_layouts[file.name] = JSON.parse(await file.text());
 			}
+			files = undefined;
 		}
 	});
 </script>
@@ -66,7 +67,12 @@
 	-->
 	{#if cfg.cameras}
 		{#each cfg.cameras as camera, i}
+		<Layout>
 			<CamConfig bind:camera={cfg.cameras[i]} bind:disabled={saving} />
+			<Card padding="xs">
+				<img src={`${client.getConfig().baseUrl}/stream/${camera.name}`} alt={camera.name} />
+			</Card>
+					</Layout>
 		{/each}
 	{/if}
 	<!--

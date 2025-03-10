@@ -21,7 +21,7 @@ use rustix::system::RebootCommand;
 use tokio::{io::BufStream, sync::watch};
 use utopia::{OpenApi, ToSchema};
 
-use crate::{Cfg, cameras::CameraManager, config::Config};
+use crate::{cameras::CameraManager, config::Config, Cfg, Nt};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -162,6 +162,11 @@ pub(super) async fn configure(
         rustix::system::sethostname(cfgg.device_name.clone().unwrap().as_bytes()).unwrap();
     }
 
+    //for cam in cam_man.devices() {
+    //    cam_man.destroy_pipeline(cam.id.clone()).await;
+    //    cam_man.create_pipeline(Nt.clone(), cam.id).await;
+    //}
+
     {
         *Cfg.write().await = cfgg.clone();
 
@@ -205,7 +210,6 @@ pub(super) async fn calibration_intrinsics(
                 .unwrap()
                 .calib = Some(json);
         }
-        drop(cfgg);
     }
 
     HttpResponse::new(StatusCode::OK)
@@ -323,5 +327,5 @@ pub(super) async fn stream(
             header::CONTENT_TYPE,
             "multipart/x-mixed-replace; boundary=frame",
         ))
-        .streaming(data.mjpeg_streams().await.values().next().unwrap().clone())
+        .streaming(data.mjpeg_streams().await.get(&cam_name).unwrap().clone())
 }

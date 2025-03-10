@@ -38,7 +38,9 @@
 					color="green"
 					class="ml-1"
 					on:click={() => {
-						camera.name = editing_name;
+						if (editing_name) {
+							camera.name = editing_name;
+						}
 						editing_name = null;
 					}}
 				>
@@ -68,7 +70,7 @@
 			{/if}
 		</div>
 
-		<Layout gap="3">
+		<Layout gap={3}>
 			<div>
 				<Label for="res_fps" class="mt-2 mb-1">Resolution / Frame Rate</Label>
 				<Select
@@ -76,16 +78,22 @@
 					items={camera.possible_settings.map((val) => {
 						return {
 							name: `${val.width}x${val.height} @${val.frame_rate.num / val.frame_rate.den}fps`,
-							value: val
+							value: JSON.stringify(val)
 						};
 					})}
-					bind:value={camera.settings}
+					value={JSON.stringify(camera.settings)}
+					on:input={(e) => { camera.settings = JSON.parse(e.target.value); }}
 				/>
 			</div>
 
 			{#if camera.settings}
+			<div>
 				<Label class="mt-4 mb-2" for="gamma">Gamma</Label>
-				<Range id="gamma" title="Gamma" min="-5.0" max="5.0" bind:value={camera.settings.gamma} />
+				<div class="flex flex-row gap-4 items-center">
+					<Range id="gamma" title="Gamma" min="-5.0" max="5.0" bind:value={camera.gamma} />
+					<P>{camera.gamma}</P>
+				</div>
+			</div>
 			{/if}
 
 			{#if camera.subsystems}

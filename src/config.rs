@@ -43,12 +43,12 @@ def_cfg! {
         possible_settings: Option<Vec<CameraSettings>>,
         subsystems: Subsystems,
         calib: Option<serde_json::Value>,
+        gamma: Option<f32>,
     }
     CameraSettings {
         width: u32,
         height: u32,
         frame_rate: CfgFraction,
-        gamma: Option<f32>,
     }
     CfgFraction {
         num: u32,
@@ -73,7 +73,6 @@ impl Config {
         let mut f = File::open(path).map_err(|_| Error::FailedToReadConfig)?;
         let mut buf = String::new();
         f.read_to_string(&mut buf).unwrap();
-        println!("{}", &buf);
         toml::from_str(&buf).map_err(|_| Error::InvalidConfig)
     }
 }

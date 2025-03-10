@@ -5,41 +5,26 @@
 
 use actix_web::web::Bytes;
 use futures_core::Stream;
-use futures_executor::LocalPool;
-use futures_util::StreamExt;
 use gstreamer::{
-    Bin, Buffer, BusSyncReply, Caps, CapsFeatures, DeviceMonitor, DeviceProvider,
-    DeviceProviderFactory, Element, ElementFactory, FlowSuccess, Fraction, MessageView, Pipeline,
-    Sample, SampleRef, State,
-    bus::BusWatchGuard,
-    glib::{
-        ControlFlow, MainLoop, ParamSpecBoxed, Type, Value, WeakRef, future_with_timeout,
-        property::PropertyGet,
-    },
-    message::DeviceAdded,
-    prelude::*,
-    subclass::prelude::DeviceProviderImpl,
+    Buffer, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element,
+    ElementFactory, FlowSuccess, Fraction, MessageView, Pipeline, State, glib::WeakRef, prelude::*,
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use minint::NtConn;
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
-use std::{collections::HashMap, error::Error, pin::Pin, sync::Arc, task::Poll, time::Duration};
-use tokio::{
-    sync::{Mutex, MutexGuard, RwLock, watch},
-    task::LocalSet,
-    time::Instant,
-};
+use std::{collections::HashMap, error::Error, sync::Arc, task::Poll};
+use tokio::sync::{Mutex, MutexGuard, RwLock, watch};
 
 #[cfg(feature = "rerun")]
 use crate::Rerun;
 use crate::{
     Cfg,
     calibration::Calibrator,
-    config::{self, CAprilTagsSubsys, CameraSettings, CfgFraction},
+    config::{self, CameraSettings, CfgFraction},
     subsys::capriltags::CApriltagsDetector,
-    subsystem::{SubsysCtx, Subsystem},
+    subsystem::Subsystem,
 };
 
 #[derive(Clone)]
@@ -58,23 +43,34 @@ impl Stream for MjpegStream {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        while !self.rx.has_changed().unwrap() {}
+        loop {
+            match self.rx.has_changed() {
+                Ok(true) => {
+                    info!("working!!!");
+                    let mut bytes = Vec::new();
+                    bytes.clear();
+                    if let Some(frame) = self.get_mut().rx.borrow_and_update().as_deref() {
+                        bytes.extend_from_slice(
+                            &[
+                                b"--frame\r\nContent-Length: ",
+                                frame.size().to_string().as_bytes(),
+                                b"\r\nContent-Type: image/jpeg\r\n\r\n",
+                            ]
+                            .concat(),
+                        );
+                        bytes.extend_from_slice(frame.map_readable().unwrap().as_slice());
+                    }
 
-        info!("working!!!");
-        let mut bytes = Vec::new();
-        bytes.clear();
-        if let Some(frame) = self.get_mut().rx.borrow_and_update().as_deref() {
-            bytes.extend_from_slice(
-                &[
-                    b"--frame\r\nContent-Length: ",
-                    frame.size().to_string().as_bytes(),
-                    b"\r\nContent-Type: image/jpeg\r\n\r\n",
-                ]
-                .concat(),
-            );
-            bytes.extend_from_slice(frame.map_readable().unwrap().as_slice());
+                    return Poll::Ready(Some(Ok(bytes.into())));
+                }
+                Ok(false) => {}
+                Err(err) => {
+                    error!("error getting frame: {err:?}");
+
+                    return Poll::Ready(None);
+                }
+            }
         }
-        Poll::Ready(Some(Ok(bytes.into())))
     }
 }
 
@@ -82,7 +78,7 @@ impl Stream for MjpegStream {
 pub struct CameraManager {
     //dev_mon: DeviceMonitor,
     dev_prov: DeviceProvider,
-    pipeline: Pipeline,
+    pipelines: Arc<RwLock<HashMap<String, Pipeline>>>,
     calibrators: Arc<Mutex<HashMap<String, Calibrator>>>,
     mjpeg_streams: Arc<Mutex<HashMap<String, MjpegStream>>>,
 }
@@ -106,21 +102,12 @@ impl CameraManager {
             .unwrap()
             .get()
             .unwrap();
-        //let dev_mon = DeviceMonitor::new();
-        //let caps = Caps::builder("video/x-raw").any_features().build();
-        //dev_mon
-        //    .add_filter(Some("Video/Source"), Some(&caps))
-        //    .unwrap();
 
         // Create the pipeline
-        let pipeline = Pipeline::new();
-        let mut pipelines = Arc::new(RwLock::new(Vec::new()));
+        let pipelines = Arc::new(RwLock::new(HashMap::new()));
 
         //let bus = dev_mon.bus();
         let bus = dev_prov.bus();
-
-        // Create weak ref to pipeline we can give away
-        let pipeline_ = pipeline.downgrade();
 
         let calibrators: Arc<Mutex<HashMap<String, Calibrator>>> =
             Arc::new(Mutex::new(HashMap::new()));
@@ -137,7 +124,6 @@ impl CameraManager {
             let pipelines = &pipelines_;
 
             // Upgrade the weak ref to work with the pipeline
-            let pipeline = pipeline_.upgrade().unwrap();
             let pipeline = Pipeline::new();
 
             match msg.view() {
@@ -194,7 +180,7 @@ impl CameraManager {
                                 debug!("adding mjpeg stream");
                                 let mut mjpeg_streams =
                                     tokio::task::block_in_place(|| mjpeg_streams.blocking_lock());
-                                (*mjpeg_streams).insert(cam_config.id.clone(), mjpeg_stream);
+                                (*mjpeg_streams).insert(cam_config.name.clone(), mjpeg_stream);
                                 drop(mjpeg_streams);
                                 debug!("dropped lock");
                             }
@@ -205,12 +191,14 @@ impl CameraManager {
                                 cam_config.clone(),
                                 nt.clone(),
                             );
+
+                            tokio::task::block_in_place(|| pipelines.blocking_write())
+                                .insert(dev.display_name().to_string(), pipeline);
                         }
                     }
                 }
                 _ => {}
             }
-            tokio::task::block_in_place(|| pipelines.blocking_write()).push(pipeline);
 
             BusSyncReply::Pass
         });
@@ -218,7 +206,7 @@ impl CameraManager {
         // Start the device monitor
         dev_prov.start().unwrap();
 
-        for pipeline in pipelines.read().await.clone() {
+        for (cam_name, pipeline) in pipelines.read().await.clone() {
             // Start the pipeline
             pipeline.set_state(State::Playing).unwrap();
 
@@ -229,11 +217,95 @@ impl CameraManager {
         }
 
         Self {
-            //dev_mon,
             dev_prov,
-            pipeline,
+            pipelines,
             calibrators,
             mjpeg_streams,
+        }
+    }
+
+    pub async fn destroy_pipeline(&self, dev_id: String) {
+        let mut pipelines = self.pipelines.write().await;
+        unsafe {
+            pipelines.get_mut(&dev_id).unwrap().set_state(State::Null).unwrap();
+            pipelines.get_mut(&dev_id).unwrap().run_dispose();
+        }
+        pipelines.remove(&dev_id);
+        self.pipelines.write().await.remove(&dev_id);
+    }
+
+    pub async fn create_pipeline(&self, nt: NtConn, dev_id: String) {
+        let devices = self.dev_prov.devices();
+        let dev = devices.iter().filter(|dev| dev.display_name().to_string() == dev_id).next().unwrap();
+
+        // Upgrade the weak ref to work with the pipeline
+        let pipeline = Pipeline::new();
+        let calibrators = self.calibrators.clone();
+        let mjpeg_streams = self.mjpeg_streams.clone();
+        let pipelines = self.pipelines.clone();
+
+        if let Some(cam_configs) = &Cfg.read().await.cameras.clone() {
+            if let Some(cam_config) = cam_configs
+                .clone()
+                .iter()
+                .filter(|cam| cam.id == dev.display_name().to_string())
+                .next()
+            {
+                debug!("found a config");
+
+                // Create the camera source
+                let cam = dev.create_element(None).unwrap();
+                dbg!(cam.list_properties());
+
+                // The camera preprocessing part:
+                //   [src]> capsfilter -> queue -> tee -> ...
+
+                // Create the elements
+                let filter = ElementFactory::make("capsfilter")
+                    .property("caps", &dev.caps().unwrap())
+                    .build()
+                    .unwrap();
+                //let queue = ElementFactory::make("queue").build().unwrap();
+                let tee = ElementFactory::make("tee").build().unwrap();
+
+                // Add them to the pipeline
+                pipeline.add_many([&cam, &filter, &tee]).unwrap();
+
+                // Link them
+                Element::link_many([&cam, &filter, &tee]).unwrap();
+
+                debug!("initializing calibrator");
+                let calibrator = Self::add_calib(&pipeline, &tee, cam_config.clone());
+                debug!("adding calibrator");
+                calibrators
+                    .lock()
+                    .await
+                    .insert(cam_config.id.clone(), calibrator);
+
+                debug!("initializing mjpeg stream");
+                let mjpeg_stream = Self::add_mjpeg(&pipeline, &tee, cam_config.clone());
+                debug!("adding mjpeg stream");
+                self.mjpeg_streams
+                    .lock()
+                    .await
+                    .insert(cam_config.name.clone(), mjpeg_stream);
+
+                Self::add_subsys::<CApriltagsDetector>(
+                    &pipeline,
+                    &tee,
+                    cam_config.clone(),
+                    nt.clone(),
+                );
+
+            // Start the pipeline
+            pipeline.set_state(State::Playing).unwrap();
+
+            // Get the pipeline's bus
+            let bus = pipeline.bus().unwrap();
+            // Hook up event handler for the pipeline
+            bus.set_sync_handler(|_, _| BusSyncReply::Pass);
+                self.pipelines.write().await.insert(dev.display_name().to_string(), pipeline);
+            }
         }
     }
 
@@ -246,6 +318,7 @@ impl CameraManager {
                 id: dev.display_name().to_string(),
                 name: String::new(),
                 settings: None,
+                gamma: None,
                 possible_settings: Some(
                     dev.caps()
                         .unwrap()
@@ -261,7 +334,6 @@ impl CameraManager {
                                     num: frame_rate.numer() as u32,
                                     den: frame_rate.denom() as u32,
                                 },
-                                gamma: None,
                             }
                         })
                         .collect(),
@@ -478,9 +550,13 @@ impl CameraManager {
         MjpegStream { rx }
     }
 
-    pub fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&self, name: String) -> Result<(), Box<dyn Error>> {
         // Define the event loop or something?
-        self.pipeline
+        self.pipelines
+            .read()
+            .await
+            .get(&name)
+            .unwrap()
             .bus()
             .unwrap()
             .connect_message(Some("error"), move |_, msg| match msg.view() {
@@ -498,20 +574,27 @@ impl CameraManager {
         Ok(())
     }
 
-    pub fn start(&self) {
+    pub async fn start(&self, name: String) {
         // Start the pipeline
-        self.pipeline.set_state(State::Playing).unwrap();
+        self.pipelines
+            .read()
+            .await
+            .get(&name)
+            .unwrap()
+            .set_state(State::Playing)
+            .unwrap();
         //.expect("Unable to set the pipeline to the `Playing` state.");
     }
-    pub fn pause(&self) {
-        self.pipeline
+    pub async fn pause(&self, name: String) {
+        self.pipelines
+            .read()
+            .await
+            .get(&name)
+            .unwrap()
             .set_state(State::Paused)
             .expect("Unable to set the pipeline to the `Null` state.");
     }
-    #[deprecated]
-    pub fn stop(&self) {
-        self.pause();
-    }
+
     pub async fn calibrators(&self) -> MutexGuard<HashMap<String, Calibrator>> {
         self.calibrators.lock().await
     }
