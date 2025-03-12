@@ -141,25 +141,36 @@ impl CameraManager {
                             debug!("found a config");
 
                             // Create the camera source
-                            let cam = dev.create_element(None).unwrap();
-                            dbg!(cam.list_properties());
+                            let cam = dev.create_element(Some("camera")).unwrap();
 
                             // The camera preprocessing part:
                             //   [src]> capsfilter -> queue -> tee -> ...
 
                             // Create the elements
                             let filter = ElementFactory::make("capsfilter")
-                                .property("caps", &dev.caps().unwrap())
+                                .name("capsfilter")
+                                .property(
+                                    "caps",
+                                    &Caps::builder("video/x-raw")
+                                        .field("width", &1280)
+                                        .field("height", &720)
+                                        .build(),
+                                )
                                 .build()
                                 .unwrap();
                             //let queue = ElementFactory::make("queue").build().unwrap();
+                            let gamma = ElementFactory::make("gamma")
+                                .name("gamma")
+                                .property("gamma", &cam_config.gamma.unwrap_or(1.0))
+                                .build()
+                                .unwrap();
                             let tee = ElementFactory::make("tee").build().unwrap();
 
                             // Add them to the pipeline
-                            pipeline.add_many([&cam, &filter, &tee]).unwrap();
+                            pipeline.add_many([&cam, &filter, &gamma, &tee]).unwrap();
 
                             // Link them
-                            Element::link_many([&cam, &filter, &tee]).unwrap();
+                            Element::link_many([&cam, &filter, &gamma, &tee]).unwrap();
 
                             debug!("initializing calibrator");
                             let calibrator = Self::add_calib(&pipeline, &tee, cam_config.clone());
@@ -224,10 +235,88 @@ impl CameraManager {
         }
     }
 
+    //pub async enable_subsystem(&self, dev_id: String, enable: bool) {
+    //    self.pause(dev_id.clone()).await;
+    //    {
+    //        let mut pipelines = self.pipelines.write().await;
+    //        let pipeline = pipelines.get_mut(&dev_id).unwrap();
+    //        // Get a copy of the global configuration
+    //        let config = {
+    //            let cfgg = Cfg.read().await;
+    //            let ret = (*cfgg).clone();
+    //            drop(cfgg);
+    //            ret
+    //        };
+
+    //        if let Some(cam_configs) = &config.cameras {
+    //            if let Some(cam_config) = cam_configs
+    //                .clone()
+    //                .iter()
+    //                .filter(|cam| cam.id == dev_id)
+    //                .next()
+    //            {
+    //                pipeline.by_name(&format!("")
+
+    pub async fn update_pipeline(&self, dev_id: String) {
+        self.pause(dev_id.clone()).await;
+        {
+            let mut pipelines = self.pipelines.write().await;
+            if let Some(pipeline) = pipelines.get_mut(&dev_id) {
+                // Get a copy of the global configuration
+                let config = {
+                    let cfgg = Cfg.read().await;
+                    let ret = (*cfgg).clone();
+                    drop(cfgg);
+                    ret
+                };
+
+                if let Some(cam_configs) = &config.cameras {
+                    if let Some(cam_config) = cam_configs
+                        .clone()
+                        .iter()
+                        .filter(|cam| cam.id == dev_id)
+                        .next()
+                    {
+                        if let Some(settings) = &cam_config.settings {
+                            //pipeline.by_name("capsfilter").unwrap().set_property(
+                            //    "caps",
+                            //    &Caps::builder("video/x-raw")
+                            //        .field("width", &settings.width)
+                            //        .field("height", &settings.height)
+                            //        //.field(
+                            //        //    "framerate",
+                            //        //    &Fraction::new(
+                            //        //        settings.frame_rate.num as i32,
+                            //        //        settings.frame_rate.den as i32,
+                            //        //    ),
+                            //        //)
+                            //        .build(),
+                            //);
+                            pipeline
+                                .by_name("gamma")
+                                .unwrap()
+                                .set_property("gamma", &cam_config.gamma.unwrap_or(1.0));
+
+                            pipeline
+                                .by_name("capriltags_valve")
+                                .unwrap()
+                                .set_property("drop", !cam_config.subsystems.capriltags.enabled);
+                        }
+                    }
+                }
+            }
+        }
+        self.start(dev_id).await;
+    }
+
     pub async fn destroy_pipeline(&self, dev_id: String) {
         let mut pipelines = self.pipelines.write().await;
         unsafe {
-            pipelines.get_mut(&dev_id).unwrap().set_state(State::Null).unwrap();
+            pipelines
+                .get_mut(&dev_id)
+                .unwrap()
+                .set_state(State::Null)
+                .unwrap();
             pipelines.get_mut(&dev_id).unwrap().run_dispose();
         }
         pipelines.remove(&dev_id);
@@ -236,7 +325,11 @@ impl CameraManager {
 
     pub async fn create_pipeline(&self, nt: NtConn, dev_id: String) {
         let devices = self.dev_prov.devices();
-        let dev = devices.iter().filter(|dev| dev.display_name().to_string() == dev_id).next().unwrap();
+        let dev = devices
+            .iter()
+            .filter(|dev| dev.display_name().to_string() == dev_id)
+            .next()
+            .unwrap();
 
         // Upgrade the weak ref to work with the pipeline
         let pipeline = Pipeline::new();
@@ -297,14 +390,17 @@ impl CameraManager {
                     nt.clone(),
                 );
 
-            // Start the pipeline
-            pipeline.set_state(State::Playing).unwrap();
+                // Start the pipeline
+                pipeline.set_state(State::Playing).unwrap();
 
-            // Get the pipeline's bus
-            let bus = pipeline.bus().unwrap();
-            // Hook up event handler for the pipeline
-            bus.set_sync_handler(|_, _| BusSyncReply::Pass);
-                self.pipelines.write().await.insert(dev.display_name().to_string(), pipeline);
+                // Get the pipeline's bus
+                let bus = pipeline.bus().unwrap();
+                // Hook up event handler for the pipeline
+                bus.set_sync_handler(|_, _| BusSyncReply::Pass);
+                self.pipelines
+                    .write()
+                    .await
+                    .insert(dev.display_name().to_string(), pipeline);
             }
         }
     }
@@ -371,12 +467,17 @@ impl CameraManager {
         debug!(target: &target, "initializing preproc pipeline chunk subsystem...");
         let (input, output) = S::preproc(cam_config.clone(), pipeline).unwrap();
 
-        let queue = ElementFactory::make("queue").build().unwrap();
+        let valve = ElementFactory::make("valve")
+            .name(&format!("{}_valve", S::NAME))
+            .property("drop", &true)
+            .build()
+            .unwrap();
+        //let queue = ElementFactory::make("queue").build().unwrap();
         let appsink = ElementFactory::make("appsink").build().unwrap();
-        pipeline.add_many([&queue, &appsink]).unwrap();
+        pipeline.add_many([&valve, &appsink]).unwrap();
 
         debug!(target: &target, "linking preproc pipeline chunk...");
-        Element::link_many([&cam, &queue, &input]).unwrap();
+        Element::link_many([&cam, &valve, &input]).unwrap();
         output.link(&appsink).unwrap();
 
         let appsink = appsink.dynamic_cast::<AppSink>().unwrap();
@@ -397,6 +498,7 @@ impl CameraManager {
                 })
                 .build(),
         );
+        appsink.set_async(false);
 
         debug!("linked subsys junk");
 
@@ -576,23 +678,17 @@ impl CameraManager {
 
     pub async fn start(&self, name: String) {
         // Start the pipeline
-        self.pipelines
-            .read()
-            .await
-            .get(&name)
-            .unwrap()
-            .set_state(State::Playing)
-            .unwrap();
+        if let Some(pipeline) = self.pipelines.read().await.get(&name) {
+            pipeline.set_state(State::Playing).unwrap();
+        }
         //.expect("Unable to set the pipeline to the `Playing` state.");
     }
     pub async fn pause(&self, name: String) {
-        self.pipelines
-            .read()
-            .await
-            .get(&name)
-            .unwrap()
-            .set_state(State::Paused)
-            .expect("Unable to set the pipeline to the `Null` state.");
+        if let Some(pipeline) = self.pipelines.read().await.get(&name) {
+            pipeline
+                .set_state(State::Paused)
+                .expect("Unable to set the pipeline to the `Null` state.");
+        }
     }
 
     pub async fn calibrators(&self) -> MutexGuard<HashMap<String, Calibrator>> {

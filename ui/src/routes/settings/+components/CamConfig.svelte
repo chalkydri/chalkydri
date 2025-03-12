@@ -82,19 +82,19 @@
 						};
 					})}
 					value={JSON.stringify(camera.settings)}
-					on:input={(e) => { camera.settings = JSON.parse(e.target.value); }}
+					on:input={(e) => {
+						camera.settings = JSON.parse(e.target.value);
+					}}
 				/>
 			</div>
 
-			{#if camera.settings}
 			<div>
 				<Label class="mt-4 mb-2" for="gamma">Gamma</Label>
 				<div class="flex flex-row gap-4 items-center">
-					<Range id="gamma" title="Gamma" min="-5.0" max="5.0" bind:value={camera.gamma} />
+					<Range id="gamma" title="Gamma" min="1.0" max="5.0" bind:value={camera.gamma} />
 					<P>{camera.gamma}</P>
 				</div>
 			</div>
-			{/if}
 
 			{#if camera.subsystems}
 				<Card padding="sm" class="mt-2">

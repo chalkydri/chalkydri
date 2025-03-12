@@ -98,63 +98,62 @@ static Rerun: Lazy<RecordingStream> = Lazy::new(|| {
 #[allow(non_upper_case_globals)]
 static Nt: Lazy<NtConn> = Lazy::new(|| {
     futures_executor::block_on(async {
-    // Come up with an IP address for the roboRIO based on the team number or specified IP
-    let roborio_ip = {
-        let Config {
-            ntables_ip,
-            team_number,
-            ..
-        } = &*Cfg.read().await;
+        // Come up with an IP address for the roboRIO based on the team number or specified IP
+        let roborio_ip = {
+            let Config {
+                ntables_ip,
+                team_number,
+                ..
+            } = &*Cfg.read().await;
 
-        ntables_ip
-            .clone()
-            .map(|s| {
-                s.parse::<Ipv4Addr>()
-                    .expect("failed to parse ip address")
-                    .octets()
-            })
-            .unwrap_or_else(|| gen_team_ip(*team_number).expect("failed to generate team ip"))
-    };
+            ntables_ip
+                .clone()
+                .map(|s| {
+                    s.parse::<Ipv4Addr>()
+                        .expect("failed to parse ip address")
+                        .octets()
+                })
+                .unwrap_or_else(|| gen_team_ip(*team_number).expect("failed to generate team ip"))
+        };
 
-    // Get the device's name or generate one if not set
-    let dev_name = if let Some(dev_name) = (*Cfg.read().await).device_name.clone() {
-        dev_name
-    } else {
-        warn!("device name not set! generating one...");
+        // Get the device's name or generate one if not set
+        let dev_name = if let Some(dev_name) = (*Cfg.read().await).device_name.clone() {
+            dev_name
+        } else {
+            warn!("device name not set! generating one...");
 
-        // Generate & save it
-        let dev_name = String::from("chalkydri");
-        (*Cfg.write().await).device_name = Some(dev_name.clone());
+            // Generate & save it
+            let dev_name = String::from("chalkydri");
+            (*Cfg.write().await).device_name = Some(dev_name.clone());
 
-        dev_name
-    };
+            dev_name
+        };
 
-    // Attempt to connect to the NT server, retrying until successful
+        // Attempt to connect to the NT server, retrying until successful
 
-    let nt: NtConn;
+        let nt: NtConn;
 
-    let mut retry = false;
+        let mut retry = false;
 
-    loop {
-        match NtConn::new(roborio_ip, dev_name.clone()).await {
-            Ok(conn) => {
-                nt = conn;
-                break;
-            }
-            Err(err) => {
-                if !retry {
-                    error!("Error connecting to NT server: {err:?}");
-                    retry = true;
+        loop {
+            match NtConn::new(roborio_ip, dev_name.clone()).await {
+                Ok(conn) => {
+                    nt = conn;
+                    break;
                 }
-                tokio::time::sleep(Duration::from_millis(5)).await;
+                Err(err) => {
+                    if !retry {
+                        error!("Error connecting to NT server: {err:?}");
+                        retry = true;
+                    }
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
             }
         }
-    }
 
-    info!("Connected to NT server at {roborio_ip:?} successfully!");
+        info!("Connected to NT server at {roborio_ip:?} successfully!");
 
-    nt
-
+        nt
     })
 });
 

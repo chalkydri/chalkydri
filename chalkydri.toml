@@ -4,12 +4,12 @@ device_name = "chalkydri3372531970"
 
 [[cameras]]
 id = '\_SB_.PCI0.XHC_.RHUB.HS11-11:1.0-0bda:565c'
-name = "test"
-gamma = 2.0
+name = "test1"
+gamma = 1.0
 
 [cameras.settings]
-width = 320
-height = 240
+width = 1280
+height = 720
 
 [cameras.settings.frame_rate]
 num = 30
@@ -113,6 +113,210 @@ den = 1
 
 [cameras.subsystems.capriltags]
 enabled = true
+field_layout = "2025-reefscape-welded.json"
+
+[cameras.subsystems.ml]
+enabled = false
+
+[[cameras]]
+id = '\_SB_.PCI0.XHC_.RHUB.HS03-3:1.0-045e:0779'
+name = "test2"
+gamma = 1.0
+
+[cameras.settings]
+width = 1280
+height = 800
+
+[cameras.settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 160
+height = 120
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 176
+height = 144
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 320
+height = 240
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 416
+height = 240
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 352
+height = 288
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 640
+height = 360
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 640
+height = 480
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 800
+height = 448
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 800
+height = 600
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 960
+height = 544
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 1280
+height = 720
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 160
+height = 120
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 176
+height = 144
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 320
+height = 240
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 352
+height = 288
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 424
+height = 240
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 640
+height = 360
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 640
+height = 480
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 800
+height = 448
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 800
+height = 600
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 960
+height = 544
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 1280
+height = 720
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[[cameras.possible_settings]]
+width = 1280
+height = 800
+
+[cameras.possible_settings.frame_rate]
+num = 30
+den = 1
+
+[cameras.subsystems.capriltags]
+enabled = false
 field_layout = "2025-reefscape-welded.json"
 
 [cameras.subsystems.ml]
@@ -429,3 +633,315 @@ Z = 0.49999999999999994
 [field_layouts."2025-reefscape-welded.json".field]
 length = 17.548
 width = 8.052
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 1
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 16.687292
+y = 0.628142
+z = 1.4859
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.4539904997395468
+X = 0.0
+Y = 0.0
+Z = 0.8910065241883678
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 2
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 16.687292
+y = 7.414259999999999
+z = 1.4859
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = -0.4539904997395467
+X = 0.0
+Y = 0.0
+Z = 0.8910065241883679
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 3
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 11.49096
+y = 8.031733999999998
+z = 1.30175
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = -0.7071067811865475
+X = 0.0
+Y = 0.0
+Z = 0.7071067811865476
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 4
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 9.27608
+y = 6.132575999999999
+z = 1.867916
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.9659258262890684
+X = 0.0
+Y = 0.25881904510252074
+Z = 0.0
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 5
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 9.27608
+y = 1.909826
+z = 1.867916
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.9659258262890684
+X = 0.0
+Y = 0.25881904510252074
+Z = 0.0
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 6
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 13.474446
+y = 3.3012379999999997
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = -0.8660254037844387
+X = 0.0
+Y = 0.0
+Z = 0.49999999999999994
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 7
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 13.890498
+y = 4.0208200000000005
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 1.0
+X = 0.0
+Y = 0.0
+Z = 0.0
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 8
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 13.474446
+y = 4.740402
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.8660254037844387
+X = 0.0
+Y = 0.0
+Z = 0.49999999999999994
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 9
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 12.643358
+y = 4.740402
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.5000000000000001
+X = 0.0
+Y = 0.0
+Z = 0.8660254037844386
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 10
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 12.227306
+y = 4.0208200000000005
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.00000000000000006123233995736766
+X = 0.0
+Y = 0.0
+Z = 1.0
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 11
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 12.643358
+y = 3.3012379999999997
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = -0.4999999999999998
+X = 0.0
+Y = 0.0
+Z = 0.8660254037844387
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 12
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 0.8613139999999999
+y = 0.628142
+z = 1.4859
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.8910065241883679
+X = 0.0
+Y = 0.0
+Z = 0.4539904997395467
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 13
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 0.8613139999999999
+y = 7.414259999999999
+z = 1.4859
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = -0.8910065241883678
+X = 0.0
+Y = 0.0
+Z = 0.45399049973954686
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 14
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 8.272272
+y = 6.132575999999999
+z = 1.867916
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.00000000000000005914589856893349
+X = -0.25881904510252074
+Y = 0.000000000000000015848095757158825
+Z = 0.9659258262890684
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 15
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 8.272272
+y = 1.909826
+z = 1.867916
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.00000000000000005914589856893349
+X = -0.25881904510252074
+Y = 0.000000000000000015848095757158825
+Z = 0.9659258262890684
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 16
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 6.057646
+y = 0.010668
+z = 1.30175
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.7071067811865476
+X = 0.0
+Y = 0.0
+Z = 0.7071067811865476
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 17
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 4.073905999999999
+y = 3.3012379999999997
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = -0.4999999999999998
+X = 0.0
+Y = 0.0
+Z = 0.8660254037844387
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 18
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 3.6576
+y = 4.0208200000000005
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.00000000000000006123233995736766
+X = 0.0
+Y = 0.0
+Z = 1.0
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 19
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 4.073905999999999
+y = 4.740402
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.5000000000000001
+X = 0.0
+Y = 0.0
+Z = 0.8660254037844386
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 20
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 4.904739999999999
+y = 4.740402
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 0.8660254037844387
+X = 0.0
+Y = 0.0
+Z = 0.49999999999999994
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 21
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 5.321046
+y = 4.0208200000000005
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = 1.0
+X = 0.0
+Y = 0.0
+Z = 0.0
+
+[[field_layouts."2025-reefscape-andymark.json".tags]]
+ID = 22
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.translation]
+x = 4.904739999999999
+y = 3.3012379999999997
+z = 0.308102
+
+[field_layouts."2025-reefscape-andymark.json".tags.pose.rotation.quaternion]
+W = -0.8660254037844387
+X = 0.0
+Y = 0.0
+Z = 0.49999999999999994
+
+[field_layouts."2025-reefscape-andymark.json".field]
+length = 17.548
+width = 8.042

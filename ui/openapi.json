@@ -1,1 +1,268 @@
-{"openapi":"3.1.0","info":{"title":"Chalkydri Manager API","description":"A blazingly fast FRC vision system","license":{"name":"GPL-3.0","identifier":"GPL-3.0"},"version":"0.1.0"},"paths":{"/api/calibrate/status":{"get":{"tags":[],"operationId":"calibration_status","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/CalibrationStatus"}}}}}}},"/api/calibrate/{cam_name}/intrinsics":{"get":{"tags":[],"operationId":"calibration_intrinsics","parameters":[{"name":"cam_name","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":""}}}},"/api/calibrate/{cam_name}/step":{"get":{"tags":[],"operationId":"calibration_step","parameters":[{"name":"cam_name","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":""}}}},"/api/configuration":{"get":{"tags":[],"summary":"List possible configurations","operationId":"configuration","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Config"}}}}}},"post":{"tags":[],"summary":"Set configuration","operationId":"configure","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Config"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Config"}}}}}}},"/api/info":{"get":{"tags":[],"summary":"Chalkydri version and info","operationId":"info","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Info"}}}}}}},"/api/sys/info":{"get":{"tags":[],"operationId":"sys_info","responses":{"200":{"description":""}}}},"/api/sys/reboot":{"post":{"tags":[],"operationId":"sys_reboot","responses":{"200":{"description":""}}}},"/api/sys/shutdown":{"post":{"tags":[],"operationId":"sys_shutdown","responses":{"200":{"description":""}}}}},"components":{"schemas":{"AprilTagFieldLayout":{"type":"object","required":["tags","field"],"properties":{"field":{"$ref":"#/components/schemas/Field"},"tags":{"type":"array","items":{"$ref":"#/components/schemas/LayoutTag"}}}},"CAprilTagsSubsys":{"type":"object","required":["enabled"],"properties":{"enabled":{"type":"boolean"},"field_layout":{"type":["string","null"]},"gamma":{"type":["number","null"],"format":"double"}}},"CalibrationStatus":{"type":"object","required":["width","height","current_step","total_steps"],"properties":{"current_step":{"type":"integer","minimum":0},"height":{"type":"integer","format":"int32","minimum":0},"total_steps":{"type":"integer","minimum":0},"width":{"type":"integer","format":"int32","minimum":0}}},"Camera":{"type":"object","required":["id","name","subsystems"],"properties":{"calib":{},"gamma":{"type":["number","null"],"format":"float"},"id":{"type":"string"},"name":{"type":"string"},"possible_settings":{"type":["array","null"],"items":{"$ref":"#/components/schemas/CameraSettings"}},"settings":{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/CameraSettings"}]},"subsystems":{"$ref":"#/components/schemas/Subsystems"}}},"CameraSettings":{"type":"object","required":["width","height","frame_rate"],"properties":{"frame_rate":{"$ref":"#/components/schemas/CfgFraction"},"height":{"type":"integer","format":"int32","minimum":0},"width":{"type":"integer","format":"int32","minimum":0}}},"CfgFraction":{"type":"object","required":["num","den"],"properties":{"den":{"type":"integer","format":"int32","minimum":0},"num":{"type":"integer","format":"int32","minimum":0}}},"Config":{"type":"object","required":["team_number"],"properties":{"cameras":{"type":["array","null"],"items":{"$ref":"#/components/schemas/Camera"}},"device_name":{"type":["string","null"]},"field_layouts":{"type":["object","null"],"additionalProperties":{"$ref":"#/components/schemas/AprilTagFieldLayout"},"propertyNames":{"type":"string"}},"ntables_ip":{"type":["string","null"]},"rerun":{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/Rerun"}]},"team_number":{"type":"integer","format":"int32","minimum":0}}},"Field":{"type":"object","required":["length","width"],"properties":{"length":{"type":"number","format":"double"},"width":{"type":"number","format":"double"}}},"Info":{"type":"object","required":["version"],"properties":{"version":{"type":"string"}}},"LayoutPose":{"type":"object","required":["translation","rotation"],"properties":{"rotation":{"$ref":"#/components/schemas/LayoutRotation"},"translation":{"$ref":"#/components/schemas/LayoutTranslation"}}},"LayoutQuaternion":{"type":"object","required":["W","X","Y","Z"],"properties":{"W":{"type":"number","format":"double"},"X":{"type":"number","format":"double"},"Y":{"type":"number","format":"double"},"Z":{"type":"number","format":"double"}}},"LayoutRotation":{"type":"object","required":["quaternion"],"properties":{"quaternion":{"$ref":"#/components/schemas/LayoutQuaternion"}}},"LayoutTag":{"type":"object","required":["ID","pose"],"properties":{"ID":{"type":"integer","format":"int64"},"pose":{"$ref":"#/components/schemas/LayoutPose"}}},"LayoutTranslation":{"type":"object","required":["x","y","z"],"properties":{"x":{"type":"number","format":"double"},"y":{"type":"number","format":"double"},"z":{"type":"number","format":"double"}}},"MlSubsys":{"type":"object","required":["enabled"],"properties":{"enabled":{"type":"boolean"}}},"Rerun":{"type":"object","properties":{"server_address":{"type":["string","null"]}}},"Subsystems":{"type":"object","required":["capriltags","ml"],"properties":{"capriltags":{"$ref":"#/components/schemas/CAprilTagsSubsys"},"ml":{"$ref":"#/components/schemas/MlSubsys"}}}}}}
+{
+	"openapi": "3.1.0",
+	"info": {
+		"title": "Chalkydri Manager API",
+		"description": "A blazingly fast FRC vision system",
+		"license": { "name": "GPL-3.0", "identifier": "GPL-3.0" },
+		"version": "0.1.0"
+	},
+	"paths": {
+		"/api/calibrate/status": {
+			"get": {
+				"tags": [],
+				"operationId": "calibration_status",
+				"responses": {
+					"200": {
+						"description": "",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/CalibrationStatus" } }
+						}
+					}
+				}
+			}
+		},
+		"/api/calibrate/{cam_name}/intrinsics": {
+			"get": {
+				"tags": [],
+				"operationId": "calibration_intrinsics",
+				"parameters": [
+					{ "name": "cam_name", "in": "path", "required": true, "schema": { "type": "string" } }
+				],
+				"responses": { "200": { "description": "" } }
+			}
+		},
+		"/api/calibrate/{cam_name}/step": {
+			"get": {
+				"tags": [],
+				"operationId": "calibration_step",
+				"parameters": [
+					{ "name": "cam_name", "in": "path", "required": true, "schema": { "type": "string" } }
+				],
+				"responses": { "200": { "description": "" } }
+			}
+		},
+		"/api/configuration": {
+			"get": {
+				"tags": [],
+				"summary": "List possible configurations",
+				"operationId": "configuration",
+				"responses": {
+					"200": {
+						"description": "",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/Config" } }
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": [],
+				"summary": "Set configuration",
+				"operationId": "configure",
+				"requestBody": {
+					"content": {
+						"application/json": { "schema": { "$ref": "#/components/schemas/Config" } }
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/Config" } }
+						}
+					}
+				}
+			}
+		},
+		"/api/info": {
+			"get": {
+				"tags": [],
+				"summary": "Chalkydri version and info",
+				"operationId": "info",
+				"responses": {
+					"200": {
+						"description": "",
+						"content": { "application/json": { "schema": { "$ref": "#/components/schemas/Info" } } }
+					}
+				}
+			}
+		},
+		"/api/sys/info": {
+			"get": {
+				"tags": [],
+				"operationId": "sys_info",
+				"responses": { "200": { "description": "" } }
+			}
+		},
+		"/api/sys/reboot": {
+			"post": {
+				"tags": [],
+				"operationId": "sys_reboot",
+				"responses": { "200": { "description": "" } }
+			}
+		},
+		"/api/sys/shutdown": {
+			"post": {
+				"tags": [],
+				"operationId": "sys_shutdown",
+				"responses": { "200": { "description": "" } }
+			}
+		}
+	},
+	"components": {
+		"schemas": {
+			"AprilTagFieldLayout": {
+				"type": "object",
+				"required": ["tags", "field"],
+				"properties": {
+					"field": { "$ref": "#/components/schemas/Field" },
+					"tags": { "type": "array", "items": { "$ref": "#/components/schemas/LayoutTag" } }
+				}
+			},
+			"CAprilTagsSubsys": {
+				"type": "object",
+				"required": ["enabled"],
+				"properties": {
+					"enabled": { "type": "boolean" },
+					"field_layout": { "type": ["string", "null"] },
+					"gamma": { "type": ["number", "null"], "format": "double" }
+				}
+			},
+			"CalibrationStatus": {
+				"type": "object",
+				"required": ["width", "height", "current_step", "total_steps"],
+				"properties": {
+					"current_step": { "type": "integer", "minimum": 0 },
+					"height": { "type": "integer", "format": "int32", "minimum": 0 },
+					"total_steps": { "type": "integer", "minimum": 0 },
+					"width": { "type": "integer", "format": "int32", "minimum": 0 }
+				}
+			},
+			"Camera": {
+				"type": "object",
+				"required": ["id", "name", "subsystems"],
+				"properties": {
+					"calib": {},
+					"gamma": { "type": ["number", "null"], "format": "float" },
+					"id": { "type": "string" },
+					"name": { "type": "string" },
+					"possible_settings": {
+						"type": ["array", "null"],
+						"items": { "$ref": "#/components/schemas/CameraSettings" }
+					},
+					"settings": {
+						"oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/CameraSettings" }]
+					},
+					"subsystems": { "$ref": "#/components/schemas/Subsystems" }
+				}
+			},
+			"CameraSettings": {
+				"type": "object",
+				"required": ["width", "height", "frame_rate"],
+				"properties": {
+					"frame_rate": { "$ref": "#/components/schemas/CfgFraction" },
+					"height": { "type": "integer", "format": "int32", "minimum": 0 },
+					"width": { "type": "integer", "format": "int32", "minimum": 0 }
+				}
+			},
+			"CfgFraction": {
+				"type": "object",
+				"required": ["num", "den"],
+				"properties": {
+					"den": { "type": "integer", "format": "int32", "minimum": 0 },
+					"num": { "type": "integer", "format": "int32", "minimum": 0 }
+				}
+			},
+			"Config": {
+				"type": "object",
+				"required": ["team_number"],
+				"properties": {
+					"cameras": {
+						"type": ["array", "null"],
+						"items": { "$ref": "#/components/schemas/Camera" }
+					},
+					"device_name": { "type": ["string", "null"] },
+					"field_layouts": {
+						"type": ["object", "null"],
+						"additionalProperties": { "$ref": "#/components/schemas/AprilTagFieldLayout" },
+						"propertyNames": { "type": "string" }
+					},
+					"ntables_ip": { "type": ["string", "null"] },
+					"rerun": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/Rerun" }] },
+					"team_number": { "type": "integer", "format": "int32", "minimum": 0 }
+				}
+			},
+			"Field": {
+				"type": "object",
+				"required": ["length", "width"],
+				"properties": {
+					"length": { "type": "number", "format": "double" },
+					"width": { "type": "number", "format": "double" }
+				}
+			},
+			"Info": {
+				"type": "object",
+				"required": ["version"],
+				"properties": { "version": { "type": "string" } }
+			},
+			"LayoutPose": {
+				"type": "object",
+				"required": ["translation", "rotation"],
+				"properties": {
+					"rotation": { "$ref": "#/components/schemas/LayoutRotation" },
+					"translation": { "$ref": "#/components/schemas/LayoutTranslation" }
+				}
+			},
+			"LayoutQuaternion": {
+				"type": "object",
+				"required": ["W", "X", "Y", "Z"],
+				"properties": {
+					"W": { "type": "number", "format": "double" },
+					"X": { "type": "number", "format": "double" },
+					"Y": { "type": "number", "format": "double" },
+					"Z": { "type": "number", "format": "double" }
+				}
+			},
+			"LayoutRotation": {
+				"type": "object",
+				"required": ["quaternion"],
+				"properties": { "quaternion": { "$ref": "#/components/schemas/LayoutQuaternion" } }
+			},
+			"LayoutTag": {
+				"type": "object",
+				"required": ["ID", "pose"],
+				"properties": {
+					"ID": { "type": "integer", "format": "int64" },
+					"pose": { "$ref": "#/components/schemas/LayoutPose" }
+				}
+			},
+			"LayoutTranslation": {
+				"type": "object",
+				"required": ["x", "y", "z"],
+				"properties": {
+					"x": { "type": "number", "format": "double" },
+					"y": { "type": "number", "format": "double" },
+					"z": { "type": "number", "format": "double" }
+				}
+			},
+			"MlSubsys": {
+				"type": "object",
+				"required": ["enabled"],
+				"properties": { "enabled": { "type": "boolean" } }
+			},
+			"Rerun": {
+				"type": "object",
+				"properties": { "server_address": { "type": ["string", "null"] } }
+			},
+			"Subsystems": {
+				"type": "object",
+				"required": ["capriltags", "ml"],
+				"properties": {
+					"capriltags": { "$ref": "#/components/schemas/CAprilTagsSubsys" },
+					"ml": { "$ref": "#/components/schemas/MlSubsys" }
+				}
+			}
+		}
+	}
+}

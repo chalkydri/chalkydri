@@ -21,7 +21,11 @@ use rustix::system::RebootCommand;
 use tokio::{io::BufStream, sync::watch};
 use utopia::{OpenApi, ToSchema};
 
-use crate::{cameras::CameraManager, config::Config, Cfg, Nt};
+use crate::{
+    Cfg, Nt,
+    cameras::{self, CameraManager},
+    config::Config,
+};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -138,6 +142,11 @@ pub(super) async fn configuration(data: web::Data<CameraManager>) -> impl Respon
             if cameras.iter().filter(|c| c.id == cam.id).next().is_none() {
                 cameras.push(cam);
             }
+        } else {
+            cfgg.cameras = Some(Vec::new());
+            if let Some(cameras) = &mut cfgg.cameras {
+                cameras.push(cam);
+            }
         }
     }
     web::Json(cfgg)
@@ -166,6 +175,15 @@ pub(super) async fn configure(
     //    cam_man.destroy_pipeline(cam.id.clone()).await;
     //    cam_man.create_pipeline(Nt.clone(), cam.id).await;
     //}
+    for cam in cam_man.devices() {
+        if let Some(gamma) = cam.gamma {
+            if gamma < 1.0 {
+                error!("FIX THIS");
+                return web::Json(Cfg.read().await.clone());
+            }
+        }
+        cam_man.update_pipeline(cam.id.clone()).await;
+    }
 
     {
         *Cfg.write().await = cfgg.clone();

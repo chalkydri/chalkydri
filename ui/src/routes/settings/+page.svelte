@@ -55,6 +55,9 @@
 	<Card padding="sm">
 		<P size="lg">General</P>
 
+		<Label for="team_num" class="mt-2 mb-1">Team number</Label>
+		<Input id="team_num" type="number" bind:value={cfg.team_number} />
+
 		<Label for="device_name" class="mt-2 mb-1">Device name</Label>
 		<Input id="device_name" bind:value={cfg.device_name} />
 
@@ -67,12 +70,12 @@
 	-->
 	{#if cfg.cameras}
 		{#each cfg.cameras as camera, i}
-		<Layout>
-			<CamConfig bind:camera={cfg.cameras[i]} bind:disabled={saving} />
-			<Card padding="xs">
-				<img src={`${client.getConfig().baseUrl}/stream/${camera.name}`} alt={camera.name} />
-			</Card>
-					</Layout>
+			<Layout>
+				<CamConfig bind:camera={cfg.cameras[i]} bind:disabled={saving} />
+				<Card padding="xs">
+					<img src={`${client.getConfig().baseUrl ? client.getConfig().baseUrl : ''}/stream/${camera.name}`} alt={camera.name} />
+				</Card>
+			</Layout>
 		{/each}
 	{/if}
 	<!--

@@ -65,10 +65,7 @@ impl Subsystem for CApriltagsDetector {
             .property("sigma", &0.1)
             .build()
             .unwrap();
-        let gamma = ElementFactory::make("gamma")
-            .property("gamma", &config.gamma.unwrap_or(1.0))
-            .build()
-            .unwrap();
+
         let videoconvertscale = ElementFactory::make("videoconvertscale").build().unwrap();
         let filter = ElementFactory::make("capsfilter")
             .property(
@@ -83,14 +80,12 @@ impl Subsystem for CApriltagsDetector {
             .unwrap();
 
         // Add them to the pipeline
-        pipeline
-            .add_many([&gamma, &videoconvertscale, &filter])
-            .unwrap();
+        pipeline.add_many([&videoconvertscale, &filter]).unwrap();
 
         // Link them
-        Element::link_many([&gamma, &videoconvertscale, &filter]).unwrap();
+        Element::link_many([&videoconvertscale, &filter]).unwrap();
 
-        Ok((gamma, filter))
+        Ok((videoconvertscale, filter))
     }
     async fn init(cam_config: config::Camera) -> Result<Self, Self::Error> {
         let model = CalibratedModel::new();

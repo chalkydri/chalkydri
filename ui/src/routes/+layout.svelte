@@ -2,8 +2,6 @@
 	import '../app.css';
 	import {
 		DarkMode,
-		Drawer,
-		Layout,
 		Navbar,
 		NavBrand,
 		NavHamburger,
@@ -13,9 +11,6 @@
 		SidebarItem,
 		SidebarWrapper
 	} from 'flowbite-svelte';
-	import { configuration, type Config } from '$lib/api';
-	import { writable } from 'svelte/store';
-	import { onMount } from 'svelte';
 
 	let hide_sidebar = $state(false);
 	let { children } = $props();
@@ -43,6 +38,7 @@
 				<SidebarGroup>
 					<SidebarItem label="Home" href="/" />
 					<SidebarItem label="Calibration" href="/calibration" />
+					<SidebarItem label="Custom subsystems" href="/custom" />
 					<SidebarItem label="Settings" href="/settings" />
 				</SidebarGroup>
 			</SidebarWrapper>
