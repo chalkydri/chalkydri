@@ -22,6 +22,8 @@ pub enum NtError {
     TopicNotFound(String),
     /// Binary frame parsing error
     BinaryFrameError,
+    /// Lock acquisition error
+    LockError(String),
     /// Other errors
     Other(String),
 }
@@ -37,6 +39,7 @@ impl Display for NtError {
             NtError::IoError(msg) => write!(f, "IO error: {msg}"),
             NtError::TopicNotFound(msg) => write!(f, "Topic not found: {msg}"),
             NtError::BinaryFrameError => write!(f, "Failed to parse binary frame"),
+            NtError::LockError(msg) => write!(f, "Lock error: {msg}"),
             NtError::Other(msg) => write!(f, "Error: {msg}"),
         }
     }

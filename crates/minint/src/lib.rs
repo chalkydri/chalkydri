@@ -71,6 +71,14 @@ pub struct NtConn {
     topic_pubuids: Arc<RwLock<HashMap<i32, i32>>>,
     pubuid_topics: Arc<RwLock<HashMap<i32, i32>>>,
     values: Arc<RwLock<HashMap<i32, Data>>>,
+
+    /// Mapping from topic names to topic IDs for topics we've received from server 
+    server_topics: Arc<RwLock<HashMap<String, i32>>>,
+    
+    /// Mapping from topic IDs to topic types
+    topic_types: Arc<RwLock<HashMap<i32, String>>>,
+    
+    subscription_values: Arc<RwLock<HashMap<i32, (u64, Data)>>>,
 }
 impl NtConn {
     /// Connect to a NetworkTables server
@@ -110,6 +118,10 @@ impl NtConn {
         // Setup channels for control
         let (c2s_tx, c2s_rx) = mpsc::unbounded_channel::<Message>();
 
+        let server_topics = Arc::new(RwLock::new(HashMap::new()));
+        let topic_types = Arc::new(RwLock::new(HashMap::new()));
+        let subscription_values = Arc::new(RwLock::new(HashMap::new()));
+
         let conn = Self {
             next_id: Arc::new(Mutex::const_new(0)),
             c2s_tx,
@@ -127,6 +139,10 @@ impl NtConn {
 
             incoming_abort: Arc::new(RwLock::new(None)),
             outgoing_abort: Arc::new(RwLock::new(None)),
+
+            server_topics,
+            topic_types,
+            subscription_values,
         };
 
         conn.init_background_event_loops().await;
@@ -163,6 +179,10 @@ impl NtConn {
                                                 pubuid,
                                                 ..
                                             } => {
+                                                // Store server topic info
+                                                conn.server_topics.write().await.insert(name.clone(), id);
+                                                conn.topic_types.write().await.insert(id, r#type.clone());
+                                                
                                                 trace!("inserting to topics");
                                                 (*topics.write().await).insert(id, name.clone());
 
@@ -201,9 +221,12 @@ impl NtConn {
                                 }
                                 Ok(Message::Binary(bin)) => {
                                     match Self::read_bin_frame(bin.to_vec()) {
-                                        Ok((uid, ts, _data)) => {
-                                            trace!("Received binary frame with uid={}, ts={}", uid, ts);
-                                            // Process the data if needed
+                                        Ok((topic_id, timestamp, data)) => {
+                                            trace!("Received binary frame with topic_id={}, ts={}", topic_id, timestamp);
+                                            
+                                            // Store the value for both general values and subscription-specific values
+                                            conn.values.write().await.insert(topic_id as i32, data.clone());
+                                            conn.subscription_values.write().await.insert(topic_id as i32, (timestamp, data));
                                         }
                                         Err(err) => {
                                             error!("Failed to parse binary frame: {}", err);
@@ -413,7 +436,7 @@ impl NtConn {
         })
     }
 
-    /// Unsubscribe from topic(s)
+    /// Unsubscribe from a topic
     ///
     /// This method is typically called when an `NtSubscription` is dropped.
     fn unsubscribe(&self, subuid: i32) -> Result<()> {
@@ -506,6 +529,10 @@ impl Clone for NtConn {
             topic_pubuids: self.topic_pubuids.clone(),
             pubuid_topics: self.pubuid_topics.clone(),
             values: self.values.clone(),
+
+            server_topics: self.server_topics.clone(),
+            topic_types: self.topic_types.clone(),
+            subscription_values: self.subscription_values.clone(),
         }
     }
 }
@@ -579,7 +606,15 @@ pub struct NtSubscription<'nt> {
     conn: &'nt NtConn,
     subuid: i32,
 }
-impl NtSubscription<'_> {}
+impl NtSubscription<'_> {
+    pub async fn get(&self) -> Result<Option<(u64, Data)>> {
+        Ok(self.conn.subscription_values
+            .read()
+            .await
+            .get(&self.subuid)
+            .cloned())
+    }
+}
 impl Drop for NtSubscription<'_> {
     fn drop(&mut self) {
         self.conn.unsubscribe(self.subuid).unwrap();
