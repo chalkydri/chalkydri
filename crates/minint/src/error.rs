@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::fmt::{self, Display};
 use tokio_tungstenite::tungstenite::Error as TungsteniteError;
+use rmp::decode::{ValueReadError, bytes::BytesReadError};
 
 /// Custom error types for NetworkTables operations
 #[derive(Debug)]
@@ -65,6 +66,18 @@ impl From<serde_json::Error> for NtError {
 impl From<rmp::encode::ValueWriteError> for NtError {
     fn from(err: rmp::encode::ValueWriteError) -> Self {
         NtError::MessagePackError(err.to_string())
+    }
+}
+
+impl From<rmp::decode::ValueReadError> for NtError {
+    fn from(err: rmp::decode::ValueReadError) -> Self {
+        NtError::MessagePackError(format!("{:?}", err))
+    }
+}
+
+impl From<ValueReadError<BytesReadError>> for NtError {
+    fn from(err: ValueReadError<BytesReadError>) -> Self {
+        NtError::MessagePackError(format!("{:?}", err))
     }
 }
 

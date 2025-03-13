@@ -431,16 +431,12 @@ impl NtConn {
     /// Returns `(uid, timestamp, data)`
     fn read_bin_frame(buf: Vec<u8>) -> Result<(u64, u64, Data)> {
         let mut bytes = Bytes::new(&buf);
-        let len = rmp::decode::read_array_len(&mut bytes)
-            .map_err(|e| NtError::MessagePackError(format!("Failed to read array length: {:?}", e)))?;
+        let len = rmp::decode::read_array_len(&mut bytes)?;
 
         if len == 4 {
-            let uid = rmp::decode::read_u64(&mut bytes)
-                .map_err(|e| NtError::MessagePackError(format!("Failed to read UID: {:?}", e)))?;
-            let ts = rmp::decode::read_u64(&mut bytes)
-                .map_err(|e| NtError::MessagePackError(format!("Failed to read timestamp: {:?}", e)))?;
-            let data_type = rmp::decode::read_u8(&mut bytes)
-                .map_err(|e| NtError::MessagePackError(format!("Failed to read data type: {:?}", e)))?;
+            let uid = rmp::decode::read_u64(&mut bytes)?;
+            let ts = rmp::decode::read_u64(&mut bytes)?;
+            let data_type = rmp::decode::read_u8(&mut bytes)?;
             let data = Data::from(&mut bytes, data_type)
                 .map_err(|_| NtError::MessagePackError("Failed to parse data value".to_string()))?;
 
