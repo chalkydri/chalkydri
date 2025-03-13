@@ -20,13 +20,14 @@ extern crate tokio_tungstenite;
 
 mod datatype;
 mod messages;
+mod error;
+
+pub use error::{NtError, Result};
 
 use std::collections::{BTreeMap, HashMap};
-use std::error::Error;
 use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::sync::Arc;
-use std::time::Duration;
 
 use datatype::{Data, DataWrap};
 use futures_util::stream::{SplitSink, SplitStream};
@@ -95,7 +96,7 @@ impl NtConn {
     pub async fn new(
         server: impl Into<IpAddr>,
         client_ident: impl Into<String>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self> {
         let topics = Arc::new(RwLock::new(HashMap::new()));
         let topic_pubuids = Arc::new(RwLock::new(HashMap::new()));
         let pubuid_topics = Arc::new(RwLock::new(HashMap::new()));
@@ -109,7 +110,7 @@ impl NtConn {
         // Setup channels for control
         let (c2s_tx, c2s_rx) = mpsc::unbounded_channel::<Message>();
 
-        Ok(Self {
+        let conn = Self {
             next_id: Arc::new(Mutex::const_new(0)),
             c2s_tx,
             c2s_rx: Arc::new(Mutex::new(c2s_rx)),
@@ -126,7 +127,10 @@ impl NtConn {
 
             incoming_abort: Arc::new(RwLock::new(None)),
             outgoing_abort: Arc::new(RwLock::new(None)),
-        })
+        };
+
+        conn.init_background_event_loops().await;
+        Ok(conn)
     }
 
     async fn init_background_event_loops(&self) {
@@ -196,7 +200,15 @@ impl NtConn {
                                     }
                                 }
                                 Ok(Message::Binary(bin)) => {
-                                    Self::read_bin_frame(bin.to_vec()).unwrap();
+                                    match Self::read_bin_frame(bin.to_vec()) {
+                                        Ok((uid, ts, _data)) => {
+                                            trace!("Received binary frame with uid={}, ts={}", uid, ts);
+                                            // Process the data if needed
+                                        }
+                                        Err(err) => {
+                                            error!("Failed to parse binary frame: {}", err);
+                                        }
+                                    }
                                 }
                                 Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
                                 Err(TungsteniteError::ConnectionClosed) => {
@@ -247,7 +259,7 @@ impl NtConn {
         }
     }
 
-    pub async fn connect(&self) -> Result<(), Box<dyn Error>> {
+    async fn connect(&self) -> Result<()> {
         // Get server and client_ident into something we can work with
         let server = self.server.read().await.clone();
         let client_ident = self.client_ident.read().await.clone();
@@ -309,7 +321,7 @@ impl NtConn {
     pub async fn publish<T: DataWrap>(
         &self,
         name: impl Into<String>,
-    ) -> Result<NtTopic<T>, Box<dyn Error>> {
+    ) -> Result<NtTopic<T>> {
         let pubuid = self.next_id().await;
         let name = name.into();
 
@@ -325,7 +337,8 @@ impl NtConn {
             }),
         }])?;
 
-        self.c2s_tx.send(Message::Text(buf.into())).unwrap();
+        self.c2s_tx.send(Message::Text(buf.into()))
+            .map_err(|e| NtError::SendError(e.to_string()))?;
 
         debug!(
             "{name} ({data_type}): publishing with pubuid {pubuid}",
@@ -353,9 +366,10 @@ impl NtConn {
     /// Unpublish topic
     ///
     /// This method is typically called when an `NtTopic` is dropped.
-    fn unpublish(&self, pubuid: i32) -> Result<(), Box<dyn Error>> {
+    fn unpublish(&self, pubuid: i32) -> Result<()> {
         let buf = serde_json::to_string(&[ClientMsg::Unpublish { pubuid }])?;
-        self.c2s_tx.send(Message::Text(buf.into()))?;
+        self.c2s_tx.send(Message::Text(buf.into()))
+            .map_err(|e| NtError::SendError(e.to_string()))?;
 
         Ok(())
     }
@@ -382,7 +396,7 @@ impl NtConn {
     ///     // ...
     /// }
     /// ```
-    pub async fn subscribe(&self, topic: &str) -> Result<NtSubscription, Box<dyn Error>> {
+    pub async fn subscribe(&self, topic: &str) -> Result<NtSubscription> {
         let subuid = self.next_id().await;
 
         let buf = serde_json::to_string(&[ClientMsg::Subscribe {
@@ -390,7 +404,8 @@ impl NtConn {
             subuid,
             options: BTreeMap::new(),
         }])?;
-        self.c2s_tx.send(Message::Text(buf.into()))?;
+        self.c2s_tx.send(Message::Text(buf.into()))
+            .map_err(|e| NtError::SendError(e.to_string()))?;
 
         Ok(NtSubscription {
             conn: &*self,
@@ -401,9 +416,10 @@ impl NtConn {
     /// Unsubscribe from topic(s)
     ///
     /// This method is typically called when an `NtSubscription` is dropped.
-    fn unsubscribe(&self, subuid: i32) -> Result<(), Box<dyn Error>> {
+    fn unsubscribe(&self, subuid: i32) -> Result<()> {
         let buf = serde_json::to_string(&[ClientMsg::Unsubscribe { subuid }])?;
-        self.c2s_tx.send(Message::Text(buf.into()))?;
+        self.c2s_tx.send(Message::Text(buf.into()))
+            .map_err(|e| NtError::SendError(e.to_string()))?;
 
         Ok(())
     }
@@ -413,19 +429,24 @@ impl NtConn {
     /// This method is used internally to process incoming data values for subscribed topics.
     ///
     /// Returns `(uid, timestamp, data)`
-    fn read_bin_frame(buf: Vec<u8>) -> Result<(u64, u64, Data), ()> {
+    fn read_bin_frame(buf: Vec<u8>) -> Result<(u64, u64, Data)> {
         let mut bytes = Bytes::new(&buf);
-        let len = rmp::decode::read_array_len(&mut bytes).map_err(|_| ())?;
+        let len = rmp::decode::read_array_len(&mut bytes)
+            .map_err(|e| NtError::MessagePackError(format!("Failed to read array length: {:?}", e)))?;
 
         if len == 4 {
-            let uid = rmp::decode::read_u64(&mut bytes).map_err(|_| ())?;
-            let ts = rmp::decode::read_u64(&mut bytes).map_err(|_| ())?;
-            let data_type = rmp::decode::read_u8(&mut bytes).map_err(|_| ())?;
-            let data = Data::from(&mut bytes, data_type).map_err(|_| ())?;
+            let uid = rmp::decode::read_u64(&mut bytes)
+                .map_err(|e| NtError::MessagePackError(format!("Failed to read UID: {:?}", e)))?;
+            let ts = rmp::decode::read_u64(&mut bytes)
+                .map_err(|e| NtError::MessagePackError(format!("Failed to read timestamp: {:?}", e)))?;
+            let data_type = rmp::decode::read_u8(&mut bytes)
+                .map_err(|e| NtError::MessagePackError(format!("Failed to read data type: {:?}", e)))?;
+            let data = Data::from(&mut bytes, data_type)
+                .map_err(|_| NtError::MessagePackError("Failed to parse data value".to_string()))?;
 
             Ok((uid, ts, data))
         } else {
-            Err(())
+            Err(NtError::BinaryFrameError)
         }
     }
 
@@ -437,16 +458,19 @@ impl NtConn {
         uid: i32,
         ts: u64,
         value: T,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         let mut buf = Vec::new();
         rmp::encode::write_array_len(&mut buf, 4)?;
 
         rmp::encode::write_i32(&mut buf, uid)?;
         rmp::encode::write_uint(&mut buf, ts)?;
         rmp::encode::write_u8(&mut buf, T::MSGPCK)?;
-        T::encode(&mut buf, value).map_err(|_| std::io::Error::other("i don't fucking know"))?;
+        T::encode(&mut buf, value).map_err(|_| NtError::MessagePackError(
+            "Failed to encode value to MessagePack format.".to_string()
+        ))?;
 
-        self.c2s_tx.send(Message::Binary(buf.into()))?;
+        self.c2s_tx.send(Message::Binary(buf.into()))
+            .map_err(|e| NtError::SendError(e.to_string()))?;
 
         Ok(())
     }
@@ -525,7 +549,7 @@ impl<T: DataWrap + std::fmt::Debug> NtTopic<'_, T> {
     ///     // ...
     /// }
     /// ```
-    pub async fn set(&mut self, val: T) -> Result<(), Box<dyn Error>> {
+    pub async fn set(&mut self, val: T) -> Result<()> {
         trace!("getting read lock pubuid_topics");
         if let Some(id) = (*self.conn.pubuid_topics.read().await).get(&self.pubuid) {
             trace!("getting read lock topics");
@@ -545,7 +569,9 @@ impl<T: DataWrap + std::fmt::Debug> NtTopic<'_, T> {
 }
 impl<T: DataWrap> Drop for NtTopic<'_, T> {
     fn drop(&mut self) {
-        self.conn.unpublish(self.pubuid).unwrap();
+        if let Err(e) = self.conn.unpublish(self.pubuid) {
+            error!("Failed to unpublish topic: {}", e);
+        }
     }
 }
 
