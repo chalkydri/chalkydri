@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use rmp::{decode::RmpRead, encode::RmpWrite};
 
+#[derive(Clone, Debug)]
 pub enum Data {
     Bool(bool),
     F64(f64),
