@@ -73,7 +73,7 @@
 			<Layout>
 				<CamConfig bind:camera={cfg.cameras[i]} bind:disabled={saving} />
 				<Card padding="xs">
-					<img src={`${client.getConfig().baseUrl ? client.getConfig().baseUrl : ''}/stream/${camera.name}`} alt={camera.name} />
+					<img src={`${client.getConfig().baseUrl ? client.getConfig().baseUrl : ''}/stream/${camera.id}`} alt={camera.name} />
 				</Card>
 			</Layout>
 		{/each}

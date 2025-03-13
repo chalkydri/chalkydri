@@ -176,12 +176,12 @@ pub(super) async fn configure(
     //    cam_man.create_pipeline(Nt.clone(), cam.id).await;
     //}
     for cam in cam_man.devices() {
-        if let Some(gamma) = cam.gamma {
-            if gamma < 1.0 {
-                error!("FIX THIS");
-                return web::Json(Cfg.read().await.clone());
-            }
-        }
+        //if let Some(gamma) = cam.gamma {
+        //    if gamma < 1.0 {
+        //        error!("FIX THIS");
+        //        return web::Json(Cfg.read().await.clone());
+        //    }
+        //}
         cam_man.update_pipeline(cam.id.clone()).await;
     }
 
@@ -336,6 +336,7 @@ pub(super) async fn stream(
 
     println!("{cam_name}");
 
+    if let Some(mjpeg_stream) = data.mjpeg_streams().await.get(&cam_name) {
     HttpResponse::Ok()
         .append_header(header::CacheControl(vec![CacheDirective::NoCache]))
         .append_header((header::PRAGMA, "no-cache"))
@@ -345,5 +346,8 @@ pub(super) async fn stream(
             header::CONTENT_TYPE,
             "multipart/x-mixed-replace; boundary=frame",
         ))
-        .streaming(data.mjpeg_streams().await.get(&cam_name).unwrap().clone())
+        .streaming(mjpeg_stream.clone())
+    } else {
+        HttpResponse::NotFound().await.unwrap()
+    }
 }

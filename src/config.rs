@@ -43,7 +43,8 @@ def_cfg! {
         possible_settings: Option<Vec<CameraSettings>>,
         subsystems: Subsystems,
         calib: Option<serde_json::Value>,
-        gamma: Option<f64>,
+        auto_exposure: bool,
+        manual_exposure: Option<u32>,
     }
     CameraSettings {
         width: u32,

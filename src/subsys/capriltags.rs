@@ -61,11 +61,6 @@ impl Subsystem for CApriltagsDetector {
         //  tee ! gamma ! videoconvertscale ! capsfilter ! appsink
 
         // Create the elements
-        let gaussianblur = ElementFactory::make("gaussianblur")
-            .property("sigma", &0.1)
-            .build()
-            .unwrap();
-
         let videoconvertscale = ElementFactory::make("videoconvertscale").build().unwrap();
         let filter = ElementFactory::make("capsfilter")
             .property(
@@ -80,7 +75,9 @@ impl Subsystem for CApriltagsDetector {
             .unwrap();
 
         // Add them to the pipeline
-        pipeline.add_many([&videoconvertscale, &filter]).unwrap();
+        pipeline
+            .add_many([&videoconvertscale, &filter])
+            .unwrap();
 
         // Link them
         Element::link_many([&videoconvertscale, &filter]).unwrap();

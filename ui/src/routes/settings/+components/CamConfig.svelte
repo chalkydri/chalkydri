@@ -89,11 +89,16 @@
 			</div>
 
 			<div>
-				<Label class="mt-4 mb-2" for="gamma">Gamma</Label>
+				<Label class="mt-4 mb-2" for="auto_exposure">Auto-exposure</Label>
+				<Toggle bind:checked={camera.auto_exposure} />
+
+				{#if !camera.auto_exposure}
+				<Label class="mt-4 mb-2" for="manual_exposure">Exposure time</Label>
 				<div class="flex flex-row gap-4 items-center">
-					<Range id="gamma" title="Gamma" min="1.0" max="5.0" bind:value={camera.gamma} />
-					<P>{camera.gamma}</P>
+					<Range id="manual_exposure" title="Exposure time" min="1" max="1000" step="1" bind:value={camera.manual_exposure} />
+					<Input type="number" bind:value={camera.manual_exposure} />
 				</div>
+				{/if}
 			</div>
 
 			{#if camera.subsystems}
