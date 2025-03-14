@@ -142,7 +142,12 @@ impl NtConn {
             subscription_values,
         };
 
+        trace!("initializing background event loop...");
         conn.init_background_event_loops().await;
+        trace!("initialized background event loop...");
+
+        conn.connect().await?;
+
         Ok(conn)
     }
 
@@ -159,6 +164,8 @@ impl NtConn {
             let pubuid_topics = self.pubuid_topics.clone();
 
             let jh = tokio::spawn(async move {
+                let mut reconnect = false;
+
                 loop {
                     if let Some(sock_rd) = conn.sock_rd.write().await.as_mut() {
                         while let Some(buf) = sock_rd.next().await {
@@ -247,13 +254,19 @@ impl NtConn {
                                     }
                                 }
                                 Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
-                                Err(TungsteniteError::ConnectionClosed) => {
-                                    conn.connect().await.unwrap();
+                                Err(TungsteniteError::ConnectionClosed) | Err(TungsteniteError::Io(_)) => {
+                                    reconnect = true;
                                 }
                                 Err(err) => error!("error reading incoming message: {err:?}"),
                             }
                         }
                     }
+
+                    if reconnect {
+                        conn.connect().await.unwrap();
+                        reconnect = false;
+                    }
+
                     tokio::task::yield_now().await;
                 }
             });
@@ -266,6 +279,8 @@ impl NtConn {
             let conn = self.clone();
 
             let jh = tokio::spawn(async move {
+                let mut reconnect = false;
+
                 loop {
                     while let Some(outgoing) = conn.c2s_rx.lock().await.recv().await {
                         trace!("sending {outgoing:?}");
@@ -275,8 +290,8 @@ impl NtConn {
                                 Ok(()) => {
                                     trace!("sent outgoing message successfully");
                                 }
-                                Err(TungsteniteError::ConnectionClosed) => {
-                                    conn.connect().await.unwrap();
+                                Err(TungsteniteError::ConnectionClosed) | Err(TungsteniteError::Io(_)) => {
+                                    reconnect = true;
                                 }
                                 Err(err) => {
                                     error!("error writing outgoing message: {err:?}");
@@ -285,6 +300,11 @@ impl NtConn {
 
                             trace!("sent");
                         }
+                    }
+
+                    if reconnect {
+                        conn.connect().await.unwrap();
+                        reconnect = false;
                     }
 
                     tokio::task::yield_now().await;

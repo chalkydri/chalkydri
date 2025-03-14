@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button, Card, Fileupload, Input, Label, Layout, P, Skeleton } from 'flowbite-svelte';
+	import { Button, Card, Fileupload, Input, Label, Layout, P, Select, Skeleton } from 'flowbite-svelte';
 	import { _loadConfig, _saveConfig } from './+page';
 	import { onMount } from 'svelte';
 	import { configure, type Config, type Camera } from '$lib/api';
@@ -60,8 +60,19 @@
 
 		<Label for="device_name" class="mt-2 mb-1">Device name</Label>
 		<Input id="device_name" bind:value={cfg.device_name} />
+	</Card>
 
-		<Fileupload bind:files />
+	<Card size="md" padding="sm" class="mt-2">
+		<P size="lg">Pose estimation</P>
+
+		<Layout gap={3}>
+		<div>
+		<Label for="field_layout" class="mt-2 mb-1">Field layout</Label>
+		<Select id="field_layout" items={[{name: 'test', value: 'test'}]} />
+		</div>
+
+		<Button size="sm" class="m-auto" color="blue">Manage field layouts</Button>
+		</Layout>
 	</Card>
 
 	<!--
