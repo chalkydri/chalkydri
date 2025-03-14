@@ -52,15 +52,17 @@ pub async fn frame_proc_loop(
     mut func: impl AsyncFnMut(Buffer),
 ) {
     loop {
-        let changed = rx.has_changed();
-        if changed.is_ok() && changed.unwrap() {
-            match rx.borrow_and_update().clone() {
+        match rx.changed().await {
+            Ok(()) => match rx.borrow_and_update().clone() {
                 Some(frame) => {
                     func(frame).await;
                 }
                 None => {
                     warn!("waiting on first frame...");
                 }
+            },
+            Err(err) => {
+                error!("error waiting for new frame: {err:?}");
             }
         }
     }

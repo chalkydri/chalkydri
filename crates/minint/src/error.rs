@@ -1,7 +1,7 @@
+use rmp::decode::{bytes::BytesReadError, ValueReadError};
 use std::error::Error;
 use std::fmt::{self, Display};
 use tokio_tungstenite::tungstenite::Error as TungsteniteError;
-use rmp::decode::{ValueReadError, bytes::BytesReadError};
 
 /// Custom error types for NetworkTables operations
 #[derive(Debug)]

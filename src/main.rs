@@ -54,7 +54,8 @@ use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
 use std::{
-    error::Error, fs::File, io::Write, net::Ipv4Addr, path::Path, sync::Arc, time::Duration,
+    error::Error, ffi::CStr, fs::File, io::Write, net::Ipv4Addr, path::Path, sync::Arc,
+    time::Duration,
 };
 use tokio::sync::RwLock;
 
@@ -176,6 +177,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("starting up...");
 
+    // Disable BS kernel modules
+    let _ = rustix::system::delete_module(c"rpivid_hevc", 0);
+    let _ = rustix::system::delete_module(c"pisp_be", 0);
+
     gstreamer::init().unwrap();
     debug!("initialized gstreamer");
 
@@ -198,12 +203,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             //_ = local => {},
             _ = api => {},
             _ = tokio::signal::ctrl_c() => {
-                //cam_man.stop();
-         let mut f = File::create("chalkydri.toml").unwrap();
-        let toml_cfgg = toml::to_string_pretty(&*Cfg.read().await).unwrap();
-        f.write_all(toml_cfgg.as_bytes()).unwrap();
-        f.flush().unwrap();
-
+                let mut f = File::create("chalkydri.toml").unwrap();
+                let toml_cfgg = toml::to_string_pretty(&*Cfg.read().await).unwrap();
+                f.write_all(toml_cfgg.as_bytes()).unwrap();
+                f.flush().unwrap();
             },
         );
     }

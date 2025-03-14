@@ -10,17 +10,13 @@
 // According to this post on CD, we're doing the 36h11 tag family now.
 
 use std::collections::HashMap;
-use std::fs::File;
-use std::path::Path;
 
 use apriltag::{Detector, Family, Image, TagParams};
-use apriltag_image::image::{DynamicImage, GrayImage};
-use apriltag_image::prelude::*;
 use camera_intrinsic_model::{GenericModel, OpenCVModel5};
+use gstreamer::ElementFactory;
 use gstreamer::prelude::GstBinExtManual;
 use gstreamer::{Buffer, Caps, Element};
-use gstreamer::{ElementFactory, FlowSuccess, State};
-use minint::{NtConn, NtTopic};
+use minint::NtConn;
 use rapier3d::math::{Matrix, Rotation, Translation};
 use rapier3d::na::Quaternion;
 #[cfg(feature = "rerun")]
@@ -75,9 +71,7 @@ impl Subsystem for CApriltagsDetector {
             .unwrap();
 
         // Add them to the pipeline
-        pipeline
-            .add_many([&videoconvertscale, &filter])
-            .unwrap();
+        pipeline.add_many([&videoconvertscale, &filter]).unwrap();
 
         // Link them
         Element::link_many([&videoconvertscale, &filter]).unwrap();
@@ -141,103 +135,101 @@ impl Subsystem for CApriltagsDetector {
         frame_proc_loop(rx, async |frame| {
             let proc_st_time = Instant::now();
 
-            debug!("loading image...");
-            let img =
-                GrayImage::from_vec(1280, 720, frame.map_readable().unwrap().to_vec()).unwrap();
+            if let Ok(buf) = frame.into_mapped_buffer_readable() {
+                debug!("loading image...");
+                let img = unsafe { Image::from_luma8(1280, 720, buf.as_ptr() as *mut _).unwrap() };
 
-            debug!("loading the image more...");
-            let img = Image::from_image_buffer(&img.clone());
+                let dets = self.det.detect(&img);
 
-            let dets = self.det.detect(&img);
+                let poses: Vec<_> = dets
+                    .iter()
+                    .filter_map(|det| {
+                        // Extract camera calibration values from the [CalibratedModel]
+                        let OpenCVModel5 { fx, fy, cx, cy, .. } =
+                            if let GenericModel::OpenCVModel5(model) = self.model.inner_model() {
+                                model
+                            } else {
+                                panic!("camera model type not supported yet");
+                            };
 
-            let poses: Vec<_> = dets
-                .iter()
-                .filter_map(|det| {
-                    // Extract camera calibration values from the [CalibratedModel]
-                    let OpenCVModel5 { fx, fy, cx, cy, .. } =
-                        if let GenericModel::OpenCVModel5(model) = self.model.inner_model() {
-                            model
-                        } else {
-                            panic!("camera model type not supported yet");
-                        };
+                        // Estimate tag pose with the camera calibration values
+                        let pose = det
+                            .estimate_tag_pose(&TagParams {
+                                fx,
+                                fy,
+                                cx,
+                                cy,
+                                tagsize: TAG_SIZE,
+                            })
+                            .unwrap();
 
-                    // Estimate tag pose with the camera calibration values
-                    let pose = det
-                        .estimate_tag_pose(&TagParams {
-                            fx,
-                            fy,
-                            cx,
-                            cy,
-                            tagsize: TAG_SIZE,
-                        })
-                        .unwrap();
+                        // Extract the camera's translation and rotation matrices from the [Pose]
+                        let cam_translation = pose.translation().data().to_vec();
+                        let cam_rotation = pose.rotation().data().to_vec();
 
-                    // Extract the camera's translation and rotation matrices from the [Pose]
-                    let cam_translation = pose.translation().data().to_vec();
-                    let cam_rotation = pose.rotation().data().to_vec();
+                        // Convert the camera's translation and rotation matrices into proper Rust datatypes
+                        let cam_translation = Translation::new(
+                            cam_translation[0],
+                            cam_translation[1],
+                            cam_translation[2],
+                        );
+                        let cam_rotation = Rotation::from_matrix(&Matrix::from_vec(cam_rotation));
 
-                    // Convert the camera's translation and rotation matrices into proper Rust datatypes
-                    let cam_translation = Translation::new(
-                        cam_translation[0],
-                        cam_translation[1],
-                        cam_translation[2],
-                    );
-                    let cam_rotation = Rotation::from_matrix(&Matrix::from_vec(cam_rotation));
+                        debug!(
+                            "detected tag id {}: tl={cam_translation} ro={cam_rotation}",
+                            det.id()
+                        );
 
-                    debug!(
-                        "detected tag id {}: tl={cam_translation} ro={cam_rotation}",
-                        det.id()
-                    );
+                        // Try to get the tag's pose from the field layout
+                        if let Some((tag_translation, tag_rotation)) =
+                            self.layout.get(&(det.id() as u64))
+                        {
+                            let translation = tag_translation * cam_translation;
+                            let rotation = tag_rotation * cam_rotation;
+                            return Some((translation, rotation, det.decision_margin() as f64));
+                        }
 
-                    // Try to get the tag's pose from the field layout
-                    if let Some((tag_translation, tag_rotation)) =
-                        self.layout.get(&(det.id() as u64))
-                    {
-                        let translation = tag_translation * cam_translation;
-                        let rotation = tag_rotation * cam_rotation;
-                        return Some((translation, rotation, det.decision_margin() as f64));
+                        None
+                    })
+                    .collect();
+
+                if poses.len() > 0 {
+                    let mut avg_translation = Translation::new(0.0f64, 0.0, 0.0);
+                    let mut avg_rotation = Quaternion::new(0.0f64, 0.0, 0.0, 0.0);
+
+                    for pose in poses.iter() {
+                        avg_translation.x += pose.0.x;
+                        avg_translation.y += pose.0.y;
+                        avg_translation.z += pose.0.z;
+
+                        avg_rotation.w += pose.1.w;
+                        avg_rotation.i += pose.1.i;
+                        avg_rotation.j += pose.1.j;
+                        avg_rotation.k += pose.1.k;
                     }
 
-                    None
-                })
-                .collect();
+                    avg_translation.x /= poses.len() as f64;
+                    avg_translation.x /= poses.len() as f64;
+                    avg_translation.x /= poses.len() as f64;
 
-            if poses.len() > 0 {
-                let mut avg_translation = Translation::new(0.0f64, 0.0, 0.0);
-                let mut avg_rotation = Quaternion::new(0.0f64, 0.0, 0.0, 0.0);
+                    avg_rotation.w /= poses.len() as f64;
+                    avg_rotation.i /= poses.len() as f64;
+                    avg_rotation.j /= poses.len() as f64;
+                    avg_rotation.k /= poses.len() as f64;
 
-                for pose in poses.iter() {
-                    avg_translation.x += pose.0.x;
-                    avg_translation.y += pose.0.y;
-                    avg_translation.z += pose.0.z;
+                    let t = avg_translation.vector.data.as_slice().to_vec();
+                    let r = avg_rotation.vector().data.into_slice().to_vec();
 
-                    avg_rotation.w += pose.1.w;
-                    avg_rotation.i += pose.1.i;
-                    avg_rotation.j += pose.1.j;
-                    avg_rotation.k += pose.1.k;
+                    debug!("tag detected : {t:?} / {r:?}");
+
+                    translation.set(t).await;
+                    rotation.set(r).await;
+                    tag_detected.set(true).await;
+                    delay.set(proc_st_time.elapsed().as_millis_f64()).await;
+                } else {
+                    debug!("no tag detected");
+                    tag_detected.set(false).await.unwrap();
                 }
-
-                avg_translation.x /= poses.len() as f64;
-                avg_translation.x /= poses.len() as f64;
-                avg_translation.x /= poses.len() as f64;
-
-                avg_rotation.w /= poses.len() as f64;
-                avg_rotation.i /= poses.len() as f64;
-                avg_rotation.j /= poses.len() as f64;
-                avg_rotation.k /= poses.len() as f64;
-
-                let t = avg_translation.vector.data.as_slice().to_vec();
-                let r = avg_rotation.vector().data.into_slice().to_vec();
-
-                debug!("tag detected : {t:?} / {r:?}");
-
-                translation.set(t).await;
-                rotation.set(r).await;
-                tag_detected.set(true).await;
-                delay.set(proc_st_time.elapsed().as_millis_f64()).await;
-            } else {
-                debug!("no tag detected");
-                tag_detected.set(false).await.unwrap();
             }
         })
         .await;

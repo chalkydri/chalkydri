@@ -6,14 +6,15 @@
 use actix_web::web::Bytes;
 use futures_core::Stream;
 use gstreamer::{
-    glib::{ParamSpecBoxed, WeakRef}, prelude::*, Buffer, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element, ElementFactory, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure
+    Buffer, BusSyncReply, Caps, DeviceProvider, DeviceProviderFactory, Element, ElementFactory,
+    FlowSuccess, Fraction, MessageView, Pipeline, State, Structure, glib::WeakRef, prelude::*,
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use minint::NtConn;
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
-use std::{collections::HashMap, error::Error, sync::Arc, task::Poll};
+use std::{collections::HashMap, sync::Arc, task::Poll};
 use tokio::sync::{Mutex, MutexGuard, RwLock, watch};
 
 #[cfg(feature = "rerun")]
@@ -22,6 +23,7 @@ use crate::{
     Cfg,
     calibration::Calibrator,
     config::{self, CameraSettings, CfgFraction},
+    error::Error,
     subsys::capriltags::CApriltagsDetector,
     subsystem::Subsystem,
 };
@@ -37,7 +39,7 @@ pub struct MjpegStream {
     rx: watch::Receiver<Option<Buffer>>,
 }
 impl Stream for MjpegStream {
-    type Item = Result<Bytes, Box<dyn Error>>;
+    type Item = Result<Bytes, Error>;
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -57,7 +59,12 @@ impl Stream for MjpegStream {
                             ]
                             .concat(),
                         );
-                        bytes.extend_from_slice(frame.map_readable().unwrap().as_slice());
+                        bytes.extend_from_slice(
+                            frame
+                                .map_readable()
+                                .map_err(|_| Error::FailedToMapBuffer)?
+                                .as_slice(),
+                        );
                     }
 
                     return Poll::Ready(Some(Ok(bytes.into())));
@@ -131,22 +138,34 @@ impl CameraManager {
                     debug!("got a new device");
 
                     if let Some(cam_configs) = &config.cameras {
-                            let id = dev.property::<Structure>("properties").get::<String>("device.serial").unwrap();
-                        if let Some(cam_config) = cam_configs
-                            .clone()
-                            .iter()
-                            .filter(|cam| cam.id == id)
-                            .next()
+                        let id = dev
+                            .property::<Structure>("properties")
+                            .get::<String>("device.serial")
+                            .unwrap();
+                        if let Some(cam_config) =
+                            cam_configs.clone().iter().filter(|cam| cam.id == id).next()
                         {
                             debug!("found a config");
-                            dbg!(dev.list_properties().iter().map(|prop| prop.name().to_string()).collect::<Vec<_>>());
-                            dbg!(dev.property::<Structure>("properties").iter().map(|(k, v)| (k.to_string(), v.to_value())).collect::<Vec<_>>());
+                            dbg!(
+                                dev.list_properties()
+                                    .iter()
+                                    .map(|prop| prop.name().to_string())
+                                    .collect::<Vec<_>>()
+                            );
+                            dbg!(
+                                dev.property::<Structure>("properties")
+                                    .iter()
+                                    .map(|(k, v)| (k.to_string(), v.to_value()))
+                                    .collect::<Vec<_>>()
+                            );
 
                             // Create the camera source
                             let cam = dev.create_element(Some("camera")).unwrap();
                             let mut extra_controls = Structure::new_empty("extra-controls");
-                            extra_controls.set("auto_exposure", &1);
-                            extra_controls.set("exposure_time_absolute", &10);
+                            extra_controls.set("auto_exposure", if cam_config.auto_exposure { 3 } else { 1 });
+                            if let Some(manual_exposure) = cam_config.manual_exposure {
+                                extra_controls.set("exposure_time_absolute", &manual_exposure);
+                            }
                             cam.set_property("extra-controls", extra_controls);
 
                             // The camera preprocessing part:
@@ -275,7 +294,10 @@ impl CameraManager {
 
                             let camera = pipeline.by_name("camera").unwrap();
                             let mut extra_controls = camera.property::<Structure>("extra-controls");
-                            extra_controls.set("auto_exposure", if cam_config.auto_exposure { 3 } else { 1 });
+                            extra_controls.set(
+                                "auto_exposure",
+                                if cam_config.auto_exposure { 3 } else { 1 },
+                            );
                             if let Some(manual_exposure) = cam_config.manual_exposure {
                                 extra_controls.set("exposure_time_absolute", &manual_exposure);
                             }
@@ -311,7 +333,10 @@ impl CameraManager {
         let mut devices = Vec::new();
 
         for dev in self.dev_prov.devices().iter() {
-                            let id = dev.property::<Structure>("properties").get::<String>("device.serial").unwrap();
+            let id = dev
+                .property::<Structure>("properties")
+                .get::<String>("device.serial")
+                .unwrap();
             devices.push(config::Camera {
                 id,
                 name: String::new(),
@@ -542,10 +567,19 @@ impl CameraManager {
         appsink.set_callbacks(
             AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
-                    let sample = appsink.pull_sample().unwrap();
-                    let buf = sample.buffer().unwrap();
-                    while let Err(err) = tx.send(Some(buf.to_owned())) {
-                        error!("error sending frame: {err:?}");
+                    let sample = appsink
+                        .pull_sample()
+                        .map_err(|_| Error::FailedToPullSample)
+                        .unwrap();
+                    match sample.buffer() {
+                        Some(buf) => {
+                            while let Err(err) = tx.send(Some(buf.to_owned())) {
+                                error!("error sending frame: {err:?}");
+                            }
+                        }
+                        None => {
+                            error!("failed to get buffer");
+                        }
                     }
 
                     Ok(FlowSuccess::Ok)
@@ -558,7 +592,7 @@ impl CameraManager {
         MjpegStream { rx }
     }
 
-    pub async fn run(&self, name: String) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&self, name: String) -> Result<(), Box<dyn std::error::Error>> {
         // Define the event loop or something?
         self.pipelines
             .read()

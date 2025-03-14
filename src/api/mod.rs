@@ -337,16 +337,16 @@ pub(super) async fn stream(
     println!("{cam_name}");
 
     if let Some(mjpeg_stream) = data.mjpeg_streams().await.get(&cam_name) {
-    HttpResponse::Ok()
-        .append_header(header::CacheControl(vec![CacheDirective::NoCache]))
-        .append_header((header::PRAGMA, "no-cache"))
-        .append_header((header::EXPIRES, 0))
-        .append_header((header::CONNECTION, "close"))
-        .append_header((
-            header::CONTENT_TYPE,
-            "multipart/x-mixed-replace; boundary=frame",
-        ))
-        .streaming(mjpeg_stream.clone())
+        HttpResponse::Ok()
+            .append_header(header::CacheControl(vec![CacheDirective::NoCache]))
+            .append_header((header::PRAGMA, "no-cache"))
+            .append_header((header::EXPIRES, 0))
+            .append_header((header::CONNECTION, "close"))
+            .append_header((
+                header::CONTENT_TYPE,
+                "multipart/x-mixed-replace; boundary=frame",
+            ))
+            .streaming(mjpeg_stream.clone())
     } else {
         HttpResponse::NotFound().await.unwrap()
     }

@@ -19,8 +19,8 @@ extern crate tokio;
 extern crate tokio_tungstenite;
 
 mod datatype;
-mod messages;
 mod error;
+mod messages;
 
 pub use error::{NtError, Result};
 
@@ -72,12 +72,12 @@ pub struct NtConn {
     pubuid_topics: Arc<RwLock<HashMap<i32, i32>>>,
     values: Arc<RwLock<HashMap<i32, Data>>>,
 
-    /// Mapping from topic names to topic IDs for topics we've received from server 
+    /// Mapping from topic names to topic IDs for topics we've received from server
     server_topics: Arc<RwLock<HashMap<String, i32>>>,
-    
+
     /// Mapping from topic IDs to topic types
     topic_types: Arc<RwLock<HashMap<i32, String>>>,
-    
+
     subscription_values: Arc<RwLock<HashMap<i32, (u64, Data)>>>,
 }
 impl NtConn {
@@ -101,10 +101,7 @@ impl NtConn {
     ///     // ...
     /// }
     /// ```
-    pub async fn new(
-        server: impl Into<IpAddr>,
-        client_ident: impl Into<String>,
-    ) -> Result<Self> {
+    pub async fn new(server: impl Into<IpAddr>, client_ident: impl Into<String>) -> Result<Self> {
         let topics = Arc::new(RwLock::new(HashMap::new()));
         let topic_pubuids = Arc::new(RwLock::new(HashMap::new()));
         let pubuid_topics = Arc::new(RwLock::new(HashMap::new()));
@@ -180,9 +177,15 @@ impl NtConn {
                                                 ..
                                             } => {
                                                 // Store server topic info
-                                                conn.server_topics.write().await.insert(name.clone(), id);
-                                                conn.topic_types.write().await.insert(id, r#type.clone());
-                                                
+                                                conn.server_topics
+                                                    .write()
+                                                    .await
+                                                    .insert(name.clone(), id);
+                                                conn.topic_types
+                                                    .write()
+                                                    .await
+                                                    .insert(id, r#type.clone());
+
                                                 trace!("inserting to topics");
                                                 (*topics.write().await).insert(id, name.clone());
 
@@ -222,11 +225,21 @@ impl NtConn {
                                 Ok(Message::Binary(bin)) => {
                                     match Self::read_bin_frame(bin.to_vec()) {
                                         Ok((topic_id, timestamp, data)) => {
-                                            trace!("Received binary frame with topic_id={}, ts={}", topic_id, timestamp);
-                                            
+                                            trace!(
+                                                "Received binary frame with topic_id={}, ts={}",
+                                                topic_id,
+                                                timestamp
+                                            );
+
                                             // Store the value for both general values and subscription-specific values
-                                            conn.values.write().await.insert(topic_id as i32, data.clone());
-                                            conn.subscription_values.write().await.insert(topic_id as i32, (timestamp, data));
+                                            conn.values
+                                                .write()
+                                                .await
+                                                .insert(topic_id as i32, data.clone());
+                                            conn.subscription_values
+                                                .write()
+                                                .await
+                                                .insert(topic_id as i32, (timestamp, data));
                                         }
                                         Err(err) => {
                                             error!("Failed to parse binary frame: {}", err);
@@ -341,10 +354,7 @@ impl NtConn {
     ///     // ...
     /// }
     /// ```
-    pub async fn publish<T: DataWrap>(
-        &self,
-        name: impl Into<String>,
-    ) -> Result<NtTopic<T>> {
+    pub async fn publish<T: DataWrap>(&self, name: impl Into<String>) -> Result<NtTopic<T>> {
         let pubuid = self.next_id().await;
         let name = name.into();
 
@@ -360,7 +370,8 @@ impl NtConn {
             }),
         }])?;
 
-        self.c2s_tx.send(Message::Text(buf.into()))
+        self.c2s_tx
+            .send(Message::Text(buf.into()))
             .map_err(|e| NtError::SendError(e.to_string()))?;
 
         debug!(
@@ -391,7 +402,8 @@ impl NtConn {
     /// This method is typically called when an `NtTopic` is dropped.
     fn unpublish(&self, pubuid: i32) -> Result<()> {
         let buf = serde_json::to_string(&[ClientMsg::Unpublish { pubuid }])?;
-        self.c2s_tx.send(Message::Text(buf.into()))
+        self.c2s_tx
+            .send(Message::Text(buf.into()))
             .map_err(|e| NtError::SendError(e.to_string()))?;
 
         Ok(())
@@ -427,7 +439,8 @@ impl NtConn {
             subuid,
             options: BTreeMap::new(),
         }])?;
-        self.c2s_tx.send(Message::Text(buf.into()))
+        self.c2s_tx
+            .send(Message::Text(buf.into()))
             .map_err(|e| NtError::SendError(e.to_string()))?;
 
         Ok(NtSubscription {
@@ -441,7 +454,8 @@ impl NtConn {
     /// This method is typically called when an `NtSubscription` is dropped.
     fn unsubscribe(&self, subuid: i32) -> Result<()> {
         let buf = serde_json::to_string(&[ClientMsg::Unsubscribe { subuid }])?;
-        self.c2s_tx.send(Message::Text(buf.into()))
+        self.c2s_tx
+            .send(Message::Text(buf.into()))
             .map_err(|e| NtError::SendError(e.to_string()))?;
 
         Ok(())
@@ -472,23 +486,19 @@ impl NtConn {
     /// Write a binary frame
     ///
     /// This method is used internally to send data values to the NetworkTables server.
-    fn write_bin_frame<T: DataWrap>(
-        &self,
-        uid: i32,
-        ts: u64,
-        value: T,
-    ) -> Result<()> {
+    fn write_bin_frame<T: DataWrap>(&self, uid: i32, ts: u64, value: T) -> Result<()> {
         let mut buf = Vec::new();
         rmp::encode::write_array_len(&mut buf, 4)?;
 
         rmp::encode::write_i32(&mut buf, uid)?;
         rmp::encode::write_uint(&mut buf, ts)?;
         rmp::encode::write_u8(&mut buf, T::MSGPCK)?;
-        T::encode(&mut buf, value).map_err(|_| NtError::MessagePackError(
-            "Failed to encode value to MessagePack format.".to_string()
-        ))?;
+        T::encode(&mut buf, value).map_err(|_| {
+            NtError::MessagePackError("Failed to encode value to MessagePack format.".to_string())
+        })?;
 
-        self.c2s_tx.send(Message::Binary(buf.into()))
+        self.c2s_tx
+            .send(Message::Binary(buf.into()))
             .map_err(|e| NtError::SendError(e.to_string()))?;
 
         Ok(())
@@ -608,7 +618,9 @@ pub struct NtSubscription<'nt> {
 }
 impl NtSubscription<'_> {
     pub async fn get(&self) -> Result<Option<(u64, Data)>> {
-        Ok(self.conn.subscription_values
+        Ok(self
+            .conn
+            .subscription_values
             .read()
             .await
             .get(&self.subuid)
