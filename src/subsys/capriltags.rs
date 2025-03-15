@@ -79,7 +79,7 @@ impl Subsystem for CApriltagsDetector {
         Ok((videoconvertscale, filter))
     }
     async fn init(cam_config: config::Camera) -> Result<Self, Self::Error> {
-        let model = CalibratedModel::new();
+        let model = CalibratedModel::new(cam_config.calib.unwrap());
 
         let subsys_cfg = cam_config.subsystems.capriltags;
         let default_layout = AprilTagFieldLayout {

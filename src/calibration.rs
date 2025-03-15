@@ -30,16 +30,10 @@ pub struct CalibratedModel {
     model: GenericModel<f64>,
 }
 impl CalibratedModel {
-    pub fn new() -> Self {
-        let mut path = Path::new("/etc/cam0.json");
-        if !path.exists() {
-            path = Path::new("./cam0.json");
-        }
-
+    pub fn new(calib: serde_json::Value) -> Self {
         // Load the camera model
-        let model = model_from_json(path.to_str().unwrap());
+        let model = serde_json::from_value(calib).unwrap();
 
-        let det = TagDetector::new(&TagFamily::T36H11, None);
         Self { model }
     }
 

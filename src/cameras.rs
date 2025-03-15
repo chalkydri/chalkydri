@@ -219,13 +219,15 @@ impl CameraManager {
                                 debug!("dropped lock");
                             }
 
-                            Self::add_subsys::<CApriltagsDetector>(
-                                &pipeline,
-                                &tee,
-                                cam_config.clone(),
-                                nt.clone(),
-                                cam_config.subsystems.capriltags.enabled,
-                            );
+                            if cam_config.calib.is_some() {
+                                Self::add_subsys::<CApriltagsDetector>(
+                                    &pipeline,
+                                    &tee,
+                                    cam_config.clone(),
+                                    nt.clone(),
+                                    cam_config.subsystems.capriltags.enabled,
+                                );
+                            }
 
                             tokio::task::block_in_place(|| pipelines.blocking_write())
                                 .insert(id, pipeline);
