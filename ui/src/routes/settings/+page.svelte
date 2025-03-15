@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button, Card, Fileupload, Input, Label, Layout, P, Select, Skeleton } from 'flowbite-svelte';
+	import { Button, Card, Fileupload, Input, Label, Layout, Modal, P, Select, Skeleton } from 'flowbite-svelte';
 	import { _loadConfig, _saveConfig } from './+page';
 	import { onMount } from 'svelte';
 	import { configure, type Config, type Camera } from '$lib/api';
@@ -9,6 +9,7 @@
 
 	let cfg: Config | null = $state(null);
 	let saving = $state(false);
+	let managing_field_layouts = $state(false);
 
 	async function save() {
 		saving = true;
@@ -60,6 +61,8 @@
 
 		<Label for="device_name" class="mt-2 mb-1">Device name</Label>
 		<Input id="device_name" bind:value={cfg.device_name} />
+
+		<Fileupload bind:files />
 	</Card>
 
 	<Card size="md" padding="sm" class="mt-2">
@@ -71,7 +74,7 @@
 		<Select id="field_layout" items={[{name: 'test', value: 'test'}]} />
 		</div>
 
-		<Button size="sm" class="m-auto" color="blue">Manage field layouts</Button>
+		<Button size="sm" class="m-auto" color="blue" on:click={() => { managing_field_layouts = true; }}>Manage field layouts</Button>
 		</Layout>
 	</Card>
 
@@ -98,6 +101,16 @@
 			>{#if saving}Saving...{:else}Save{/if}</Button
 		>
 	</Card>
+
+	<Modal bind:open={managing_field_layouts}>
+		<P size="lg">Field layouts</P>
+
+		{#if config.field_layouts}
+			{#each config.field_layouts as field_layout, name}
+				{field_layout}
+			{/each}
+		{/if}
+	</Modal>
 {:else}
 	<Skeleton />
 {/if}

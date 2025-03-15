@@ -159,111 +159,26 @@ impl NtConn {
 
         if (*incoming_abort).is_none() {
             let conn = self.clone();
-            let topics = self.topics.clone();
-            let topic_pubuids = self.topic_pubuids.clone();
-            let pubuid_topics = self.pubuid_topics.clone();
 
             let jh = tokio::spawn(async move {
                 let mut reconnect = false;
 
                 loop {
                     if let Some(sock_rd) = conn.sock_rd.write().await.as_mut() {
-                        while let Some(buf) = sock_rd.next().await {
-                            match buf {
-                                Ok(Message::Text(json)) => {
-                                    let messages: Vec<ServerMsg> =
-                                        serde_json::from_str(&json).unwrap();
-
-                                    for msg in messages {
-                                        match msg {
-                                            ServerMsg::Announce {
-                                                name,
-                                                id,
-                                                r#type,
-                                                pubuid,
-                                                ..
-                                            } => {
-                                                // Store server topic info
-                                                conn.server_topics
-                                                    .write()
-                                                    .await
-                                                    .insert(name.clone(), id);
-                                                conn.topic_types
-                                                    .write()
-                                                    .await
-                                                    .insert(id, r#type.clone());
-
-                                                trace!("inserting to topics");
-                                                (*topics.write().await).insert(id, name.clone());
-
-                                                if let Some(pubuid) = pubuid {
-                                                    trace!("inserting to pubuid_topics");
-                                                    (*pubuid_topics.write().await)
-                                                        .insert(pubuid, id);
-                                                    trace!("inserting to topic_pubuids");
-                                                    (*topic_pubuids.write().await)
-                                                        .insert(id, pubuid);
-
-                                                    debug!("{name} ({type}): published successfully with topic id {id}");
-                                                } else {
-                                                    debug!("{name} ({type}): announced with topic id {id}");
-                                                }
-                                            }
-                                            ServerMsg::Unannounce { name, id } => {
-                                                let mut topics = topics.write().await;
-                                                let topic_pubuids = topic_pubuids.read().await;
-                                                let mut pubuid_topics = pubuid_topics.write().await;
-
-                                                (*topics).remove(&id);
-                                                if let Some(pubuid) = (*topic_pubuids).get(&id) {
-                                                    (*pubuid_topics).remove(pubuid);
-                                                }
-
-                                                drop(pubuid_topics);
-                                                drop(topic_pubuids);
-                                                drop(topics);
-
-                                                debug!("{name}: unannounced");
-                                            }
-                                            _ => unimplemented!(),
-                                        }
-                                    }
-                                }
-                                Ok(Message::Binary(bin)) => {
-                                    match Self::read_bin_frame(bin.to_vec()) {
-                                        Ok((topic_id, timestamp, data)) => {
-                                            trace!(
-                                                "Received binary frame with topic_id={}, ts={}",
-                                                topic_id,
-                                                timestamp
-                                            );
-
-                                            // Store the value for both general values and subscription-specific values
-                                            conn.values
-                                                .write()
-                                                .await
-                                                .insert(topic_id as i32, data.clone());
-                                            conn.subscription_values
-                                                .write()
-                                                .await
-                                                .insert(topic_id as i32, (timestamp, data));
-                                        }
-                                        Err(err) => {
-                                            error!("Failed to parse binary frame: {}", err);
-                                        }
-                                    }
-                                }
-                                Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
-                                Err(TungsteniteError::ConnectionClosed) | Err(TungsteniteError::Io(_)) => {
+                        while let Some(msg) = sock_rd.next().await {
+                            match conn.handle_incoming_msg(msg).await {
+                                Err(NtError::NeedReconnect) => {
                                     reconnect = true;
                                 }
-                                Err(err) => error!("error reading incoming message: {err:?}"),
+                                _ => {}
                             }
                         }
                     }
 
                     if reconnect {
-                        conn.connect().await.unwrap();
+                        while let Err(err) = conn.connect().await {
+                            error!("failed to reconnect: {err:?}");
+                        }
                         reconnect = false;
                     }
 
@@ -290,7 +205,10 @@ impl NtConn {
                                 Ok(()) => {
                                     trace!("sent outgoing message successfully");
                                 }
-                                Err(TungsteniteError::ConnectionClosed) | Err(TungsteniteError::Io(_)) => {
+                                Err(TungsteniteError::ConnectionClosed)
+                                | Err(TungsteniteError::Io(_))
+                                | Err(TungsteniteError::AlreadyClosed)
+                                | Err(TungsteniteError::Protocol(_)) => {
                                     reconnect = true;
                                 }
                                 Err(err) => {
@@ -315,6 +233,100 @@ impl NtConn {
         }
     }
 
+    async fn handle_incoming_msg(
+        &self,
+        msg: core::result::Result<Message, TungsteniteError>,
+    ) -> Result<()> {
+        match msg {
+            Ok(Message::Text(json)) => {
+                let messages: Vec<ServerMsg> = serde_json::from_str(&json).unwrap();
+
+                for msg in messages {
+                    match msg {
+                        ServerMsg::Announce {
+                            name,
+                            id,
+                            r#type,
+                            pubuid,
+                            ..
+                        } => {
+                            // Store server topic info
+                            self.server_topics.write().await.insert(name.clone(), id);
+                            self.topic_types.write().await.insert(id, r#type.clone());
+
+                            trace!("inserting to topics");
+                            (*self.topics.write().await).insert(id, name.clone());
+
+                            if let Some(pubuid) = pubuid {
+                                trace!("inserting to pubuid_topics");
+                                (*self.pubuid_topics.write().await).insert(pubuid, id);
+                                trace!("inserting to topic_pubuids");
+                                (*self.topic_pubuids.write().await).insert(id, pubuid);
+
+                                debug!(
+                                    "{name} ({type}): published successfully with topic id {id}"
+                                );
+                            } else {
+                                debug!("{name} ({type}): announced with topic id {id}");
+                            }
+                        }
+                        ServerMsg::Unannounce { name, id } => {
+                            let mut topics = self.topics.write().await;
+                            let topic_pubuids = self.topic_pubuids.read().await;
+                            let mut pubuid_topics = self.pubuid_topics.write().await;
+
+                            (*topics).remove(&id);
+                            if let Some(pubuid) = (*topic_pubuids).get(&id) {
+                                (*pubuid_topics).remove(pubuid);
+                            }
+
+                            drop(pubuid_topics);
+                            drop(topic_pubuids);
+                            drop(topics);
+
+                            debug!("{name}: unannounced");
+                        }
+                        _ => unimplemented!(),
+                    }
+                }
+            }
+            Ok(Message::Binary(bin)) => {
+                match Self::read_bin_frame(bin.to_vec()) {
+                    Ok((topic_id, timestamp, data)) => {
+                        trace!(
+                            "received binary frame with topic_id {}, ts={}",
+                            topic_id,
+                            timestamp
+                        );
+
+                        // Store the value for both general values and subscription-specific values
+                        self.values
+                            .write()
+                            .await
+                            .insert(topic_id as i32, data.clone());
+                        self.subscription_values
+                            .write()
+                            .await
+                            .insert(topic_id as i32, (timestamp, data));
+                    }
+                    Err(err) => {
+                        error!("Failed to parse binary frame: {}", err);
+                    }
+                }
+            }
+            Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
+            Err(TungsteniteError::ConnectionClosed)
+            | Err(TungsteniteError::Io(_))
+            | Err(TungsteniteError::AlreadyClosed)
+            | Err(TungsteniteError::Protocol(_)) => {
+                return Err(NtError::NeedReconnect);
+            }
+            Err(err) => error!("error reading incoming message: {err:?}"),
+        }
+
+        Ok(())
+    }
+
     async fn connect(&self) -> Result<()> {
         // Get server and client_ident into something we can work with
         let server = self.server.read().await.clone();
@@ -334,6 +346,32 @@ impl NtConn {
 
         *self.sock_rd.write().await = Some(sock_rd);
         *self.sock_wr.write().await = Some(sock_wr);
+
+        {
+            let pubuid_topics = self.pubuid_topics.read().await;
+            let topics = self.topics.read().await;
+
+            let mut republish = Vec::new();
+            if !pubuid_topics.is_empty() {
+                debug!("republishing");
+                for (pubuid, uid) in pubuid_topics.clone() {
+                    let name = topics.get(&uid).unwrap().clone();
+                    let topic_types = self.topic_types.read().await;
+                    let msg = ClientMsg::Publish {
+                        name,
+                        pubuid,
+                        r#type: topic_types.get(&uid).unwrap().to_string(),
+                        properties: None,
+                    };
+                    republish.push(msg);
+                }
+            }
+            let buf = serde_json::to_string(&republish)?;
+
+            self.c2s_tx
+                .send(Message::Text(buf.into()))
+                .map_err(|e| NtError::SendError(e.to_string()))?;
+        }
 
         Ok(())
     }
@@ -398,17 +436,6 @@ impl NtConn {
             "{name} ({data_type}): publishing with pubuid {pubuid}",
             data_type = T::STRING.to_string()
         );
-
-        //let mut published = false;
-        //while !published {
-        //    published = if (*self.pubuid_topics.read().await).contains_key(&pubuid) {
-        //        true
-        //    } else {
-        //        false
-        //    };
-        //    trace!("waiting for topic to be published");
-        //    tokio::time::sleep(Duration::from_millis(100)).await;
-        //}
 
         Ok(NtTopic {
             conn: &*self,

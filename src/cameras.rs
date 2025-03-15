@@ -11,10 +11,10 @@ use gstreamer::{
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
-use minint::NtConn;
+use minint::{NtConn, NtTopic};
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
-use std::{collections::HashMap, sync::Arc, task::Poll};
+use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc, task::Poll};
 use tokio::sync::{Mutex, MutexGuard, RwLock, watch};
 
 #[cfg(feature = "rerun")]
@@ -162,7 +162,10 @@ impl CameraManager {
                             // Create the camera source
                             let cam = dev.create_element(Some("camera")).unwrap();
                             let mut extra_controls = Structure::new_empty("extra-controls");
-                            extra_controls.set("auto_exposure", if cam_config.auto_exposure { 3 } else { 1 });
+                            extra_controls.set(
+                                "auto_exposure",
+                                if cam_config.auto_exposure { 3 } else { 1 },
+                            );
                             if let Some(manual_exposure) = cam_config.manual_exposure {
                                 extra_controls.set("exposure_time_absolute", &manual_exposure);
                             }
@@ -226,6 +229,24 @@ impl CameraManager {
 
                             tokio::task::block_in_place(|| pipelines.blocking_write())
                                 .insert(id, pipeline);
+
+                            futures_executor::block_on(async {
+                                let mut streams = ManuallyDrop::new(
+                                    nt.publish(format!(
+                                        "/CameraPublisher/{}/streams",
+                                        cam_config.name
+                                    ))
+                                    .await
+                                    .unwrap(),
+                                );
+                                streams
+                                    .set(vec![format!(
+                                        "mjpeg:http://localhost:6942/stream/{}",
+                                        cam_config.id
+                                    )])
+                                    .await
+                                    .unwrap();
+                            });
                         }
                     }
                 }

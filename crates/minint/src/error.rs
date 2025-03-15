@@ -26,6 +26,7 @@ pub enum NtError {
     LockError(String),
     /// Other errors
     Other(String),
+    NeedReconnect,
 }
 
 impl Display for NtError {
@@ -41,6 +42,7 @@ impl Display for NtError {
             NtError::BinaryFrameError => write!(f, "Failed to parse binary frame"),
             NtError::LockError(msg) => write!(f, "Lock error: {msg}"),
             NtError::Other(msg) => write!(f, "Error: {msg}"),
+            NtError::NeedReconnect => write!(f, "Disconnected from NT server! Must reconnect"),
         }
     }
 }

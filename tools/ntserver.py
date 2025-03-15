@@ -14,7 +14,7 @@ def main():
     inst.startServer()
 
     while True:
-        topics = inst.getTopics('/')
+        topics = inst.getTable("/chalkydri").getTopics()
         if len(topics) > 0:
             print(topics)
 
