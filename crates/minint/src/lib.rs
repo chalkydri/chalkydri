@@ -148,6 +148,7 @@ impl NtConn {
         Ok(conn)
     }
 
+    /// Initialize the background event loops
     async fn init_background_event_loops(&self, mut c2s_rx: mpsc::UnboundedReceiver<Message>) {
         // Spawn event loop to read and process incoming messages
 
@@ -279,16 +280,14 @@ impl NtConn {
                                 debug!("{name} ({type}): announced with topic id {id}");
                             }
                         }
-                        ServerMsg::Unannounce { name, id } => {
-                            let topic_pubuids = self.server_client.read().await;
-                            let mut pubuid_topics = self.client_server.write().await;
-
-                            if let Some(pubuid) = (*topic_pubuids).get(&id) {
-                                (*pubuid_topics).remove(pubuid);
+                        ServerMsg::Unannounce {
+                            name,
+                            id: server_id,
+                        } => {
+                            if let Some(pubuid) = self.server_client.read().await.get(&server_id) {
+                                self.client_server.write().await.remove(pubuid);
                             }
-
-                            drop(pubuid_topics);
-                            drop(topic_pubuids);
+                            self.server_client.write().await.remove(&server_id);
 
                             debug!("{name}: unannounced");
                         }
@@ -327,6 +326,7 @@ impl NtConn {
         Ok(())
     }
 
+    /// Connect (or reconnect) to the NetworkTables server
     async fn connect(&self) -> Result<()> {
         // Get server and client_ident into something we can work with
         let server = self.server.read().await.clone();
@@ -341,7 +341,7 @@ impl NtConn {
             HeaderValue::from_static("v4.1.networktables.first.wpi.edu"),
         );
 
-        // Connect to the server and split into read and write
+        // Repeatedly attempt to connect to the server
         loop {
             match tokio_tungstenite::connect_async(req.clone()).await {
                 Ok((sock, _)) => {

@@ -38,6 +38,7 @@ mod logger;
 mod subsys;
 mod subsystem;
 mod utils;
+mod update;
 
 #[cfg(feature = "web")]
 use api::run_api;
@@ -54,8 +55,7 @@ use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
 use std::{
-    error::Error, ffi::CStr, fs::File, io::Write, net::Ipv4Addr, path::Path, sync::Arc,
-    time::Duration,
+    error::Error, fs::File, io::Write, net::Ipv4Addr, path::Path, sync::Arc,
 };
 use tokio::sync::RwLock;
 
@@ -130,25 +130,14 @@ static Nt: Lazy<NtConn> = Lazy::new(|| {
             dev_name
         };
 
-        // Attempt to connect to the NT server, retrying until successful
-
         let nt: NtConn;
 
-        let mut retry = false;
-
-        loop {
-            match NtConn::new(roborio_ip, dev_name.clone()).await {
-                Ok(conn) => {
-                    nt = conn;
-                    break;
-                }
-                Err(err) => {
-                    if !retry {
-                        error!("Error connecting to NT server: {err:?}");
-                        retry = true;
-                    }
-                    tokio::time::sleep(Duration::from_millis(5)).await;
-                }
+        match NtConn::new(roborio_ip, dev_name.clone()).await {
+            Ok(conn) => {
+                nt = conn;
+            }
+            Err(err) => {
+                panic!("Error connecting to NT server: {err:?}");
             }
         }
 
@@ -177,8 +166,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("starting up...");
 
-    //rustix::fs::statfs(path).unwrap();
-
     // Disable BS kernel modules
     let _ = rustix::system::delete_module(c"rpivid_hevc", 0);
     let _ = rustix::system::delete_module(c"pisp_be", 0);
@@ -189,29 +176,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cam_man = CameraManager::new(Nt.clone()).await;
     let api = tokio::spawn(run_api(cam_man.clone()));
 
-    let cam_man_ = cam_man.clone();
-    std::thread::spawn(move || {
-        //cam_man_.start();
-        //cam_man_.run().unwrap();
-    });
-
-    #[cfg(not(feature = "web"))]
-    local.await;
-
-    // Have to let NT topics get dropped before calling nt.stop()
-    #[cfg(feature = "web")]
-    {
-        tokio::select!(
-            //_ = local => {},
-            _ = api => {},
-            _ = tokio::signal::ctrl_c() => {
-                let mut f = File::create("chalkydri.toml").unwrap();
-                let toml_cfgg = toml::to_string_pretty(&*Cfg.read().await).unwrap();
-                f.write_all(toml_cfgg.as_bytes()).unwrap();
-                f.flush().unwrap();
-            },
-        );
-    }
+    tokio::select!(
+        _ = api => {},
+        _ = tokio::signal::ctrl_c() => {
+            let mut f = File::create("chalkydri.toml").unwrap();
+            let toml_cfgg = toml::to_string_pretty(&*Cfg.read().await).unwrap();
+            f.write_all(toml_cfgg.as_bytes()).unwrap();
+            f.flush().unwrap();
+        },
+    );
 
     Ok(())
 }

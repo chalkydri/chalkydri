@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 
-use gstreamer::{Buffer, Element, Pipeline, glib::WeakRef};
-use gstreamer_app::AppSink;
+use gstreamer::{Buffer, Element, Pipeline};
 use minint::NtConn;
 use tokio::sync::watch;
 
@@ -41,10 +40,6 @@ pub trait Subsystem: Sized {
         nt: NtConn,
         rx: watch::Receiver<Option<Buffer>>,
     ) -> Result<Self::Output, Self::Error>;
-}
-
-pub struct SubsysCtx {
-    pub appsink: WeakRef<AppSink>,
 }
 
 pub async fn frame_proc_loop(

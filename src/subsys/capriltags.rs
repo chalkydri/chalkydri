@@ -52,7 +52,6 @@ impl Subsystem for CApriltagsDetector {
         cam_config: config::Camera,
         pipeline: &gstreamer::Pipeline,
     ) -> Result<(gstreamer::Element, gstreamer::Element), Self::Error> {
-        let config = cam_config.subsystems.capriltags;
         // The AprilTag preprocessing part:
         //  tee ! gamma ! videoconvertscale ! capsfilter ! appsink
 

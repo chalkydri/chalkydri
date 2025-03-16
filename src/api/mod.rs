@@ -2,11 +2,10 @@
 //! JSON API used by the web UI and possibly third-party applications
 //!
 
-use std::{fs::File, io::Write, sync::Arc};
+use std::{fs::File, io::Write};
 
 use actix_web::{
     App, HttpResponse, HttpServer, Responder,
-    body::BodyStream,
     get,
     http::{
         StatusCode,
@@ -18,12 +17,11 @@ use actix_web::{
 use mime_guess::from_path;
 use rust_embed::Embed;
 use rustix::system::RebootCommand;
-use tokio::{io::BufStream, sync::watch};
 use utopia::{OpenApi, ToSchema};
 
 use crate::{
-    Cfg, Nt,
-    cameras::{self, CameraManager},
+    Cfg,
+    cameras::CameraManager,
     config::Config,
 };
 
@@ -80,6 +78,7 @@ async fn dist(path: web::Path<String>) -> impl Responder {
     }
 }
 
+/// Run the API server
 pub async fn run_api(cam_man: CameraManager) {
     HttpServer::new(move || {
         App::new()
