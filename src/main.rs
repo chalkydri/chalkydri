@@ -38,7 +38,6 @@ mod logger;
 mod subsys;
 mod subsystem;
 mod utils;
-mod update;
 
 #[cfg(feature = "web")]
 use api::run_api;
@@ -55,9 +54,9 @@ use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
 use std::{
-    error::Error, fs::File, io::Write, net::Ipv4Addr, path::Path, sync::Arc,
+    error::Error, fs::File, io::Write, net::Ipv4Addr, os::unix::process::CommandExt, path::Path, process::Command, sync::Arc
 };
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, oneshot, RwLock};
 
 // mimalloc is a very good general purpose allocator
 #[global_allocator]
@@ -173,18 +172,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     gstreamer::init().unwrap();
     debug!("initialized gstreamer");
 
-    let cam_man = CameraManager::new(Nt.clone()).await;
+    let (tx, mut rx) = mpsc::channel::<()>(1);
+    let cam_man = CameraManager::new(Nt.clone(), tx).await;
     let api = tokio::spawn(run_api(cam_man.clone()));
 
     tokio::select!(
         _ = api => {},
-        _ = tokio::signal::ctrl_c() => {
-            let mut f = File::create("chalkydri.toml").unwrap();
-            let toml_cfgg = toml::to_string_pretty(&*Cfg.read().await).unwrap();
-            f.write_all(toml_cfgg.as_bytes()).unwrap();
-            f.flush().unwrap();
+        _ = tokio::signal::ctrl_c() => {},
+        _ = rx.recv() => {
         },
     );
+
+    Cfg.read().await.save("chalkydri.toml").await.unwrap();
 
     Ok(())
 }

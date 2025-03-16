@@ -6,8 +6,7 @@
 use actix_web::web::Bytes;
 use futures_core::Stream;
 use gstreamer::{
-    Buffer, BusSyncReply, Caps, DeviceProvider, DeviceProviderFactory, Element, ElementFactory,
-    FlowSuccess, Fraction, MessageView, Pipeline, State, Structure, glib::WeakRef, prelude::*,
+    event::Reconfigure, glib::WeakRef, prelude::*, Buffer, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element, ElementFactory, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
@@ -15,7 +14,7 @@ use minint::{NtConn, NtTopic};
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
 use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc, task::Poll};
-use tokio::sync::{Mutex, MutexGuard, RwLock, watch};
+use tokio::sync::{mpsc, oneshot, watch, Mutex, MutexGuard, RwLock};
 
 #[cfg(feature = "rerun")]
 use crate::Rerun;
@@ -42,7 +41,7 @@ impl Stream for MjpegStream {
     type Item = Result<Bytes, Error>;
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         loop {
             match self.rx.has_changed() {
@@ -82,14 +81,14 @@ impl Stream for MjpegStream {
 
 #[derive(Clone)]
 pub struct CameraManager {
-    //dev_mon: DeviceMonitor,
     dev_prov: DeviceProvider,
     pipelines: Arc<RwLock<HashMap<String, Pipeline>>>,
     calibrators: Arc<Mutex<HashMap<String, Calibrator>>>,
     mjpeg_streams: Arc<Mutex<HashMap<String, MjpegStream>>>,
+    restart_tx: mpsc::Sender<()>,
 }
 impl CameraManager {
-    pub async fn new(nt: NtConn) -> Self {
+    pub async fn new(nt: NtConn, restart_tx: mpsc::Sender<()>) -> Self {
         // Make sure gstreamer is initialized
         gstreamer::assert_initialized();
 
@@ -138,10 +137,7 @@ impl CameraManager {
                     debug!("got a new device");
 
                     if let Some(cam_configs) = &config.cameras {
-                        let id = dev
-                            .property::<Structure>("properties")
-                            .get::<String>("device.serial")
-                            .unwrap();
+                        let id = Self::get_id(&dev);
                         if let Some(cam_config) =
                             cam_configs.clone().iter().filter(|cam| cam.id == id).next()
                         {
@@ -161,6 +157,7 @@ impl CameraManager {
 
                             // Create the camera source
                             let cam = dev.create_element(Some("camera")).unwrap();
+
                             let mut extra_controls = Structure::new_empty("extra-controls");
                             extra_controls.set(
                                 "auto_exposure",
@@ -175,25 +172,37 @@ impl CameraManager {
                             //   [src]> capsfilter -> queue -> tee -> ...
 
                             // Create the elements
+                            let settings = cam_config.settings.clone().unwrap_or_default();
                             let filter = ElementFactory::make("capsfilter")
                                 .name("capsfilter")
                                 .property(
                                     "caps",
                                     &Caps::builder("video/x-raw")
-                                        .field("width", &1280)
-                                        .field("height", &720)
+                                        .field("width", settings.width as i32)
+                                        .field("height", settings.height as i32)
+                                        //.field(
+                                        //    "framerate",
+                                        //    &Fraction::new(
+                                        //        settings.frame_rate.num as i32,
+                                        //        settings.frame_rate.den as i32,
+                                        //    ),
+                                        //)
                                         .build(),
                                 )
                                 .build()
                                 .unwrap();
-                            //let queue = ElementFactory::make("queue").build().unwrap();
+                            let videoflip = ElementFactory::make("videoflip")
+                                .name("videoflip")
+                                .property_from_str("method", &serde_json::to_string(&cam_config.orientation).unwrap().trim_matches('"'))
+                                .build()
+                                .unwrap();
                             let tee = ElementFactory::make("tee").build().unwrap();
 
                             // Add them to the pipeline
-                            pipeline.add_many([&cam, &filter, &tee]).unwrap();
+                            pipeline.add_many([&cam, &filter, &videoflip, &tee]).unwrap();
 
                             // Link them
-                            Element::link_many([&cam, &filter, &tee]).unwrap();
+                            Element::link_many([&cam, &filter, &videoflip, &tee]).unwrap();
 
                             debug!("initializing calibrator");
                             let calibrator = Self::add_calib(&pipeline, &tee, cam_config.clone());
@@ -276,7 +285,19 @@ impl CameraManager {
             pipelines,
             calibrators,
             mjpeg_streams,
+            restart_tx,
         }
+    }
+
+    pub async fn restart(&self) {
+        self.restart_tx.send(()).await.unwrap();
+    }
+
+    fn get_id(dev: &Device) -> String {
+        dev
+            .property::<Structure>("properties")
+            .get::<String>("device.serial")
+            .unwrap()
     }
 
     pub async fn update_pipeline(&self, dev_id: String) {
@@ -300,22 +321,28 @@ impl CameraManager {
                         .next()
                     {
                         if let Some(settings) = &cam_config.settings {
-                            //pipeline.by_name("capsfilter").unwrap().set_property(
-                            //    "caps",
-                            //    &Caps::builder("video/x-raw")
-                            //        .field("width", &settings.width)
-                            //        .field("height", &settings.height)
-                            //        //.field(
-                            //        //    "framerate",
-                            //        //    &Fraction::new(
-                            //        //        settings.frame_rate.num as i32,
-                            //        //        settings.frame_rate.den as i32,
-                            //        //    ),
-                            //        //)
-                            //        .build(),
+                            let capsfilter = pipeline.by_name("capsfilter").unwrap();
+                            let mut old_caps = pipeline.by_name("capsfilter").unwrap().property::<Caps>("caps").to_owned();
+                            let caps = old_caps.make_mut();
+                            caps.set_value("width", (&(settings.width as i32)).into());
+                            caps.set_value("height", (&(settings.height as i32)).into());
+                            //caps.set_value(
+                            //            "framerate",
+                            //            (&Fraction::new(
+                            //                settings.frame_rate.num as i32,
+                            //                settings.frame_rate.den as i32,
+                            //            )).into(),
                             //);
+                            capsfilter.set_property("caps", caps.to_owned());
+
+                            pipeline.foreach_sink_pad(|elem, pad| {
+                                pad.mark_reconfigure();
+
+                                true
+                            });
 
                             let camera = pipeline.by_name("camera").unwrap();
+
                             let mut extra_controls = camera.property::<Structure>("extra-controls");
                             extra_controls.set(
                                 "auto_exposure",
@@ -325,10 +352,13 @@ impl CameraManager {
                                 extra_controls.set("exposure_time_absolute", &manual_exposure);
                             }
                             camera.set_property("extra-controls", extra_controls);
-                            pipeline
-                                .by_name("capriltags_valve")
-                                .unwrap()
-                                .set_property("drop", !cam_config.subsystems.capriltags.enabled);
+
+                            if let Some(capriltags_valve) = pipeline
+                                .by_name("capriltags_valve") {
+                                capriltags_valve.set_property("drop", !cam_config.subsystems.capriltags.enabled);
+                            }
+
+                            
                         }
                     }
                 }
@@ -356,44 +386,37 @@ impl CameraManager {
         let mut devices = Vec::new();
 
         for dev in self.dev_prov.devices().iter() {
-            let id = dev
-                .property::<Structure>("properties")
-                .get::<String>("device.serial")
-                .unwrap();
+            let id = Self::get_id(&dev);
             devices.push(config::Camera {
                 id,
-                name: String::new(),
-                settings: None,
-                auto_exposure: true,
-                manual_exposure: None,
                 possible_settings: Some(
                     dev.caps()
                         .unwrap()
                         .iter()
-                        .map(|cap| {
+                        .filter(|cap| cap.name().as_str() == "video/x-raw")
+                        .filter_map(|cap| {
+                            let width = cap.get::<i32>("width").ok().map(|v| v as u32);
+                            let height = cap.get::<i32>("height").ok().map(|v| v as u32);
                             let frame_rate = cap
-                                .get::<Fraction>("framerate")
-                                .unwrap_or_else(|_| Fraction::new(30, 1));
-                            CameraSettings {
-                                width: cap.get::<i32>("width").unwrap_or(1280) as u32,
-                                height: cap.get::<i32>("height").unwrap_or(720) as u32,
-                                frame_rate: CfgFraction {
-                                    num: frame_rate.numer() as u32,
-                                    den: frame_rate.denom() as u32,
-                                },
+                                .get::<Fraction>("framerate").ok().map(|v| CfgFraction {
+                                    num: v.numer() as u32,
+                                    den: v.denom() as u32,
+                                });
+                            if width.is_none() || height.is_none() {
+                                error!("Either width or height doesn't exist. Need to look into that...");
+                                None
+                            } else {
+                                Some(CameraSettings {
+                                    width: width.unwrap(),
+                                    height: height.unwrap(),
+                                    frame_rate,
+                                    format: Some(cap.get::<String>("format").unwrap_or_default()),
+                                })
                             }
                         })
                         .collect(),
                 ),
-                subsystems: config::Subsystems {
-                    capriltags: config::CAprilTagsSubsys {
-                        enabled: false,
-                        field_layout: None,
-                        gamma: None,
-                    },
-                    ml: config::MlSubsys { enabled: false },
-                },
-                calib: None,
+                ..Default::default()
             });
         }
 
@@ -424,15 +447,17 @@ impl CameraManager {
             .property("drop", !enabled)
             .build()
             .unwrap();
-        let queue = ElementFactory::make("queue").build().unwrap();
-        let appsink = ElementFactory::make("appsink").build().unwrap();
-        pipeline.add_many([&valve, &queue, &appsink]).unwrap();
+        //let queue = ElementFactory::make("queue").build().unwrap();
+        let videorate = ElementFactory::make("videorate").property("max-rate", 40).property("drop-only", true).build().unwrap();
+        let appsink = ElementFactory::make("appsink").name(&format!("{}_appsink", S::NAME)).build().unwrap();
+        pipeline.add_many([&valve, &videorate, &appsink]).unwrap();
 
         debug!(target: &target, "linking preproc pipeline chunk...");
-        Element::link_many([&cam, &valve, &queue, &input]).unwrap();
+        Element::link_many([&cam, &valve, &videorate, &input]).unwrap();
         output.link(&appsink).unwrap();
 
         let appsink = appsink.dynamic_cast::<AppSink>().unwrap();
+        appsink.set_drop(true);
 
         let (tx, rx) = watch::channel(None);
 
@@ -496,7 +521,7 @@ impl CameraManager {
             )
             .build()
             .unwrap();
-        let appsink = ElementFactory::make("appsink").build().unwrap();
+        let appsink = ElementFactory::make("appsink").name("calib_appsink").build().unwrap();
 
         pipeline
             .add_many([&valve, &queue, &videoconvertscale, &filter, &appsink])
@@ -504,6 +529,7 @@ impl CameraManager {
         Element::link_many([&cam, &valve, &queue, &videoconvertscale, &filter, &appsink]).unwrap();
 
         let appsink = appsink.dynamic_cast::<AppSink>().unwrap();
+        appsink.set_drop(true);
 
         let (tx, rx) = watch::channel(None);
 
@@ -539,7 +565,8 @@ impl CameraManager {
             .property("drop", false)
             .build()
             .unwrap();
-        let queue = ElementFactory::make("queue").build().unwrap();
+        let videorate = ElementFactory::make("videorate").property("max-rate", 20).property("drop-only", true).build().unwrap();
+        //let queue = ElementFactory::make("queue").build().unwrap();
         let videoconvertscale = ElementFactory::make("videoconvertscale")
             .property_from_str("method", "nearest-neighbour")
             .build()
@@ -559,12 +586,12 @@ impl CameraManager {
             .property("quality", &25)
             .build()
             .unwrap();
-        let appsink = ElementFactory::make("appsink").build().unwrap();
+        let appsink = ElementFactory::make("appsink").name("mjpeg_appsink").build().unwrap();
 
         pipeline
             .add_many([
                 &valve,
-                &queue,
+                &videorate,
                 &videoconvertscale,
                 &filter,
                 &jpegenc,
@@ -574,7 +601,7 @@ impl CameraManager {
         Element::link_many([
             &cam,
             &valve,
-            &queue,
+            &videorate,
             &videoconvertscale,
             &filter,
             &jpegenc,
@@ -583,6 +610,7 @@ impl CameraManager {
         .unwrap();
 
         let appsink = appsink.dynamic_cast::<AppSink>().unwrap();
+        appsink.set_drop(true);
 
         let (tx, rx) = watch::channel(None);
 

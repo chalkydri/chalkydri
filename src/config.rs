@@ -1,5 +1,5 @@
-use crate::{error::Error, subsys::capriltags::AprilTagFieldLayout};
-use std::{collections::HashMap, fs::File, io::Read, path::Path};
+use crate::{error::Error, subsys::capriltags::AprilTagFieldLayout, Cfg};
+use std::{collections::HashMap, fs::File, io::{Read, Write}, path::Path};
 
 macro_rules! def_cfg {
     ($(
@@ -45,11 +45,13 @@ def_cfg! {
         calib: Option<serde_json::Value>,
         auto_exposure: bool,
         manual_exposure: Option<u32>,
+        orientation: VideoOrientation,
     }
     CameraSettings {
         width: u32,
         height: u32,
-        frame_rate: CfgFraction,
+        frame_rate: Option<CfgFraction>,
+        format: Option<String>,
     }
     CfgFraction {
         num: u32,
@@ -63,18 +65,69 @@ def_cfg! {
         enabled: bool,
         gamma: Option<f64>,
         field_layout: Option<String>,
+        max_frame_rate: u8,
     }
     MlSubsys {
         enabled: bool,
     }
+    CustomSubsys {
+        name: String,
+        enabled: bool,
+        code: String,
+    }
 }
 
 impl Config {
+    /// Load the configuration from the specified path
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Error> {
         let mut f = File::open(path).map_err(|_| Error::FailedToReadConfig)?;
         let mut buf = String::new();
         f.read_to_string(&mut buf).unwrap();
         toml::from_str(&buf).map_err(|_| Error::InvalidConfig)
+    }
+
+    /// Save the configuration to the specified path
+    pub async fn save(&self, path: impl AsRef<Path>) -> Result<(), Error> {
+            let mut f = File::create(path).unwrap();
+            let toml_cfgg = toml::to_string_pretty(&self).unwrap();
+            f.write_all(toml_cfgg.as_bytes()).unwrap();
+            f.flush().unwrap();
+
+            Ok(())
+    }
+}
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            settings: None,
+            auto_exposure: true,
+            manual_exposure: None,
+            possible_settings: None,
+            subsystems: Subsystems {
+                capriltags: CAprilTagsSubsys {
+                    enabled: false,
+                    field_layout: None,
+                    gamma: None,
+                    max_frame_rate: 40,
+                },
+                ml: MlSubsys { enabled: false },
+            },
+            calib: None,
+            orientation: VideoOrientation::None,
+        }
+    }
+}
+
+impl Default for CameraSettings {
+    fn default() -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            frame_rate: None,
+            format: None,
+        }
     }
 }
 
@@ -84,4 +137,14 @@ impl Config {
 pub enum CameraKind {
     PiCam,
     Usb,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
+#[serde(rename_all = "kebab-case")]
+pub enum VideoOrientation {
+    None = 0,
+    Clockwise = 1,
+    Rotate180 = 2,
+    Counterclockwise = 3,
 }

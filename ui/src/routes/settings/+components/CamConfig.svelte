@@ -77,7 +77,7 @@
 					id="res_fps"
 					items={camera.possible_settings.map((val) => {
 						return {
-							name: `${val.width}x${val.height} @${val.frame_rate.num / val.frame_rate.den}fps`,
+							name: `${val.width}x${val.height} @${val.frame_rate.num / val.frame_rate.den}fps (${val.format})`,
 							value: JSON.stringify(val)
 						};
 					})}

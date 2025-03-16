@@ -66,6 +66,7 @@ bindgen = { version = "*", default-features = false, features = ["runtime"] }
 members = [
   "crates/chalkydri-apriltags",
   "crates/chalkydri-tfledge",
+	"crates/chalkydrilib",
   "crates/minint",
 ]
 

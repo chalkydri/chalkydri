@@ -5,18 +5,14 @@
 use std::{fs::File, io::Write};
 
 use actix_web::{
-    App, HttpResponse, HttpServer, Responder,
-    get,
-    http::{
-        StatusCode,
-        header::{self, CacheDirective},
-    },
-    post,
-    web::{self, Data},
+    get, http::{
+        header::{self, CacheDirective}, StatusCode
+    }, post, put, web::{self, Data}, App, HttpResponse, HttpServer, Responder
 };
 use mime_guess::from_path;
 use rust_embed::Embed;
 use rustix::system::RebootCommand;
+use sysinfo::System;
 use utopia::{OpenApi, ToSchema};
 
 use crate::{
@@ -32,12 +28,14 @@ use crate::{
         info,
         configuration,
         configure,
+        save_configuration,
         calibration_intrinsics,
         calibration_status,
         calibration_step,
         sys_info,
+        restart,
         sys_reboot,
-        sys_shutdown
+        sys_shutdown,
     )
 )]
 #[allow(dead_code)]
@@ -87,9 +85,11 @@ pub async fn run_api(cam_man: CameraManager) {
             .service(info)
             .service(configuration)
             .service(configure)
+            .service(save_configuration)
             .service(calibration_intrinsics)
             .service(calibration_status)
             .service(calibration_step)
+            .service(restart)
             .service(sys_reboot)
             .service(sys_shutdown)
             .service(sys_info)
@@ -107,6 +107,8 @@ pub async fn run_api(cam_man: CameraManager) {
 #[derive(Serialize, ToSchema)]
 pub struct Info {
     pub version: &'static str,
+    pub cpu_usage: u8,
+    pub mem_usage: u8,
 }
 
 /// Chalkydri version and info
@@ -120,8 +122,17 @@ pub(super) async fn info() -> impl Responder {
     #[cfg(feature = "python")]
     let sys = "rpi";
 
+    let mut system = System::new();
+    system.refresh_cpu_usage();
+    system.refresh_memory();
+    
+    let cpu_usage = (system.global_cpu_usage() * 100.0) as u8;
+    let mem_usage = ((system.used_memory() as f64 / system.total_memory() as f64) * 100.0) as u8;
+
     web::Json(Info {
         version: env!("CARGO_PKG_VERSION"),
+        cpu_usage,
+        mem_usage,
     })
 }
 
@@ -164,36 +175,34 @@ pub(super) async fn configure(
 ) -> impl Responder {
     let cam_man = data.get_ref();
 
+    *Cfg.write().await = cfgg;
+
+    for cam in cam_man.devices() {
+        cam_man.update_pipeline(cam.id.clone()).await;
+    }
+
+    web::Json(Cfg.read().await.clone())
+}
+
+/// Save configuration
+#[utopia::path(
+    responses(
+        (status = 200, body = Config),
+    ),
+)]
+#[put("/api/configuration")]
+pub(super) async fn save_configuration(
+    web::Json(cfgg): web::Json<Config>,
+) -> impl Responder {
     let old_config = Cfg.read().await.clone();
 
     if cfgg.device_name != old_config.device_name {
         rustix::system::sethostname(cfgg.device_name.clone().unwrap().as_bytes()).unwrap();
     }
 
-    //for cam in cam_man.devices() {
-    //    cam_man.destroy_pipeline(cam.id.clone()).await;
-    //    cam_man.create_pipeline(Nt.clone(), cam.id).await;
-    //}
-    for cam in cam_man.devices() {
-        //if let Some(gamma) = cam.gamma {
-        //    if gamma < 1.0 {
-        //        error!("FIX THIS");
-        //        return web::Json(Cfg.read().await.clone());
-        //    }
-        //}
-        cam_man.update_pipeline(cam.id.clone()).await;
-    }
+    cfgg.save("chalkydri.toml").await.unwrap();
 
-    {
-        *Cfg.write().await = cfgg.clone();
-
-        let mut f = File::create("chalkydri.toml").unwrap();
-        let toml_cfgg = toml::to_string_pretty(&cfgg).unwrap();
-        f.write_all(toml_cfgg.as_bytes()).unwrap();
-        f.flush().unwrap();
-    }
-
-    web::Json(Cfg.read().await.clone())
+    web::Json(cfgg)
 }
 
 #[utopia::path(
@@ -285,6 +294,18 @@ pub(super) async fn calibration_step(
         (status = 200),
     )
 )]
+#[post("/api/restart")]
+pub(super) async fn restart(data: web::Data<CameraManager>) -> impl Responder {
+    data.restart().await;
+
+    HttpResponse::Ok().await.unwrap()
+}
+
+#[utopia::path(
+    responses(
+        (status = 200),
+    )
+)]
 #[post("/api/sys/reboot")]
 pub(super) async fn sys_reboot() -> impl Responder {
     rustix::system::reboot(RebootCommand::Restart).unwrap();
@@ -318,6 +339,8 @@ struct SysInfo {
 #[get("/api/sys/info")]
 pub(super) async fn sys_info() -> impl Responder {
     let sysinfo = rustix::system::sysinfo();
+    let mut system = sysinfo::System::new();
+    system.refresh_cpu_usage();
 
     let uptime = sysinfo.uptime as u64;
     let mem_usage =

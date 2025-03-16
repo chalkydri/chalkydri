@@ -105,8 +105,8 @@
 	<Modal bind:open={managing_field_layouts}>
 		<P size="lg">Field layouts</P>
 
-		{#if config.field_layouts}
-			{#each config.field_layouts as field_layout, name}
+		{#if cfg.field_layouts}
+			{#each cfg.field_layouts as field_layout, name}
 				{field_layout}
 			{/each}
 		{/if}

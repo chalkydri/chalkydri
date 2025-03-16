@@ -102,7 +102,7 @@ impl Subsystem for CApriltagsDetector {
             model,
             layout,
             det,
-            name: cam_config.id,
+            name: cam_config.name,
         })
     }
     async fn process(
