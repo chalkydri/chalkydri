@@ -250,9 +250,10 @@ impl CameraManager {
                                     .await
                                     .unwrap(),
                                 );
+                                let hostname = rustix::system::uname().nodename().to_str().unwrap().to_string();
                                 streams
                                     .set(vec![format!(
-                                        "mjpeg:http://localhost:6942/stream/{}",
+                                        "mjpeg:http://{hostname}.local:6942/stream/{}",
                                         cam_config.id
                                     )])
                                     .await
