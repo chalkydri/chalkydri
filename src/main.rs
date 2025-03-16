@@ -177,6 +177,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("starting up...");
 
+    //rustix::fs::statfs(path).unwrap();
+
     // Disable BS kernel modules
     let _ = rustix::system::delete_module(c"rpivid_hevc", 0);
     let _ = rustix::system::delete_module(c"pisp_be", 0);

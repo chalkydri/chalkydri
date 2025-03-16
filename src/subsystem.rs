@@ -52,18 +52,22 @@ pub async fn frame_proc_loop(
     mut func: impl AsyncFnMut(Buffer),
 ) {
     loop {
-        match rx.changed().await {
-            Ok(()) => match rx.borrow_and_update().clone() {
-                Some(frame) => {
-                    func(frame).await;
+        'inner: loop {
+            match rx.changed().await {
+                Ok(()) => match rx.borrow_and_update().clone() {
+                    Some(frame) => {
+                        func(frame).await;
+                    }
+                    None => {
+                        warn!("waiting on first frame...");
+                    }
+                },
+                Err(err) => {
+                    error!("error waiting for new frame: {err:?}");
+                    break 'inner;
                 }
-                None => {
-                    warn!("waiting on first frame...");
-                }
-            },
-            Err(err) => {
-                error!("error waiting for new frame: {err:?}");
             }
         }
+        tokio::task::yield_now().await;
     }
 }

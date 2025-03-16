@@ -228,7 +228,7 @@ impl Subsystem for CApriltagsDetector {
                     delay.set(proc_st_time.elapsed().as_millis_f64()).await;
                 } else {
                     debug!("no tag detected");
-                    tag_detected.set(false).await.unwrap();
+                    tag_detected.set(false).await;
                 }
             }
         })

@@ -27,7 +27,9 @@ pub use error::{NtError, Result};
 use std::collections::{BTreeMap, HashMap};
 use std::marker::PhantomData;
 use std::net::IpAddr;
+use std::ops::DerefMut;
 use std::sync::Arc;
+use std::time::Duration;
 
 use datatype::{Data, DataWrap};
 use futures_util::stream::{SplitSink, SplitStream};
@@ -36,7 +38,7 @@ use messages::*;
 use futures_util::{SinkExt, StreamExt};
 use rmp::decode::Bytes;
 use tokio::net::TcpStream;
-use tokio::sync::RwLock;
+use tokio::sync::{watch, RwLock, Semaphore};
 use tokio::{
     sync::{mpsc, Mutex},
     task::AbortHandle,
@@ -48,8 +50,12 @@ use tokio_tungstenite::tungstenite::{
 };
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
+// I wanna keep my face on today
+
 /// A NetworkTables connection
 pub struct NtConn {
+    reconnect: Arc<Semaphore>,
+
     /// Next sequential ID
     next_id: Arc<Mutex<i32>>,
 
@@ -60,25 +66,20 @@ pub struct NtConn {
 
     /// Outgoing client-to-server message queue
     c2s_tx: mpsc::UnboundedSender<Message>,
-    c2s_rx: Arc<Mutex<mpsc::UnboundedReceiver<Message>>>,
 
     client_ident: Arc<RwLock<String>>,
     server: Arc<RwLock<String>>,
     sock_rd: Arc<RwLock<Option<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>>,
     sock_wr: Arc<RwLock<Option<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>,
 
-    topics: Arc<RwLock<HashMap<i32, String>>>,
-    topic_pubuids: Arc<RwLock<HashMap<i32, i32>>>,
-    pubuid_topics: Arc<RwLock<HashMap<i32, i32>>>,
-    values: Arc<RwLock<HashMap<i32, Data>>>,
+    server_client: Arc<RwLock<HashMap<i32, i32>>>,
+    client_server: Arc<RwLock<HashMap<i32, i32>>>,
 
     /// Mapping from topic names to topic IDs for topics we've received from server
-    server_topics: Arc<RwLock<HashMap<String, i32>>>,
+    server_topics: Arc<RwLock<HashMap<String, (i32, String)>>>,
 
-    /// Mapping from topic IDs to topic types
-    topic_types: Arc<RwLock<HashMap<i32, String>>>,
-
-    subscription_values: Arc<RwLock<HashMap<i32, (u64, Data)>>>,
+    values: Arc<RwLock<HashMap<i32, watch::Receiver<(u64, Data)>>>>,
+    value_tx: Arc<RwLock<HashMap<i32, watch::Sender<(u64, Data)>>>>,
 }
 impl NtConn {
     /// Connect to a NetworkTables server
@@ -102,10 +103,8 @@ impl NtConn {
     /// }
     /// ```
     pub async fn new(server: impl Into<IpAddr>, client_ident: impl Into<String>) -> Result<Self> {
-        let topics = Arc::new(RwLock::new(HashMap::new()));
-        let topic_pubuids = Arc::new(RwLock::new(HashMap::new()));
-        let pubuid_topics = Arc::new(RwLock::new(HashMap::new()));
-        let values = Arc::new(RwLock::new(HashMap::new()));
+        let client_server = Arc::new(RwLock::new(HashMap::new()));
+        let server_client = Arc::new(RwLock::new(HashMap::new()));
         let sock_wr: Arc<
             RwLock<Option<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
         > = Arc::new(RwLock::new(None));
@@ -116,18 +115,16 @@ impl NtConn {
         let (c2s_tx, c2s_rx) = mpsc::unbounded_channel::<Message>();
 
         let server_topics = Arc::new(RwLock::new(HashMap::new()));
-        let topic_types = Arc::new(RwLock::new(HashMap::new()));
-        let subscription_values = Arc::new(RwLock::new(HashMap::new()));
+        let values = Arc::new(RwLock::new(HashMap::new()));
+        let value_tx = Arc::new(RwLock::new(HashMap::new()));
 
         let conn = Self {
+            reconnect: Arc::new(Semaphore::const_new(1)),
             next_id: Arc::new(Mutex::const_new(0)),
             c2s_tx,
-            c2s_rx: Arc::new(Mutex::new(c2s_rx)),
 
-            topics,
-            topic_pubuids,
-            pubuid_topics,
-            values,
+            client_server,
+            server_client,
 
             client_ident: Arc::new(RwLock::new(client_ident.into())),
             server: Arc::new(RwLock::new(server.into().to_string())),
@@ -138,12 +135,12 @@ impl NtConn {
             outgoing_abort: Arc::new(RwLock::new(None)),
 
             server_topics,
-            topic_types,
-            subscription_values,
+            values,
+            value_tx,
         };
 
         trace!("initializing background event loop...");
-        conn.init_background_event_loops().await;
+        conn.init_background_event_loops(c2s_rx).await;
         trace!("initialized background event loop...");
 
         conn.connect().await?;
@@ -151,7 +148,7 @@ impl NtConn {
         Ok(conn)
     }
 
-    async fn init_background_event_loops(&self) {
+    async fn init_background_event_loops(&self, mut c2s_rx: mpsc::UnboundedReceiver<Message>) {
         // Spawn event loop to read and process incoming messages
 
         let mut incoming_abort = self.incoming_abort.write().await;
@@ -169,6 +166,7 @@ impl NtConn {
                             match conn.handle_incoming_msg(msg).await {
                                 Err(NtError::NeedReconnect) => {
                                     reconnect = true;
+                                    break;
                                 }
                                 _ => {}
                             }
@@ -176,8 +174,14 @@ impl NtConn {
                     }
 
                     if reconnect {
-                        while let Err(err) = conn.connect().await {
-                            error!("failed to reconnect: {err:?}");
+                        match conn.reconnect.try_acquire() {
+                            Ok(_) => {
+                                while let Err(err) = conn.connect().await {
+                                    error!("failed to reconnect: {err:?}");
+                                    tokio::time::sleep(Duration::from_millis(20)).await;
+                                }
+                            }
+                            _ => {}
                         }
                         reconnect = false;
                     }
@@ -195,9 +199,8 @@ impl NtConn {
 
             let jh = tokio::spawn(async move {
                 let mut reconnect = false;
-
                 loop {
-                    while let Some(outgoing) = conn.c2s_rx.lock().await.recv().await {
+                    while let Some(outgoing) = c2s_rx.recv().await {
                         trace!("sending {outgoing:?}");
 
                         if let Some(sock_wr) = conn.sock_wr.write().await.as_mut() {
@@ -210,6 +213,7 @@ impl NtConn {
                                 | Err(TungsteniteError::AlreadyClosed)
                                 | Err(TungsteniteError::Protocol(_)) => {
                                     reconnect = true;
+                                    break;
                                 }
                                 Err(err) => {
                                     error!("error writing outgoing message: {err:?}");
@@ -221,7 +225,15 @@ impl NtConn {
                     }
 
                     if reconnect {
-                        conn.connect().await.unwrap();
+                        match conn.reconnect.try_acquire() {
+                            Ok(_) => {
+                                while let Err(err) = conn.connect().await {
+                                    error!("failed to reconnect: {err:?}");
+                                    tokio::time::sleep(Duration::from_millis(20)).await;
+                                }
+                            }
+                            _ => {}
+                        }
                         reconnect = false;
                     }
 
@@ -251,17 +263,14 @@ impl NtConn {
                             ..
                         } => {
                             // Store server topic info
-                            self.server_topics.write().await.insert(name.clone(), id);
-                            self.topic_types.write().await.insert(id, r#type.clone());
-
-                            trace!("inserting to topics");
-                            (*self.topics.write().await).insert(id, name.clone());
+                            self.server_topics
+                                .write()
+                                .await
+                                .insert(name.clone(), (id, r#type.clone()));
 
                             if let Some(pubuid) = pubuid {
-                                trace!("inserting to pubuid_topics");
-                                (*self.pubuid_topics.write().await).insert(pubuid, id);
-                                trace!("inserting to topic_pubuids");
-                                (*self.topic_pubuids.write().await).insert(id, pubuid);
+                                (*self.client_server.write().await).insert(pubuid, id);
+                                (*self.server_client.write().await).insert(id, pubuid);
 
                                 debug!(
                                     "{name} ({type}): published successfully with topic id {id}"
@@ -271,18 +280,15 @@ impl NtConn {
                             }
                         }
                         ServerMsg::Unannounce { name, id } => {
-                            let mut topics = self.topics.write().await;
-                            let topic_pubuids = self.topic_pubuids.read().await;
-                            let mut pubuid_topics = self.pubuid_topics.write().await;
+                            let topic_pubuids = self.server_client.read().await;
+                            let mut pubuid_topics = self.client_server.write().await;
 
-                            (*topics).remove(&id);
                             if let Some(pubuid) = (*topic_pubuids).get(&id) {
                                 (*pubuid_topics).remove(pubuid);
                             }
 
                             drop(pubuid_topics);
                             drop(topic_pubuids);
-                            drop(topics);
 
                             debug!("{name}: unannounced");
                         }
@@ -290,30 +296,24 @@ impl NtConn {
                     }
                 }
             }
-            Ok(Message::Binary(bin)) => {
-                match Self::read_bin_frame(bin.to_vec()) {
-                    Ok((topic_id, timestamp, data)) => {
-                        trace!(
-                            "received binary frame with topic_id {}, ts={}",
-                            topic_id,
-                            timestamp
-                        );
+            Ok(Message::Binary(bin)) => match Self::read_bin_frame(bin.to_vec()) {
+                Ok((topic_id, timestamp, data)) => {
+                    trace!(
+                        "received binary frame with topic_id {}, ts={}",
+                        topic_id,
+                        timestamp
+                    );
 
-                        // Store the value for both general values and subscription-specific values
-                        self.values
-                            .write()
-                            .await
-                            .insert(topic_id as i32, data.clone());
-                        self.subscription_values
-                            .write()
-                            .await
-                            .insert(topic_id as i32, (timestamp, data));
-                    }
-                    Err(err) => {
-                        error!("Failed to parse binary frame: {}", err);
+                    if let Some(value_tx) = self.value_tx.write().await.get(&(topic_id as i32)) {
+                        if let Err(err) = value_tx.send((timestamp, data)) {
+                            error!("failed to send value to subscriber: {err:?}");
+                        }
                     }
                 }
-            }
+                Err(err) => {
+                    error!("Failed to parse binary frame: {}", err);
+                }
+            },
             Ok(msg) => warn!("unhandled incoming message: {msg:?}"),
             Err(TungsteniteError::ConnectionClosed)
             | Err(TungsteniteError::Io(_))
@@ -340,37 +340,33 @@ impl NtConn {
             header::SEC_WEBSOCKET_PROTOCOL,
             HeaderValue::from_static("v4.1.networktables.first.wpi.edu"),
         );
+
         // Connect to the server and split into read and write
-        let (sock, _) = tokio_tungstenite::connect_async(req).await?;
-        let (sock_wr, sock_rd) = sock.split();
+        loop {
+            match tokio_tungstenite::connect_async(req.clone()).await {
+                Ok((sock, _)) => {
+                    let (sock_wr, sock_rd) = sock.split();
 
-        *self.sock_rd.write().await = Some(sock_rd);
-        *self.sock_wr.write().await = Some(sock_wr);
+                    {
+                        let mut sock_rd_ = self.sock_rd.write().await;
+                        let mut sock_wr_ = self.sock_wr.write().await;
+                        if let Some(sock_wr) = sock_wr_.deref_mut() {
+                            sock_wr.close().await.unwrap();
+                        }
+                        *sock_rd_ = Some(sock_rd);
+                        *sock_wr_ = Some(sock_wr);
+                    }
 
-        {
-            let pubuid_topics = self.pubuid_topics.read().await;
-            let topics = self.topics.read().await;
+                    self.server_client.write().await.clear();
+                    self.client_server.write().await.clear();
 
-            let mut republish = Vec::new();
-            if !pubuid_topics.is_empty() {
-                debug!("republishing");
-                for (pubuid, uid) in pubuid_topics.clone() {
-                    let name = topics.get(&uid).unwrap().clone();
-                    let topic_types = self.topic_types.read().await;
-                    let msg = ClientMsg::Publish {
-                        name,
-                        pubuid,
-                        r#type: topic_types.get(&uid).unwrap().to_string(),
-                        properties: None,
-                    };
-                    republish.push(msg);
+                    break;
+                }
+                Err(err) => {
+                    error!("failed to connect: {err:?}");
                 }
             }
-            let buf = serde_json::to_string(&republish)?;
-
-            self.c2s_tx
-                .send(Message::Text(buf.into()))
-                .map_err(|e| NtError::SendError(e.to_string()))?;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         Ok(())
@@ -418,6 +414,18 @@ impl NtConn {
 
         trace!("publishing {name} with pubuid {pubuid}");
 
+        self.publish_::<T>(name.clone(), pubuid).await?;
+
+        Ok(NtTopic {
+            conn: &*self,
+            name,
+            pubuid,
+            _marker: PhantomData,
+        })
+    }
+    async fn publish_<T: DataWrap>(&self, name: String, pubuid: i32) -> Result<()> {
+        trace!("publishing {name} with pubuid {pubuid}");
+
         let buf = serde_json::to_string(&[ClientMsg::Publish {
             pubuid,
             name: name.clone(),
@@ -430,18 +438,15 @@ impl NtConn {
 
         self.c2s_tx
             .send(Message::Text(buf.into()))
-            .map_err(|e| NtError::SendError(e.to_string()))?;
+            .map_err(|e| NtError::SendError(e.to_string()))
+            .unwrap();
 
         debug!(
             "{name} ({data_type}): publishing with pubuid {pubuid}",
             data_type = T::STRING.to_string()
         );
 
-        Ok(NtTopic {
-            conn: &*self,
-            pubuid,
-            _marker: PhantomData,
-        })
+        Ok(())
     }
 
     /// Unpublish topic
@@ -569,12 +574,12 @@ impl NtConn {
 impl Clone for NtConn {
     fn clone(&self) -> Self {
         Self {
+            reconnect: self.reconnect.clone(),
             next_id: self.next_id.clone(),
 
             incoming_abort: self.incoming_abort.clone(),
             outgoing_abort: self.outgoing_abort.clone(),
 
-            c2s_rx: self.c2s_rx.clone(),
             c2s_tx: self.c2s_tx.clone(),
 
             client_ident: self.client_ident.clone(),
@@ -582,14 +587,12 @@ impl Clone for NtConn {
             sock_wr: self.sock_wr.clone(),
             sock_rd: self.sock_rd.clone(),
 
-            topics: self.topics.clone(),
-            topic_pubuids: self.topic_pubuids.clone(),
-            pubuid_topics: self.pubuid_topics.clone(),
-            values: self.values.clone(),
+            client_server: self.client_server.clone(),
+            server_client: self.server_client.clone(),
 
             server_topics: self.server_topics.clone(),
-            topic_types: self.topic_types.clone(),
-            subscription_values: self.subscription_values.clone(),
+            values: self.values.clone(),
+            value_tx: self.value_tx.clone(),
         }
     }
 }
@@ -600,6 +603,7 @@ impl Clone for NtConn {
 /// the value of the topic. The topic is automatically unpublished when this structure is dropped.
 pub struct NtTopic<'nt, T: DataWrap> {
     conn: &'nt NtConn,
+    name: String,
     pubuid: i32,
     _marker: PhantomData<T>,
 }
@@ -630,19 +634,29 @@ impl<T: DataWrap + std::fmt::Debug> NtTopic<'_, T> {
     /// }
     /// ```
     pub async fn set(&mut self, val: T) -> Result<()> {
-        trace!("getting read lock pubuid_topics");
-        if let Some(id) = (*self.conn.pubuid_topics.read().await).get(&self.pubuid) {
-            trace!("getting read lock topics");
-            if let Some(name) = (*self.conn.topics.read().await).get(&id) {
-                debug!(
-                    "{name} ({data_type}): set to {val:?}",
-                    data_type = T::STRING.to_string()
-                );
-            }
+        debug!(
+            "{name} ({data_type}): set to {val:?}",
+            name = self.name,
+            data_type = T::STRING.to_string()
+        );
+
+        if !self
+            .conn
+            .client_server
+            .read()
+            .await
+            .contains_key(&self.pubuid)
+        {
+            self.conn
+                .publish_::<T>(self.name.clone(), self.pubuid)
+                .await?;
         }
 
         trace!("writing binary frame");
-        (*self.conn).write_bin_frame(self.pubuid, 0, val)?;
+        match (*self.conn).write_bin_frame(self.pubuid, 0, val) {
+            Err(_) => {}
+            _ => {}
+        }
 
         Ok(())
     }
@@ -664,14 +678,8 @@ pub struct NtSubscription<'nt> {
     subuid: i32,
 }
 impl NtSubscription<'_> {
-    pub async fn get(&self) -> Result<Option<(u64, Data)>> {
-        Ok(self
-            .conn
-            .subscription_values
-            .read()
-            .await
-            .get(&self.subuid)
-            .cloned())
+    pub async fn get(&self) -> Result<Option<watch::Receiver<(u64, Data)>>> {
+        Ok(self.conn.values.read().await.get(&self.subuid).cloned())
     }
 }
 impl Drop for NtSubscription<'_> {
