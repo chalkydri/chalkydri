@@ -71,10 +71,12 @@
 		<Layout gap={3}>
 		<div>
 		<Label for="field_layout" class="mt-2 mb-1">Field layout</Label>
+		{#if config && config.field_layouts}
 		<Select id="field_layout" items={Object.keys(config.field_layouts).map((thing) => {
-										return { name: thing, value: thing };
-									})}
-								/>
+				return { name: thing, value: thing };
+			})}
+		/>
+		{/if}
 		</div>
 
 		<Button size="sm" class="m-auto" color="blue" on:click={() => { managing_field_layouts = true; }}>Manage field layouts</Button>

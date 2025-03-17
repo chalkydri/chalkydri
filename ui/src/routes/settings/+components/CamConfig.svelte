@@ -71,6 +71,7 @@
 		</div>
 
 		<Layout gap={3}>
+			{#if camera.possible_settings}
 			<div>
 				<Label for="res_fps" class="mt-2 mb-1">Resolution / Frame Rate</Label>
 				<Select
@@ -94,6 +95,7 @@
 					}}
 				/>
 			</div>
+			{/if}
 
 			<div>
 				<Label class="mt-4 mb-2" for="auto_exposure">Auto-exposure</Label>
@@ -132,13 +134,15 @@
 							<Toggle color="blue" bind:disabled bind:checked={camera.subsystems.capriltags.enabled}
 								>C AprilTags</Toggle
 							>
-							{#if camera.subsystems.capriltags.enabled && config.field_layouts}
-								<Select
-									bind:value={camera.subsystems.capriltags.field_layout}
-									items={Object.keys(config.field_layouts).map((thing) => {
-										return { name: thing, value: thing };
-									})}
-								/>
+							{#if config}
+								{#if camera.subsystems.capriltags.enabled && config.field_layouts}
+									<Select
+										bind:value={camera.subsystems.capriltags.field_layout}
+										items={Object.keys(config.field_layouts).map((thing) => {
+											return { name: thing, value: thing };
+										})}
+									/>
+								{/if}
 							{/if}
 						</Card>
 					{/if}
