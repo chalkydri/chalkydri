@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { config } from '$lib/config';
-	import { configuration, type Camera, type CameraSettings, type Config } from '$lib/api';
+	import { configuration, type Camera, type CameraSettings, type Config, type VideoOrientation } from '$lib/api';
 	import { Button, Card, Input, Label, Layout, P, Range, Select, Toggle } from 'flowbite-svelte';
 	import { CheckIcon, PencilIcon, XIcon } from 'lucide-svelte';
 	import { onMount } from 'svelte';
@@ -101,8 +101,24 @@
 				{/if}
 			</div>
 
+			<div>
+				<Label for="orientation" class="mt-2 mb-1">Orientation</Label>
+				<Select
+					id="orientation"
+					items={[
+						{ name: '0', value: 'none' },
+						{ name: '90', value: 'clockwise' },
+						{ name: '180', value: 'rotate-180' },
+						{ name: '270', value: 'counterclockwise' },
+					]}
+					bind:value={camera.orientation}
+				/>
+			</div>
+
+			<div></div>
+
 			{#if camera.subsystems}
-				<Card padding="sm" class="mt-2">
+				<Card padding="lg" class="mt-2 col-span-2">
 					<P size="lg">Subsystems</P>
 					{#if camera.subsystems.capriltags}
 						<Card padding="xs" class="mt-2">

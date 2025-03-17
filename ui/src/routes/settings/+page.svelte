@@ -71,7 +71,10 @@
 		<Layout gap={3}>
 		<div>
 		<Label for="field_layout" class="mt-2 mb-1">Field layout</Label>
-		<Select id="field_layout" items={[{name: 'test', value: 'test'}]} />
+		<Select id="field_layout" items={Object.keys(config.field_layouts).map((thing) => {
+										return { name: thing, value: thing };
+									})}
+								/>
 		</div>
 
 		<Button size="sm" class="m-auto" color="blue" on:click={() => { managing_field_layouts = true; }}>Manage field layouts</Button>
@@ -102,12 +105,19 @@
 		>
 	</Card>
 
-	<Modal bind:open={managing_field_layouts}>
+	<Modal bind:open={managing_field_layouts} autoclose outsideclose>
 		<P size="lg">Field layouts</P>
 
 		{#if cfg.field_layouts}
-			{#each cfg.field_layouts as field_layout, name}
-				{field_layout}
+			{#each Object.keys(cfg.field_layouts) as name}
+				<Card padding="xs">
+					<Layout>
+						<div>
+							<P>{name}</P>
+							<P color="gray">{cfg.field_layouts[name].field.length}m x {cfg.field_layouts[name].field.width}m</P>
+													</div>
+					</Layout>
+				</Card>
 			{/each}
 		{/if}
 	</Modal>

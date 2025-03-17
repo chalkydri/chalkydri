@@ -3,18 +3,19 @@
  * PLES SEND HELP
  */
 
-use actix_web::web::Bytes;
-use futures_core::Stream;
+mod mjpeg;
+
 use gstreamer::{
-    event::Reconfigure, glib::WeakRef, prelude::*, Buffer, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element, ElementFactory, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure
+    glib::WeakRef, prelude::*, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element, ElementFactory, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
-use minint::{NtConn, NtTopic};
+use minint::NtConn;
+use mjpeg::MjpegStream;
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
-use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc, task::Poll};
-use tokio::sync::{mpsc, oneshot, watch, Mutex, MutexGuard, RwLock};
+use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc};
+use tokio::sync::{mpsc, watch, Mutex, MutexGuard, RwLock};
 
 #[cfg(feature = "rerun")]
 use crate::Rerun;
@@ -33,52 +34,10 @@ pub struct CameraCtx {
     tee: WeakRef<Element>,
 }
 
-#[derive(Clone)]
-pub struct MjpegStream {
-    rx: watch::Receiver<Option<Buffer>>,
-}
-impl Stream for MjpegStream {
-    type Item = Result<Bytes, Error>;
-    fn poll_next(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        loop {
-            match self.rx.has_changed() {
-                Ok(true) => {
-                    info!("working!!!");
-                    let mut bytes = Vec::new();
-                    bytes.clear();
-                    if let Some(frame) = self.get_mut().rx.borrow_and_update().as_deref() {
-                        bytes.extend_from_slice(
-                            &[
-                                b"--frame\r\nContent-Length: ",
-                                frame.size().to_string().as_bytes(),
-                                b"\r\nContent-Type: image/jpeg\r\n\r\n",
-                            ]
-                            .concat(),
-                        );
-                        bytes.extend_from_slice(
-                            frame
-                                .map_readable()
-                                .map_err(|_| Error::FailedToMapBuffer)?
-                                .as_slice(),
-                        );
-                    }
-
-                    return Poll::Ready(Some(Ok(bytes.into())));
-                }
-                Ok(false) => {}
-                Err(err) => {
-                    error!("error getting frame: {err:?}");
-
-                    return Poll::Ready(None);
-                }
-            }
-        }
-    }
-}
-
+/// The camera manager
+///
+/// This manages all of the GStreamer pipelines.
+/// It also handles device events.
 #[derive(Clone)]
 pub struct CameraManager {
     dev_prov: DeviceProvider,
@@ -88,6 +47,9 @@ pub struct CameraManager {
     restart_tx: mpsc::Sender<()>,
 }
 impl CameraManager {
+    /// Initialize a camera manager
+    ///
+    /// **You MUST call [gstreamer::init] first.**
     pub async fn new(nt: NtConn, restart_tx: mpsc::Sender<()>) -> Self {
         // Make sure gstreamer is initialized
         gstreamer::assert_initialized();
@@ -100,6 +62,12 @@ impl CameraManager {
             ret
         };
 
+        let pipelines = Arc::new(RwLock::new(HashMap::new()));
+        let calibrators: Arc<Mutex<HashMap<String, Calibrator>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let mjpeg_streams: Arc<Mutex<HashMap<String, MjpegStream>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+
         // Create a device monitor to watch for new devices
         let dev_prov = DeviceProviderFactory::find("v4l2deviceprovider")
             .unwrap()
@@ -108,17 +76,7 @@ impl CameraManager {
             .get()
             .unwrap();
 
-        // Create the pipeline
-        let pipelines = Arc::new(RwLock::new(HashMap::new()));
-
-        //let bus = dev_mon.bus();
         let bus = dev_prov.bus();
-
-        let calibrators: Arc<Mutex<HashMap<String, Calibrator>>> =
-            Arc::new(Mutex::new(HashMap::new()));
-
-        let mjpeg_streams: Arc<Mutex<HashMap<String, MjpegStream>>> =
-            Arc::new(Mutex::new(HashMap::new()));
 
         let calibrators_ = calibrators.clone();
         let mjpeg_streams_ = mjpeg_streams.clone();
@@ -127,14 +85,13 @@ impl CameraManager {
             let calibrators = &calibrators_;
             let mjpeg_streams = &mjpeg_streams_;
             let pipelines = &pipelines_;
-
-            // Upgrade the weak ref to work with the pipeline
-            let pipeline = Pipeline::new();
-
             match msg.view() {
                 MessageView::DeviceAdded(msg) => {
                     let dev = msg.device();
                     debug!("got a new device");
+
+                    // Create a new pipeline
+                    let pipeline = Pipeline::new();
 
                     if let Some(cam_configs) = &config.cameras {
                         let id = Self::get_id(&dev);
@@ -142,18 +99,6 @@ impl CameraManager {
                             cam_configs.clone().iter().filter(|cam| cam.id == id).next()
                         {
                             debug!("found a config");
-                            dbg!(
-                                dev.list_properties()
-                                    .iter()
-                                    .map(|prop| prop.name().to_string())
-                                    .collect::<Vec<_>>()
-                            );
-                            dbg!(
-                                dev.property::<Structure>("properties")
-                                    .iter()
-                                    .map(|(k, v)| (k.to_string(), v.to_value()))
-                                    .collect::<Vec<_>>()
-                            );
 
                             // Create the camera source
                             let cam = dev.create_element(Some("camera")).unwrap();
@@ -268,10 +213,12 @@ impl CameraManager {
             BusSyncReply::Pass
         });
 
-        // Start the device monitor
+        // Start the device provider
         dev_prov.start().unwrap();
 
         for (cam_name, pipeline) in pipelines.read().await.clone() {
+            debug!("starting pipeline for {cam_name}");
+
             // Start the pipeline
             pipeline.set_state(State::Playing).unwrap();
 
@@ -294,6 +241,7 @@ impl CameraManager {
         self.restart_tx.send(()).await.unwrap();
     }
 
+    /// Get unique identifier for the given device
     fn get_id(dev: &Device) -> String {
         dev
             .property::<Structure>("properties")
@@ -301,6 +249,7 @@ impl CameraManager {
             .unwrap()
     }
 
+    /// Update the given pipeline
     pub async fn update_pipeline(&self, dev_id: String) {
         self.pause(dev_id.clone()).await;
         {
@@ -336,9 +285,9 @@ impl CameraManager {
                             //);
                             capsfilter.set_property("caps", caps.to_owned());
 
-                            pipeline.foreach_sink_pad(|elem, pad| {
+                            // Reconfigure [Caps]
+                            pipeline.foreach_sink_pad(|_elem, pad| {
                                 pad.mark_reconfigure();
-
                                 true
                             });
 
@@ -354,6 +303,8 @@ impl CameraManager {
                             }
                             camera.set_property("extra-controls", extra_controls);
 
+                            pipeline.by_name("videoflip").unwrap().set_property_from_str("method", &serde_json::to_string(&cam_config.orientation).unwrap().trim_matches('"'));
+
                             if let Some(capriltags_valve) = pipeline
                                 .by_name("capriltags_valve") {
                                 capriltags_valve.set_property("drop", !cam_config.subsystems.capriltags.enabled);
@@ -366,20 +317,6 @@ impl CameraManager {
             }
         }
         self.start(dev_id).await;
-    }
-
-    pub async fn destroy_pipeline(&self, dev_id: String) {
-        let mut pipelines = self.pipelines.write().await;
-        unsafe {
-            pipelines
-                .get_mut(&dev_id)
-                .unwrap()
-                .set_state(State::Null)
-                .unwrap();
-            pipelines.get_mut(&dev_id).unwrap().run_dispose();
-        }
-        pipelines.remove(&dev_id);
-        self.pipelines.write().await.remove(&dev_id);
     }
 
     /// List connected cameras
@@ -423,9 +360,13 @@ impl CameraManager {
 
         devices
     }
+
+    /// Run a calibration step
     pub async fn calib_step(&self, name: String) -> usize {
         self.calibrators().await.get_mut(&name).unwrap().step()
     }
+
+    /// Get an [`MJPEG stream`](MjpegStream)
     pub async fn mjpeg_stream(&self, name: String) -> MjpegStream {
         self.mjpeg_streams().await.get(&name).unwrap().clone()
     }
@@ -498,6 +439,7 @@ impl CameraManager {
         });
     }
 
+    /// Add [Calibrator] to pipeline
     pub(crate) fn add_calib(
         pipeline: &Pipeline,
         cam: &Element,

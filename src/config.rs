@@ -1,4 +1,4 @@
-use crate::{error::Error, subsys::capriltags::AprilTagFieldLayout, Cfg};
+use crate::{error::Error, subsys::capriltags::AprilTagFieldLayout};
 use std::{collections::HashMap, fs::File, io::{Read, Write}, path::Path};
 
 macro_rules! def_cfg {
@@ -145,6 +145,7 @@ pub enum CameraKind {
 pub enum VideoOrientation {
     None = 0,
     Clockwise = 1,
+    #[serde(rename = "rotate-180")]
     Rotate180 = 2,
     Counterclockwise = 3,
 }
