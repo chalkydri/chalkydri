@@ -6,6 +6,6 @@ export const ssr = false;
 
 var config = client.getConfig();
 if (dev) {
-	config.baseUrl = 'http://localhost:6942';
+	config.baseUrl = 'http://10.45.33.10:6942';
 }
 client.setConfig(config);

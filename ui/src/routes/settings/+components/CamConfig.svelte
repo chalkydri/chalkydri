@@ -76,10 +76,17 @@
 				<Select
 					id="res_fps"
 					items={camera.possible_settings.map((val) => {
-						return {
-							name: `${val.width}x${val.height} @${val.frame_rate.num / val.frame_rate.den}fps (${val.format})`,
-							value: JSON.stringify(val)
-						};
+						if (!val.frame_rate) {
+							return {
+								name: `${val.width}x${val.height} @?fps (${val.format})`,
+								value: JSON.stringify(val)
+							};
+						} else {
+							return {
+								name: `${val.width}x${val.height} @${val.frame_rate.num / val.frame_rate.den}fps (${val.format})`,
+								value: JSON.stringify(val)
+							};
+						}
 					})}
 					value={JSON.stringify(camera.settings)}
 					on:input={(e) => {
