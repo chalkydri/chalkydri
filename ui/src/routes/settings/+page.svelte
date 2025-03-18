@@ -2,10 +2,10 @@
 	import { Button, Card, Fileupload, Input, Label, Layout, Modal, P, Select, Skeleton } from 'flowbite-svelte';
 	import { _loadConfig, _saveConfig } from './+page';
 	import { onMount } from 'svelte';
-	import { configure, type Config, type Camera } from '$lib/api';
+	import { configure, saveConfiguration, type Config, type Camera } from '$lib/api';
 	import CamConfig from './+components/CamConfig.svelte';
 	import { config, updateConfig, loadConfig } from '$lib/config';
-	import { client } from '$lib/api/client.gen';
+	import CameraFeed from '../+components/CameraFeed.svelte';
 
 	let cfg: Config | null = $state(null);
 	let saving = $state(false);
@@ -15,7 +15,7 @@
 		saving = true;
 
 		let new_config = (
-			await configure({
+			await saveConfiguration({
 				body: cfg ? cfg : ({} as Config)
 			})
 		).data;
@@ -48,6 +48,14 @@
 				cfg.field_layouts[file.name] = JSON.parse(await file.text());
 			}
 			files = undefined;
+		}
+		let new_config = (
+			await configure({
+				body: cfg ? cfg : ({} as Config)
+			})
+		).data;
+		if (new_config && cfg) {
+			updateConfig(cfg);
 		}
 	});
 </script>
@@ -83,23 +91,16 @@
 		</Layout>
 	</Card>
 
-	<!--
-	<Card padding="sm">
-		<P size="lg">Cameras</P>
-	-->
 	{#if cfg.cameras}
 		{#each cfg.cameras as camera, i}
 			<Layout>
 				<CamConfig bind:camera={cfg.cameras[i]} bind:disabled={saving} />
-				<Card padding="xs">
-					<img src={`${client.getConfig().baseUrl ? client.getConfig().baseUrl : ''}/stream/${camera.id}`} alt={camera.name} />
-				</Card>
+				<div class="m-2">
+					<CameraFeed bind:camera={cfg.cameras[i]} />
+				</div>
 			</Layout>
 		{/each}
 	{/if}
-	<!--
-	</Card>
-	-->
 
 	<Card class="mt-2">
 		<Button color="blue" on:click={save}
@@ -117,7 +118,7 @@
 						<div>
 							<P>{name}</P>
 							<P color="gray">{cfg.field_layouts[name].field.length}m x {cfg.field_layouts[name].field.width}m</P>
-													</div>
+						</div>
 					</Layout>
 				</Card>
 			{/each}
@@ -126,3 +127,4 @@
 {:else}
 	<Skeleton />
 {/if}
+

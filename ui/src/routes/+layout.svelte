@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { slide } from 'svelte/transition';
 	import '../app.css';
 	import {
+	Button,
 		DarkMode,
 		Navbar,
 		NavBrand,
@@ -9,7 +11,10 @@
 		Sidebar,
 		SidebarGroup,
 		SidebarItem,
-		SidebarWrapper
+		SidebarWrapper,
+
+		Toast
+
 	} from 'flowbite-svelte';
 
 	let hide_sidebar = $state(false);
@@ -21,6 +26,12 @@
 </script>
 
 <svelte:window />
+
+	<Toast transition={slide} class="rounded-md dark:bg-slate-700" position="top-right">
+		<P>A new camera is available!</P>
+		<Button class="mt-2" color="blue" size="sm">Set up now</Button>
+	</Toast>
+
 <div class="bg-slate-50 dark:bg-slate-900 p-4 w-full h-screen">
 	<header>
 		<Navbar class="rounded-md bg-slate-200 dark:bg-slate-800" let:NavContainer>

@@ -6,7 +6,10 @@
 mod mjpeg;
 
 use gstreamer::{
-    glib::WeakRef, prelude::*, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element, ElementFactory, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure
+    glib::{BoolError, WeakRef},
+    prelude::*,
+    BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element, ElementFactory,
+    FlowError, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure,
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
@@ -20,12 +23,12 @@ use tokio::sync::{mpsc, watch, Mutex, MutexGuard, RwLock};
 #[cfg(feature = "rerun")]
 use crate::Rerun;
 use crate::{
-    Cfg,
     calibration::Calibrator,
     config::{self, CameraSettings, CfgFraction},
     error::Error,
     subsys::capriltags::CApriltagsDetector,
     subsystem::Subsystem,
+    Cfg,
 };
 
 #[derive(Clone)]
@@ -136,15 +139,31 @@ impl CameraManager {
                                 )
                                 .build()
                                 .unwrap();
+
+                            // This element rotates/flips the video to deal with weird
+                            // mounting configurations
                             let videoflip = ElementFactory::make("videoflip")
                                 .name("videoflip")
-                                .property_from_str("method", &serde_json::to_string(&cam_config.orientation).unwrap().trim_matches('"'))
+                                .property_from_str(
+                                    "method",
+                                    &serde_json::to_string(&cam_config.orientation)
+                                        .unwrap()
+                                        .trim_matches('"'),
+                                )
                                 .build()
                                 .unwrap();
+
+                            // This element splits the stream off into multiple branches of the
+                            // pipeline:
+                            //  - MJPEG stream
+                            //  - Calibration
+                            //  - Subsystems
                             let tee = ElementFactory::make("tee").build().unwrap();
 
                             // Add them to the pipeline
-                            pipeline.add_many([&cam, &filter, &videoflip, &tee]).unwrap();
+                            pipeline
+                                .add_many([&cam, &filter, &videoflip, &tee])
+                                .unwrap();
 
                             // Link them
                             Element::link_many([&cam, &filter, &videoflip, &tee]).unwrap();
@@ -195,7 +214,11 @@ impl CameraManager {
                                     .await
                                     .unwrap(),
                                 );
-                                let hostname = rustix::system::uname().nodename().to_str().unwrap().to_string();
+                                let hostname = rustix::system::uname()
+                                    .nodename()
+                                    .to_str()
+                                    .unwrap()
+                                    .to_string();
                                 streams
                                     .set(vec![format!(
                                         "mjpeg:http://{hostname}.local:6942/stream/{}",
@@ -243,8 +266,7 @@ impl CameraManager {
 
     /// Get unique identifier for the given device
     fn get_id(dev: &Device) -> String {
-        dev
-            .property::<Structure>("properties")
+        dev.property::<Structure>("properties")
             .get::<String>("device.serial")
             .unwrap()
     }
@@ -272,7 +294,11 @@ impl CameraManager {
                     {
                         if let Some(settings) = &cam_config.settings {
                             let capsfilter = pipeline.by_name("capsfilter").unwrap();
-                            let mut old_caps = pipeline.by_name("capsfilter").unwrap().property::<Caps>("caps").to_owned();
+                            let mut old_caps = pipeline
+                                .by_name("capsfilter")
+                                .unwrap()
+                                .property::<Caps>("caps")
+                                .to_owned();
                             let caps = old_caps.make_mut();
                             caps.set_value("width", (&(settings.width as i32)).into());
                             caps.set_value("height", (&(settings.height as i32)).into());
@@ -303,14 +329,22 @@ impl CameraManager {
                             }
                             camera.set_property("extra-controls", extra_controls);
 
-                            pipeline.by_name("videoflip").unwrap().set_property_from_str("method", &serde_json::to_string(&cam_config.orientation).unwrap().trim_matches('"'));
+                            pipeline
+                                .by_name("videoflip")
+                                .unwrap()
+                                .set_property_from_str(
+                                    "method",
+                                    &serde_json::to_string(&cam_config.orientation)
+                                        .unwrap()
+                                        .trim_matches('"'),
+                                );
 
-                            if let Some(capriltags_valve) = pipeline
-                                .by_name("capriltags_valve") {
-                                capriltags_valve.set_property("drop", !cam_config.subsystems.capriltags.enabled);
+                            if let Some(capriltags_valve) = pipeline.by_name("capriltags_valve") {
+                                capriltags_valve.set_property(
+                                    "drop",
+                                    !cam_config.subsystems.capriltags.enabled,
+                                );
                             }
-
-                            
                         }
                     }
                 }
@@ -331,7 +365,7 @@ impl CameraManager {
                     dev.caps()
                         .unwrap()
                         .iter()
-                        .filter(|cap| cap.name().as_str() == "video/x-raw")
+                        //.filter(|cap| cap.name().as_str() == "video/x-raw")
                         .filter_map(|cap| {
                             let width = cap.get::<i32>("width").ok().map(|v| v as u32);
                             let height = cap.get::<i32>("height").ok().map(|v| v as u32);
@@ -389,9 +423,15 @@ impl CameraManager {
             .property("drop", !enabled)
             .build()
             .unwrap();
-        //let queue = ElementFactory::make("queue").build().unwrap();
-        let videorate = ElementFactory::make("videorate").property("max-rate", 40).property("drop-only", true).build().unwrap();
-        let appsink = ElementFactory::make("appsink").name(&format!("{}_appsink", S::NAME)).build().unwrap();
+        let videorate = ElementFactory::make("videorate")
+            .property("max-rate", 40)
+            .property("drop-only", true)
+            .build()
+            .unwrap();
+        let appsink = ElementFactory::make("appsink")
+            .name(&format!("{}_appsink", S::NAME))
+            .build()
+            .unwrap();
         pipeline.add_many([&valve, &videorate, &appsink]).unwrap();
 
         debug!(target: &target, "linking preproc pipeline chunk...");
@@ -408,14 +448,19 @@ impl CameraManager {
         debug!(target: &target, "setting appsink callbacks...");
         appsink.set_callbacks(
             AppSinkCallbacks::builder()
-                .new_sample(move |_| {
-                    let sample = appsink_.pull_sample().unwrap();
-                    let buf = sample.buffer().unwrap();
-                    if let Err(err) = tx.send(Some(buf.to_owned())) {
-                        error!("failed to send frame to subsys appsink: {err:?}");
-                    }
+                .new_sample(move |_| match appsink_.pull_sample() {
+                    Ok(sample) => {
+                        let buf = sample.buffer().unwrap();
+                        if let Err(err) = tx.send(Some(buf.to_owned())) {
+                            error!("failed to send frame to subsys appsink: {err:?}");
+                        }
 
-                    Ok(FlowSuccess::Ok)
+                        Ok(FlowSuccess::Ok)
+                    }
+                    Err(err) => {
+                        error!("failed to pull sample: {err:?}");
+                        Err(FlowError::Error)
+                    }
                 })
                 .build(),
         );
@@ -464,7 +509,10 @@ impl CameraManager {
             )
             .build()
             .unwrap();
-        let appsink = ElementFactory::make("appsink").name("calib_appsink").build().unwrap();
+        let appsink = ElementFactory::make("appsink")
+            .name("calib_appsink")
+            .build()
+            .unwrap();
 
         pipeline
             .add_many([&valve, &queue, &videoconvertscale, &filter, &appsink])
@@ -497,6 +545,8 @@ impl CameraManager {
     }
 
     // gamma gamma=2.0 ! fpsdisplaysink ! videorate drop-only=true ! omxh264enc ! mpegtsenc !
+
+    /// Add [MjpegStream] to pipeline
     pub(crate) fn add_mjpeg(
         pipeline: &Pipeline,
         cam: &Element,
@@ -508,7 +558,11 @@ impl CameraManager {
             .property("drop", false)
             .build()
             .unwrap();
-        let videorate = ElementFactory::make("videorate").property("max-rate", 20).property("drop-only", true).build().unwrap();
+        let videorate = ElementFactory::make("videorate")
+            .property("max-rate", 20)
+            .property("drop-only", true)
+            .build()
+            .unwrap();
         //let queue = ElementFactory::make("queue").build().unwrap();
         let videoconvertscale = ElementFactory::make("videoconvertscale")
             .property_from_str("method", "nearest-neighbour")
@@ -529,7 +583,10 @@ impl CameraManager {
             .property("quality", &25)
             .build()
             .unwrap();
-        let appsink = ElementFactory::make("appsink").name("mjpeg_appsink").build().unwrap();
+        let appsink = ElementFactory::make("appsink")
+            .name("mjpeg_appsink")
+            .build()
+            .unwrap();
 
         pipeline
             .add_many([

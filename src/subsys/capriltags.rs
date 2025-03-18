@@ -49,7 +49,7 @@ impl Subsystem for CApriltagsDetector {
     type Error = Box<dyn std::error::Error + Send>;
 
     fn preproc(
-        cam_config: config::Camera,
+        _cam_config: config::Camera,
         pipeline: &gstreamer::Pipeline,
     ) -> Result<(gstreamer::Element, gstreamer::Element), Self::Error> {
         // The AprilTag preprocessing part:
