@@ -121,11 +121,14 @@ impl CameraManager {
 
                             // Create the elements
                             let settings = cam_config.settings.clone().unwrap_or_default();
+
+                            let is_mjpeg = settings.format == Some(String::new());
+
                             let filter = ElementFactory::make("capsfilter")
                                 .name("capsfilter")
                                 .property(
                                     "caps",
-                                    &Caps::builder("video/x-raw")
+                                    &Caps::builder(if is_mjpeg { "image/jpeg" } else { "video/x-raw" })
                                         .field("width", settings.width as i32)
                                         .field("height", settings.height as i32)
                                         //.field(
@@ -160,6 +163,18 @@ impl CameraManager {
                             //  - Subsystems
                             let tee = ElementFactory::make("tee").build().unwrap();
 
+                            if is_mjpeg {
+                                let jpegdec = ElementFactory::make_with_name("jpegdec", Some("jpegdec")).unwrap();
+                            // Add them to the pipeline
+                            pipeline
+                                .add_many([&cam, &filter, &jpegdec, &videoflip, &tee])
+                                .unwrap();
+
+                            // Link them
+                            Element::link_many([&cam, &filter, &jpegdec, &videoflip, &tee]).unwrap();
+                            } else {
+
+
                             // Add them to the pipeline
                             pipeline
                                 .add_many([&cam, &filter, &videoflip, &tee])
@@ -167,6 +182,7 @@ impl CameraManager {
 
                             // Link them
                             Element::link_many([&cam, &filter, &videoflip, &tee]).unwrap();
+                            }
 
                             debug!("initializing calibrator");
                             let calibrator = Self::add_calib(&pipeline, &tee, cam_config.clone());
