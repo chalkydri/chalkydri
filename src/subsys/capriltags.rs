@@ -17,8 +17,6 @@ use gstreamer::prelude::GstBinExtManual;
 use gstreamer::ElementFactory;
 use gstreamer::{Buffer, Caps, Element};
 use minint::NtConn;
-use rapier3d::math::{Matrix, Rotation, Translation};
-use rapier3d::na::Quaternion;
 #[cfg(feature = "rerun")]
 use re_sdk::external::re_types_core;
 #[cfg(feature = "rerun")]
@@ -26,10 +24,16 @@ use re_types::{
     archetypes::{Boxes2D, Points2D},
     components::{PinholeProjection, PoseRotationQuat, Position2D, ViewCoordinates},
 };
+use nalgebra as na;
+use transforms::geometry::{Quaternion, Vector3};
+use transforms::time::Timestamp;
+use transforms::Transform;
 use std::time::Instant;
 use tokio::sync::watch;
 
 use crate::calibration::CalibratedModel;
+use crate::error::Error;
+use crate::pose::PoseEstimator;
 use crate::Cfg;
 use crate::{config, subsystem::frame_proc_loop, Subsystem};
 
@@ -37,9 +41,9 @@ const TAG_SIZE: f64 = 0.1651;
 
 pub struct CApriltagsDetector {
     det: apriltag::Detector,
-    layout: HashMap<u64, (Translation<f64>, Rotation<f64>)>,
     model: CalibratedModel,
     name: String,
+    pose_est: PoseEstimator,
 }
 impl Subsystem for CApriltagsDetector {
     const NAME: &'static str = "capriltags";
@@ -92,17 +96,19 @@ impl Subsystem for CApriltagsDetector {
         let layout = layouts
             .get(&subsys_cfg.field_layout.unwrap_or_default())
             .unwrap_or(&default_layout);
-        let layout = AprilTagFieldLayout::load(layout);
         let det = Detector::builder()
             .add_family_bits(Family::tag_36h11(), 3)
             .build()
             .unwrap();
 
+        let mut pose_est = PoseEstimator::new().unwrap();
+        layout.load(&mut pose_est).await.unwrap();
+
         Ok(Self {
             model,
-            layout,
             det,
             name: cam_config.name,
+            pose_est,
         })
     }
     async fn process(
@@ -140,9 +146,7 @@ impl Subsystem for CApriltagsDetector {
                     Ok(img) => {
                         let dets = self.det.detect(&img);
 
-                        let poses: Vec<_> = dets
-                            .iter()
-                            .filter_map(|det| {
+                        for det in &dets {
                                 // Extract camera calibration values from the [CalibratedModel]
                                 let OpenCVModel5 { fx, fy, cx, cy, .. } =
                                     if let GenericModel::OpenCVModel5(model) = self.model.inner_model() {
@@ -164,68 +168,59 @@ impl Subsystem for CApriltagsDetector {
                                     let cam_rotation = pose.rotation().data().to_vec();
 
                                     // Convert the camera's translation and rotation matrices into proper Rust datatypes
-                                    let cam_translation = Translation::new(
+                                    let translation = Vector3::new(
                                         cam_translation[0],
                                         cam_translation[1],
                                         cam_translation[2],
                                     );
                                     let cam_rotation =
-                                        Rotation::from_matrix(&Matrix::from_vec(cam_rotation));
+                                        na::UnitQuaternion::from_rotation_matrix(&na::Rotation3::from_matrix(&na::Matrix3::new(
+                                                cam_rotation[0], cam_rotation[1], cam_rotation[2],
+                                                cam_rotation[3], cam_rotation[4], cam_rotation[5],
+                                                cam_rotation[6], cam_rotation[7], cam_rotation[8],
+                                        )));
+                                    let rotation = Quaternion {
+                                        w: cam_rotation.w,
+                                        x: cam_rotation.i,
+                                        y: cam_rotation.j,
+                                        z: cam_rotation.k,
+                                    };
+
+                                    let transform = Transform {
+                                        translation,
+                                        rotation,
+                                        timestamp: Timestamp::now(),
+                                        child: "robot".into(),
+                                        parent: format!("tag{}", det.id()),
+                                    };
 
                                     debug!(
-                                        "detected tag id {}: tl={cam_translation} ro={cam_rotation}",
+                                        "detected tag id {}: tl={cam_translation:?} ro={cam_rotation:?}",
                                         det.id()
                                     );
 
+                                    self.pose_est.add_transform(transform).await.unwrap();
+
                                     // Try to get the tag's pose from the field layout
-                                    if let Some((tag_translation, tag_rotation)) =
-                                        self.layout.get(&(det.id() as u64))
-                                    {
-                                        let translation = tag_translation * cam_translation;
-                                        let rotation = tag_rotation * cam_rotation;
-                                        return Some((translation, rotation, det.decision_margin() as f64));
-                                    }
+                                    //if let Some((tag_translation, tag_rotation)) =
+                                    //    self.layout.get(&(det.id() as u64))
+                                    //{
+                                    //    //let translation = *tag_translation * translation;
+                                    //    //let rotation = *tag_rotation * rotation;
+
+                                    //    return Some((translation, rotation, det.decision_margin() as f64));
+                                    //}
                                 }
+                        }
 
-                                None
-                            })
-                            .collect();
 
-                        if poses.len() > 0 {
-                            let mut avg_translation = Translation::new(0.0f64, 0.0, 0.0);
-                            let mut avg_rotation = Quaternion::new(0.0f64, 0.0, 0.0, 0.0);
-
-                            for pose in poses.iter() {
-                                avg_translation.x += pose.0.x;
-                                avg_translation.y += pose.0.y;
-                                avg_translation.z += pose.0.z;
-
-                                avg_rotation.w += pose.1.w;
-                                avg_rotation.i += pose.1.i;
-                                avg_rotation.j += pose.1.j;
-                                avg_rotation.k += pose.1.k;
-                            }
-
-                            avg_translation.x /= poses.len() as f64;
-                            avg_translation.x /= poses.len() as f64;
-                            avg_translation.x /= poses.len() as f64;
-
-                            avg_rotation.w /= poses.len() as f64;
-                            avg_rotation.i /= poses.len() as f64;
-                            avg_rotation.j /= poses.len() as f64;
-                            avg_rotation.k /= poses.len() as f64;
-
-                            let t = avg_translation.vector.data.as_slice().to_vec();
-                            let r = avg_rotation.vector().data.into_slice().to_vec();
-
-                            debug!("tag detected : {t:?} / {r:?}");
-
-                            translation.set(t).await;
-                            rotation.set(r).await;
+                        if !dets.is_empty() {
                             tag_detected.set(true).await;
+
                             delay.set(proc_st_time.elapsed().as_millis_f64()).await;
                         } else {
                             tag_detected.set(false).await;
+
                             debug!("no tag detected");
                         }
                     }
@@ -253,8 +248,7 @@ pub struct AprilTagFieldLayout {
     pub field: Field,
 }
 impl AprilTagFieldLayout {
-    pub fn load(&self) -> HashMap<u64, (Translation<f64>, Rotation<f64>)> {
-        let mut tags = HashMap::new();
+    pub async fn load(&self, pose_est: &mut PoseEstimator) -> Result<(), Error> {
         for LayoutTag {
             id,
             pose:
@@ -265,18 +259,26 @@ impl AprilTagFieldLayout {
         } in self.tags.clone()
         {
             // Turn the field layout values into Rust datatypes
-            let tag_translation = Translation::new(translation.x, translation.y, translation.z);
-            let tag_rotation = Rotation::from_quaternion(Quaternion::new(
-                quaternion.w,
-                quaternion.x,
-                quaternion.y,
-                quaternion.z,
-            ));
+            let translation = Vector3::new(translation.x, translation.y, translation.z);
+            let rotation = Quaternion {
+                w: quaternion.w,
+                x: quaternion.x,
+                y: quaternion.y,
+                z: quaternion.z,
+            };
 
-            tags.insert(id as u64, (tag_translation, tag_rotation));
+            let transform = Transform {
+                translation,
+                rotation,
+                parent: "field".into(),
+                child: format!("tag{id}"),
+                timestamp: Timestamp::zero(),
+            };
+
+            pose_est.add_transform(transform).await?;
         }
 
-        tags
+        Ok(())
     }
 }
 

@@ -36,11 +36,10 @@ serde_json = "1"
 apriltag = { version = "0.4.0", optional = true, git = "https://github.com/chalkydri/apriltag-rust.git" }
 re_web_viewer_server = { version = "0.22.0", optional = true }
 re_ws_comms = { version = "0.22.0", optional = true }
-rapier3d = { version = "0.23.0", features = ["parallel", "simd-nightly"] }
 mimalloc = { version = "0.1.43", features = ["override"] }
 camera-intrinsic-calibration = { git = "https://github.com/chalkydri/camera-intrinsic-calibration-rs.git", branch = "main" }
 camera-intrinsic-model = { git = "https://github.com/chalkydri/camera-intrinsic-model-rs.git", branch = "main" }
-aprilgrid = "0.5.3"
+aprilgrid = { git = "https://github.com/chalkydri/aprilgrid-rs.git", branch = "master" }
 sqpnp_simple = "0.1.5"
 re_sdk = { version = "0.22.0", optional = true }
 re_types = { version = "0.22.0", features = ["image"], optional = true }
@@ -52,12 +51,18 @@ gstreamer = { version = "0.23.4", features = ["v1_22"] }
 gstreamer-app = { version = "0.23.4", features = ["v1_22"] }
 rust-embed = { version = "8.5.0", features = ["actix"] }
 mime_guess = "2.0.5"
-image = "0.25.5"
 futures-core = "0.3.31"
 futures-util = "0.3.31"
 rustix = { version = "0.38.44", features = ["all-apis"] }
 futures-executor = "0.3.31"
 sysinfo = "0.33.1"
+libblur = "0.17.0"
+transforms = "0.5.1"
+nalgebra = { version = "0.33.2", default-features = false, features = ["matrixmultiply", "rayon"] }
+image = "0.25.5"
+tracing = { version = "0.1.41", features = ["log"] }
+tracing-subscriber = "0.3.19"
+nt_client = "0.3.0"
 
 [build-dependencies]
 bindgen = { version = "*", default-features = false, features = ["runtime"] }

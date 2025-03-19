@@ -37,6 +37,7 @@ mod error;
 mod logger;
 mod subsys;
 mod subsystem;
+mod pose;
 mod utils;
 
 #[cfg(feature = "web")]

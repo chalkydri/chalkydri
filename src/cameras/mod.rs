@@ -17,7 +17,7 @@ use minint::NtConn;
 use mjpeg::MjpegStream;
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
-use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc};
+use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, watch, Mutex, MutexGuard, RwLock};
 
 #[cfg(feature = "rerun")]
