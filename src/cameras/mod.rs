@@ -19,6 +19,7 @@ use mjpeg::MjpegStream;
 use re_types::archetypes::EncodedImage;
 use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, watch, Mutex, MutexGuard, RwLock};
+use tracing::{Level, Span};
 
 #[cfg(feature = "rerun")]
 use crate::Rerun;
@@ -28,7 +29,7 @@ use crate::{
     error::Error,
     subsys::capriltags::CApriltagsDetector,
     subsystem::Subsystem,
-    Cfg,
+    Cfg, Nt,
 };
 
 #[derive(Clone)]
@@ -98,9 +99,13 @@ impl CameraManager {
 
                     if let Some(cam_configs) = &config.cameras {
                         let id = Self::get_id(&dev);
+
                         if let Some(cam_config) =
                             cam_configs.clone().iter().filter(|cam| cam.id == id).next()
                         {
+                            let span = span!(Level::INFO, "camera", id = cam_config.id);
+                            let _enter = span.enter();
+
                             debug!("found a config");
 
                             // Create the camera source
@@ -128,17 +133,21 @@ impl CameraManager {
                                 .name("capsfilter")
                                 .property(
                                     "caps",
-                                    &Caps::builder(if is_mjpeg { "image/jpeg" } else { "video/x-raw" })
-                                        .field("width", settings.width as i32)
-                                        .field("height", settings.height as i32)
-                                        //.field(
-                                        //    "framerate",
-                                        //    &Fraction::new(
-                                        //        settings.frame_rate.num as i32,
-                                        //        settings.frame_rate.den as i32,
-                                        //    ),
-                                        //)
-                                        .build(),
+                                    &Caps::builder(if is_mjpeg {
+                                        "image/jpeg"
+                                    } else {
+                                        "video/x-raw"
+                                    })
+                                    .field("width", settings.width as i32)
+                                    .field("height", settings.height as i32)
+                                    //.field(
+                                    //    "framerate",
+                                    //    &Fraction::new(
+                                    //        settings.frame_rate.num as i32,
+                                    //        settings.frame_rate.den as i32,
+                                    //    ),
+                                    //)
+                                    .build(),
                                 )
                                 .build()
                                 .unwrap();
@@ -164,24 +173,25 @@ impl CameraManager {
                             let tee = ElementFactory::make("tee").build().unwrap();
 
                             if is_mjpeg {
-                                let jpegdec = ElementFactory::make_with_name("jpegdec", Some("jpegdec")).unwrap();
-                            // Add them to the pipeline
-                            pipeline
-                                .add_many([&cam, &filter, &jpegdec, &videoflip, &tee])
-                                .unwrap();
+                                let jpegdec =
+                                    ElementFactory::make_with_name("jpegdec", Some("jpegdec"))
+                                        .unwrap();
+                                // Add them to the pipeline
+                                pipeline
+                                    .add_many([&cam, &filter, &jpegdec, &videoflip, &tee])
+                                    .unwrap();
 
-                            // Link them
-                            Element::link_many([&cam, &filter, &jpegdec, &videoflip, &tee]).unwrap();
+                                // Link them
+                                Element::link_many([&cam, &filter, &jpegdec, &videoflip, &tee])
+                                    .unwrap();
                             } else {
+                                // Add them to the pipeline
+                                pipeline
+                                    .add_many([&cam, &filter, &videoflip, &tee])
+                                    .unwrap();
 
-
-                            // Add them to the pipeline
-                            pipeline
-                                .add_many([&cam, &filter, &videoflip, &tee])
-                                .unwrap();
-
-                            // Link them
-                            Element::link_many([&cam, &filter, &videoflip, &tee]).unwrap();
+                                // Link them
+                                Element::link_many([&cam, &filter, &videoflip, &tee]).unwrap();
                             }
 
                             debug!("initializing calibrator");
@@ -213,7 +223,6 @@ impl CameraManager {
                                     &pipeline,
                                     &tee,
                                     cam_config.clone(),
-                                    nt.clone(),
                                     cam_config.subsystems.capriltags.enabled,
                                 );
                             }
@@ -426,12 +435,12 @@ impl CameraManager {
         pipeline: &Pipeline,
         cam: &Element,
         cam_config: config::Camera,
-        nt: NtConn,
         enabled: bool,
     ) {
-        let target = format!("chalkydri::subsys::{}", S::NAME);
+        let span = span!(Level::INFO, "subsys", subsystem = S::NAME);
+        let _enter = span.enter();
 
-        debug!(target: &target, "initializing preproc pipeline chunk subsystem...");
+        debug!("initializing preproc pipeline chunk subsystem...");
         let (input, output) = S::preproc(cam_config.clone(), pipeline).unwrap();
 
         let valve = ElementFactory::make("valve")
@@ -450,7 +459,7 @@ impl CameraManager {
             .unwrap();
         pipeline.add_many([&valve, &videorate, &appsink]).unwrap();
 
-        debug!(target: &target, "linking preproc pipeline chunk...");
+        debug!("linking preproc pipeline chunk...");
         Element::link_many([&cam, &valve, &videorate, &input]).unwrap();
         output.link(&appsink).unwrap();
 
@@ -461,7 +470,7 @@ impl CameraManager {
 
         let appsink_ = appsink.clone();
 
-        debug!(target: &target, "setting appsink callbacks...");
+        debug!("setting appsink callbacks...");
         appsink.set_callbacks(
             AppSinkCallbacks::builder()
                 .new_sample(move |_| match appsink_.pull_sample() {
@@ -484,18 +493,15 @@ impl CameraManager {
 
         debug!("linked subsys junk");
 
-        let nt_ = nt.clone();
         let cam_config = cam_config.clone();
         std::thread::spawn(move || {
             debug!("capriltags worker thread started");
-            let nt = nt_;
-
             futures_executor::block_on(async move {
                 debug!("initializing subsystem...");
                 let mut subsys = S::init(cam_config).await.unwrap();
 
                 debug!("starting subsystem...");
-                subsys.process(nt, rx).await.unwrap();
+                subsys.process(Nt.clone(), rx).await.unwrap();
             });
         });
     }
@@ -506,7 +512,8 @@ impl CameraManager {
         cam: &Element,
         cam_config: config::Camera,
     ) -> Calibrator {
-        let target = format!("chalkydri::camera::{}", cam_config.id);
+        let span = span!(Level::INFO, "calib");
+        let _enter = span.enter();
 
         let valve = ElementFactory::make("valve")
             .property("drop", false)
@@ -540,7 +547,7 @@ impl CameraManager {
 
         let (tx, rx) = watch::channel(None);
 
-        debug!(target: &target, "setting appsink callbacks...");
+        debug!("setting appsink callbacks...");
         appsink.set_callbacks(
             AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
@@ -568,7 +575,8 @@ impl CameraManager {
         cam: &Element,
         cam_config: config::Camera,
     ) -> MjpegStream {
-        let target = format!("chalkydri::camera::{}", cam_config.id);
+        let span = span!(Level::INFO, "mjpeg");
+        let _enter = span.enter();
 
         let valve = ElementFactory::make("valve")
             .property("drop", false)
@@ -595,10 +603,10 @@ impl CameraManager {
             )
             .build()
             .unwrap();
-        let jpegenc = ElementFactory::make("jpegenc")
-            .property("quality", &25)
-            .build()
-            .unwrap();
+        //let jpegenc = ElementFactory::make("jpegenc")
+        //    .property("quality", &85)
+        //    .build()
+        //    .unwrap();
         let appsink = ElementFactory::make("appsink")
             .name("mjpeg_appsink")
             .build()
@@ -610,7 +618,7 @@ impl CameraManager {
                 &videorate,
                 &videoconvertscale,
                 &filter,
-                &jpegenc,
+                //&jpegenc,
                 &appsink,
             ])
             .unwrap();
@@ -620,7 +628,7 @@ impl CameraManager {
             &videorate,
             &videoconvertscale,
             &filter,
-            &jpegenc,
+            //&jpegenc,
             &appsink,
         ])
         .unwrap();
@@ -630,7 +638,7 @@ impl CameraManager {
 
         let (tx, rx) = watch::channel(None);
 
-        debug!(target: &target, "setting appsink callbacks...");
+        debug!("setting appsink callbacks...");
         appsink.set_callbacks(
             AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
@@ -640,7 +648,24 @@ impl CameraManager {
                         .unwrap();
                     match sample.buffer() {
                         Some(buf) => {
-                            while let Err(err) = tx.send(Some(buf.to_owned())) {
+                            let jpeg = turbojpeg::compress(
+                                turbojpeg::Image {
+                                    width: 640,
+                                    height: 480,
+                                    pitch: 640 * 3,
+                                    format: turbojpeg::PixelFormat::RGB,
+                                    pixels: buf
+                                        .to_owned()
+                                        .into_mapped_buffer_readable()
+                                        .unwrap()
+                                        .to_vec()
+                                        .as_slice(),
+                                },
+                                50,
+                                turbojpeg::Subsamp::None,
+                            )
+                            .unwrap();
+                            while let Err(err) = tx.send(Some(jpeg.to_vec())) {
                                 error!("error sending frame: {err:?}");
                             }
                         }

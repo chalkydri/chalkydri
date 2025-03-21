@@ -1,23 +1,32 @@
 <script lang="ts">
 	import { slide } from 'svelte/transition';
+	import { connected as connected_, sys_info } from '$lib/index';
 	import '../app.css';
 	import {
-	Button,
+		Button,
 		DarkMode,
+		Indicator,
+		Label,
 		Navbar,
 		NavBrand,
 		NavHamburger,
 		P,
 		Sidebar,
+		SidebarCta,
+		SidebarDropdownItem,
+		SidebarDropdownWrapper,
 		SidebarGroup,
 		SidebarItem,
 		SidebarWrapper,
-
 		Toast
-
 	} from 'flowbite-svelte';
+	import { CameraIcon, HomeIcon, PencilRulerIcon, SettingsIcon } from 'lucide-svelte';
 
 	let hide_sidebar = $state(false);
+	let connected = $state(false);
+	connected_.subscribe((val: boolean) => {
+		connected = val;
+	});
 	let { children } = $props();
 
 	function toggleSidebar() {
@@ -37,8 +46,18 @@
 		<Navbar class="rounded-md bg-slate-200 dark:bg-slate-800" let:NavContainer>
 			<NavHamburger on:click={toggleSidebar} />
 			<NavBrand href="/">
-				<P size="xl">Chalkydri Manager</P>
+				<img src="/icon.png" width="36pt" class="mr-2" alt="Chalkydri logo" />
+				<P size="xl">Chalkydri</P>
 			</NavBrand>
+			<div class="ml-auto mr-4 flex flex-row items-center">
+				{#if connected}
+					<Indicator color="green" />
+					<P class="pl-1">Connected</P>
+				{:else}
+					<Indicator color="red" />
+					<P class="pl-1">Disconnected</P>
+				{/if}
+			</div>
 			<DarkMode />
 		</Navbar>
 	</header>
@@ -47,10 +66,28 @@
 		<Sidebar class="flexbox h-max">
 			<SidebarWrapper class="bg-slate-200 dark:bg-slate-800 rounded-md mt-2 h-[100%]">
 				<SidebarGroup>
-					<SidebarItem label="Home" href="/" />
-					<SidebarItem label="Calibration" href="/calibration" />
-					<SidebarItem label="Custom subsystems" href="/custom" />
-					<SidebarItem label="Settings" href="/settings" />
+					<SidebarItem label="Home" href="/">
+						<svelte:fragment slot="icon">
+							<HomeIcon />
+						</svelte:fragment>
+					</SidebarItem>
+					<SidebarItem label="Custom code" href="/custom">
+						<svelte:fragment slot="icon">
+							<PencilRulerIcon />
+						</svelte:fragment>
+					</SidebarItem>
+					<SidebarItem label="Settings" href="/settings">
+						<svelte:fragment slot="icon">
+							<SettingsIcon />
+						</svelte:fragment>
+					</SidebarItem>
+					<SidebarGroup class="ml-3">
+						<SidebarItem label="Front Right" href="/camera">
+							<svelte:fragment slot="icon">
+								<CameraIcon />
+							</svelte:fragment>
+						</SidebarItem>
+					</SidebarGroup>
 				</SidebarGroup>
 			</SidebarWrapper>
 		</Sidebar>

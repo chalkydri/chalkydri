@@ -5,9 +5,13 @@
 use std::{fs::File, io::Write};
 
 use actix_web::{
-    get, http::{
-        header::{self, CacheDirective}, StatusCode
-    }, post, put, web::{self, Data}, App, HttpResponse, HttpServer, Responder
+    App, HttpResponse, HttpServer, Responder, get,
+    http::{
+        StatusCode,
+        header::{self, CacheDirective},
+    },
+    post, put,
+    web::{self, Data},
 };
 use mime_guess::from_path;
 use rust_embed::Embed;
@@ -15,11 +19,7 @@ use rustix::system::RebootCommand;
 use sysinfo::System;
 use utopia::{OpenApi, ToSchema};
 
-use crate::{
-    Cfg,
-    cameras::CameraManager,
-    config::Config,
-};
+use crate::{Cfg, cameras::CameraManager, config::Config};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -125,7 +125,7 @@ pub(super) async fn info() -> impl Responder {
     let mut system = System::new();
     system.refresh_cpu_usage();
     system.refresh_memory();
-    
+
     let cpu_usage = (system.global_cpu_usage() * 100.0) as u8;
     let mem_usage = ((system.used_memory() as f64 / system.total_memory() as f64) * 100.0) as u8;
 
@@ -191,9 +191,7 @@ pub(super) async fn configure(
     ),
 )]
 #[put("/api/configuration")]
-pub(super) async fn save_configuration(
-    web::Json(cfgg): web::Json<Config>,
-) -> impl Responder {
+pub(super) async fn save_configuration(web::Json(cfgg): web::Json<Config>) -> impl Responder {
     let old_config = Cfg.read().await.clone();
 
     if cfgg.device_name != old_config.device_name {

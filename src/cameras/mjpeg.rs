@@ -2,7 +2,6 @@ use std::task::Poll;
 
 use actix_web::web::Bytes;
 use futures_core::Stream;
-use gstreamer::Buffer;
 use tokio::sync::watch;
 
 use crate::error::Error;
@@ -10,7 +9,7 @@ use crate::error::Error;
 /// Wrapper over frame buffer receiver
 #[derive(Clone)]
 pub struct MjpegStream {
-    pub(super) rx: watch::Receiver<Option<Buffer>>,
+    pub(super) rx: watch::Receiver<Option<Vec<u8>>>,
 }
 impl Stream for MjpegStream {
     type Item = Result<Bytes, Error>;
@@ -28,16 +27,13 @@ impl Stream for MjpegStream {
                         bytes.extend_from_slice(
                             &[
                                 b"--frame\r\nContent-Length: ",
-                                frame.size().to_string().as_bytes(),
+                                frame.len().to_string().as_bytes(),
                                 b"\r\nContent-Type: image/jpeg\r\n\r\n",
                             ]
                             .concat(),
                         );
                         bytes.extend_from_slice(
                             frame
-                                .map_readable()
-                                .map_err(|_| Error::FailedToMapBuffer)?
-                                .as_slice(),
                         );
                     }
 

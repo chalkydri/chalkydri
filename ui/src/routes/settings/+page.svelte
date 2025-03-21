@@ -1,11 +1,23 @@
 <script lang="ts">
-	import { Button, Card, Fileupload, Input, Label, Layout, Modal, P, Select, Skeleton } from 'flowbite-svelte';
+	import {
+		Button,
+		Card,
+		Fileupload,
+		Input,
+		Label,
+		Layout,
+		Modal,
+		P,
+		Select,
+		Skeleton
+	} from 'flowbite-svelte';
 	import { _loadConfig, _saveConfig } from './+page';
 	import { onMount } from 'svelte';
 	import { configure, saveConfiguration, type Config, type Camera } from '$lib/api';
 	import CamConfig from './+components/CamConfig.svelte';
 	import { config, updateConfig, loadConfig } from '$lib/config';
 	import CameraFeed from '../+components/CameraFeed.svelte';
+	import { TrashIcon } from 'lucide-svelte';
 
 	let cfg: Config | null = $state(null);
 	let saving = $state(false);
@@ -77,17 +89,26 @@
 		<P size="lg">Pose estimation</P>
 
 		<Layout gap={3}>
-		<div>
-		<Label for="field_layout" class="mt-2 mb-1">Field layout</Label>
-		{#if config && config.field_layouts}
-		<Select id="field_layout" items={Object.keys(config.field_layouts).map((thing) => {
-				return { name: thing, value: thing };
-			})}
-		/>
-		{/if}
-		</div>
+			<div>
+				<Label for="field_layout" class="mt-2 mb-1">Field layout</Label>
+				{#if config && config.field_layouts}
+					<Select
+						id="field_layout"
+						items={Object.keys(config.field_layouts).map((thing) => {
+							return { name: thing, value: thing };
+						})}
+					/>
+				{/if}
+			</div>
 
-		<Button size="sm" class="m-auto" color="blue" on:click={() => { managing_field_layouts = true; }}>Manage field layouts</Button>
+			<Button
+				size="sm"
+				class="m-auto"
+				color="blue"
+				on:click={() => {
+					managing_field_layouts = true;
+				}}>Manage field layouts</Button
+			>
 		</Layout>
 	</Card>
 
@@ -117,7 +138,12 @@
 					<Layout>
 						<div>
 							<P>{name}</P>
-							<P color="gray">{cfg.field_layouts[name].field.length}m x {cfg.field_layouts[name].field.width}m</P>
+							<P color="gray"
+								>{cfg.field_layouts[name].field.length}m x {cfg.field_layouts[name].field.width}m</P
+							>
+							<Button size="xs" color="red">
+								<TrashIcon size="14pt" />
+							</Button>
 						</div>
 					</Layout>
 				</Card>
@@ -127,4 +153,3 @@
 {:else}
 	<Skeleton />
 {/if}
-

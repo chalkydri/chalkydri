@@ -1,5 +1,10 @@
 use crate::{error::Error, subsys::capriltags::AprilTagFieldLayout};
-use std::{collections::HashMap, fs::File, io::{Read, Write}, path::Path};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+};
 
 macro_rules! def_cfg {
     ($(
@@ -88,12 +93,12 @@ impl Config {
 
     /// Save the configuration to the specified path
     pub async fn save(&self, path: impl AsRef<Path>) -> Result<(), Error> {
-            let mut f = File::create(path).unwrap();
-            let toml_cfgg = toml::to_string_pretty(&self).unwrap();
-            f.write_all(toml_cfgg.as_bytes()).unwrap();
-            f.flush().unwrap();
+        let mut f = File::create(path).unwrap();
+        let toml_cfgg = toml::to_string_pretty(&self).unwrap();
+        f.write_all(toml_cfgg.as_bytes()).unwrap();
+        f.flush().unwrap();
 
-            Ok(())
+        Ok(())
     }
 }
 impl Default for Camera {

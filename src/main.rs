@@ -9,7 +9,7 @@
 #![allow(unreachable_code)]
 
 #[macro_use]
-extern crate log;
+extern crate tracing;
 #[cfg(feature = "web")]
 extern crate actix_web;
 extern crate env_logger;
@@ -34,17 +34,16 @@ mod calibration;
 mod cameras;
 mod config;
 mod error;
-mod logger;
+//mod logger;
+mod pose;
 mod subsys;
 mod subsystem;
-mod pose;
 mod utils;
 
 #[cfg(feature = "web")]
 use api::run_api;
 use cameras::CameraManager;
 use config::Config;
-use logger::Logger;
 use mimalloc::MiMalloc;
 use minint::NtConn;
 use once_cell::sync::Lazy;
@@ -55,9 +54,11 @@ use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
 use std::{
-    error::Error, fs::File, io::Write, net::Ipv4Addr, os::unix::process::CommandExt, path::Path, process::Command, sync::Arc
+    error::Error, fs::File, io::Write, net::Ipv4Addr, os::unix::process::CommandExt, path::Path,
+    process::Command, sync::Arc,
 };
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{RwLock, mpsc, oneshot};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 // mimalloc is a very good general purpose allocator
 #[global_allocator]
@@ -162,7 +163,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 "#
     );
 
-    Logger::new().with_path_prefix("logs/handler").init()?;
+    let filter = EnvFilter::from_default_env();
+    let layer = tracing_subscriber::fmt::layer().with_filter(filter);
+    tracing_subscriber::registry()
+        .with(layer)
+        .init();
 
     info!("starting up...");
 

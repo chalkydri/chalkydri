@@ -13,10 +13,11 @@ use std::collections::HashMap;
 
 use apriltag::{Detector, Family, Image, TagParams};
 use camera_intrinsic_model::{GenericModel, OpenCVModel5};
-use gstreamer::prelude::GstBinExtManual;
 use gstreamer::ElementFactory;
+use gstreamer::prelude::GstBinExtManual;
 use gstreamer::{Buffer, Caps, Element};
 use minint::NtConn;
+use nalgebra as na;
 #[cfg(feature = "rerun")]
 use re_sdk::external::re_types_core;
 #[cfg(feature = "rerun")]
@@ -24,18 +25,17 @@ use re_types::{
     archetypes::{Boxes2D, Points2D},
     components::{PinholeProjection, PoseRotationQuat, Position2D, ViewCoordinates},
 };
-use nalgebra as na;
-use transforms::geometry::{Quaternion, Vector3};
-use transforms::time::Timestamp;
-use transforms::Transform;
 use std::time::Instant;
 use tokio::sync::watch;
+use transforms::Transform;
+use transforms::geometry::{Quaternion, Vector3};
+use transforms::time::Timestamp;
 
+use crate::Cfg;
 use crate::calibration::CalibratedModel;
 use crate::error::Error;
 use crate::pose::PoseEstimator;
-use crate::Cfg;
-use crate::{config, subsystem::frame_proc_loop, Subsystem};
+use crate::{Subsystem, config, subsystem::frame_proc_loop};
 
 const TAG_SIZE: f64 = 0.1651;
 

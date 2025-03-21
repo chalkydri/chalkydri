@@ -12,10 +12,12 @@
 
 	import { LanguageProvider } from 'ace-linters';
 
-	import { Button, Card, P } from 'flowbite-svelte';
+	import { Button, Card, Input, P } from 'flowbite-svelte';
 	import { onMount } from 'svelte';
 	import type { Editor, EditSession } from 'ace-code';
-	import { PencilIcon, PlusIcon, TrashIcon } from 'lucide-svelte';
+	import { CheckIcon, PencilIcon, PlusIcon, TrashIcon, XIcon } from 'lucide-svelte';
+
+	let editing_subsys_name: string | null = $state(null);
 
 	onMount(async () => {
 		//let worker = new Worker(new URL('./webworker.ts', import.meta.url));
@@ -29,7 +31,7 @@
 			enableLiveAutocompletion: true,
 			enableAutoIndent: true,
 			enableSnippets: false,
-			fontSize: 16,
+			fontSize: 16
 			//enableCodeLens: true,
 		});
 		//languageProvider.registerEditor(editor as Editor);
@@ -47,9 +49,44 @@
 
 	<Card padding="xs" size="sm">
 		<div class="flex flex-row items-center">
-			<P size="lg" class="mr-auto">My subsys</P>
-			<Button color="blue" size="xs"><PencilIcon size="14pt" /></Button>
-			<Button color="red" size="xs" class="ml-1"><TrashIcon size="14pt" /></Button>
+			{#if editing_subsys_name != null}
+				<Input type="text" class="px-2 py-1" size="lg" bind:value={editing_subsys_name} />
+				<Button
+					size="xs"
+					color="green"
+					class="ml-1"
+					on:click={() => {
+						if (editing_subsys_name) {
+							// = editing_subsys_name;
+						}
+						editing_subsys_name = null;
+					}}
+				>
+					<CheckIcon size="14pt" />
+				</Button>
+				<Button
+					size="xs"
+					color="red"
+					class="ml-1"
+					on:click={() => {
+						editing_subsys_name = null;
+					}}
+				>
+					<XIcon size="14pt" />
+				</Button>
+			{:else}
+				<P size="lg" class="mr-auto">My subsys</P>
+				<Button
+					size="xs"
+					color="blue"
+					on:click={() => {
+						editing_subsys_name = '';
+					}}
+				>
+					<PencilIcon size="14pt" />
+				</Button>
+				<Button color="red" size="xs" class="ml-1"><TrashIcon size="14pt" /></Button>
+			{/if}
 		</div>
 	</Card>
 	<Button color="blue" class="w-min"><PlusIcon /></Button>

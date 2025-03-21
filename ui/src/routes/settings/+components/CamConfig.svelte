@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { config } from '$lib/config';
-	import { configuration, type Camera, type CameraSettings, type Config, type VideoOrientation } from '$lib/api';
+	import {
+		configuration,
+		type Camera,
+		type CameraSettings,
+		type Config,
+		type VideoOrientation
+	} from '$lib/api';
 	import { Button, Card, Input, Label, Layout, P, Range, Select, Toggle } from 'flowbite-svelte';
 	import { CheckIcon, PencilIcon, XIcon } from 'lucide-svelte';
 	import { onMount } from 'svelte';
@@ -72,29 +78,29 @@
 
 		<Layout gap={3}>
 			{#if camera.possible_settings}
-			<div>
-				<Label for="res_fps" class="mt-2 mb-1">Resolution / Frame Rate</Label>
-				<Select
-					id="res_fps"
-					items={camera.possible_settings.map((val) => {
-						if (!val.frame_rate) {
-							return {
-								name: `${val.width}x${val.height} @?fps (${val.format})`,
-								value: JSON.stringify(val)
-							};
-						} else {
-							return {
-								name: `${val.width}x${val.height} @${val.frame_rate.num / val.frame_rate.den}fps (${val.format})`,
-								value: JSON.stringify(val)
-							};
-						}
-					})}
-					value={JSON.stringify(camera.settings)}
-					on:input={(e) => {
-						camera.settings = JSON.parse(e.target.value);
-					}}
-				/>
-			</div>
+				<div>
+					<Label for="res_fps" class="mt-2 mb-1">Resolution / Frame Rate</Label>
+					<Select
+						id="res_fps"
+						items={camera.possible_settings.map((val) => {
+							if (!val.frame_rate) {
+								return {
+									name: `${val.width}x${val.height} @?fps (${val.format})`,
+									value: JSON.stringify(val)
+								};
+							} else {
+								return {
+									name: `${val.width}x${val.height} @${val.frame_rate.num / val.frame_rate.den}fps (${val.format})`,
+									value: JSON.stringify(val)
+								};
+							}
+						})}
+						value={JSON.stringify(camera.settings)}
+						on:input={(e) => {
+							camera.settings = JSON.parse(e.target.value);
+						}}
+					/>
+				</div>
 			{/if}
 
 			<div>
@@ -102,11 +108,18 @@
 				<Toggle bind:checked={camera.auto_exposure} />
 
 				{#if !camera.auto_exposure}
-				<Label class="mt-4 mb-2" for="manual_exposure">Exposure time</Label>
-				<div class="flex flex-row gap-4 items-center">
-					<Range id="manual_exposure" title="Exposure time" min="1" max="1000" step="1" bind:value={camera.manual_exposure} />
-					<Input type="number" bind:value={camera.manual_exposure} />
-				</div>
+					<Label class="mt-4 mb-2" for="manual_exposure">Exposure time</Label>
+					<div class="flex flex-row gap-4 items-center">
+						<Range
+							id="manual_exposure"
+							title="Exposure time"
+							min="1"
+							max="1000"
+							step="1"
+							bind:value={camera.manual_exposure}
+						/>
+						<Input type="number" bind:value={camera.manual_exposure} />
+					</div>
 				{/if}
 			</div>
 
@@ -118,7 +131,7 @@
 						{ name: '0', value: 'none' },
 						{ name: '90', value: 'clockwise' },
 						{ name: '180', value: 'rotate-180' },
-						{ name: '270', value: 'counterclockwise' },
+						{ name: '270', value: 'counterclockwise' }
 					]}
 					bind:value={camera.orientation}
 				/>
