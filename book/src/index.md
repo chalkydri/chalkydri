@@ -33,4 +33,5 @@ Chalkydri has been built from the ground up for performance on popular FRC visio
 
  - [Drake](https://github.com/drakeerv) (Student, 4533)
    - Past vision code lead
+   - GH actions workflows
 
