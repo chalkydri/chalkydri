@@ -239,7 +239,10 @@ pub struct AprilTagFieldLayout {
     pub field: Field,
 }
 impl AprilTagFieldLayout {
-    pub async fn load(&self, pose_est: &mut PoseEstimator) -> Result<HashMap<usize, Isometry3F64>, Error> {
+    pub async fn load(
+        &self,
+        pose_est: &mut PoseEstimator,
+    ) -> Result<HashMap<usize, Isometry3F64>, Error> {
         let mut tags: HashMap<usize, Isometry3F64> = HashMap::new();
         for LayoutTag {
             id,
@@ -257,10 +260,9 @@ impl AprilTagFieldLayout {
                 quaternion.y,
                 quaternion.z,
                 quaternion.w,
-            )).to_rotation_matrix();
-            let rotation = Rotation3F64::try_from_mat(
-                rotation.matrix()
-            ).unwrap();
+            ))
+            .to_rotation_matrix();
+            let rotation = Rotation3F64::try_from_mat(rotation.matrix()).unwrap();
 
             let isometry = Isometry3F64::from_translation_and_rotation(translation, rotation);
 

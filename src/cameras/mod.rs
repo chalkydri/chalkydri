@@ -6,10 +6,10 @@
 mod mjpeg;
 
 use gstreamer::{
-    glib::{BoolError, WeakRef},
-    prelude::*,
     BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element, ElementFactory,
     FlowError, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure,
+    glib::{BoolError, WeakRef},
+    prelude::*,
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
@@ -18,18 +18,21 @@ use mjpeg::MjpegStream;
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
 use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc, time::Duration};
-use tokio::{sync::{mpsc, watch, Mutex, MutexGuard, RwLock}, task::LocalSet};
+use tokio::{
+    sync::{Mutex, MutexGuard, RwLock, mpsc, watch},
+    task::LocalSet,
+};
 use tracing::{Level, Span};
 
 #[cfg(feature = "rerun")]
 use crate::Rerun;
 use crate::{
+    Cfg, Nt,
     calibration::Calibrator,
     config::{self, CameraSettings, CfgFraction},
     error::Error,
     subsys::capriltags::CApriltagsDetector,
     subsystem::Subsystem,
-    Cfg, Nt,
 };
 
 #[derive(Clone)]

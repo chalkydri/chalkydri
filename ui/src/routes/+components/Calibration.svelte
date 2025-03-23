@@ -3,21 +3,16 @@
 	import { _loadConfig } from '../settings/+page';
 	import type { CalibrationStatus } from '$lib/calibration';
 	import { onMount } from 'svelte';
-	import {
-		calibrationIntrinsics,
-		calibrationStatus,
-		calibrationStep,
-		type Config
-	} from '$lib/api';
+	import { calibrationIntrinsics, calibrationStatus, calibrationStep, type Config } from '$lib/api';
 	import { config as config_ } from '$lib/index';
 	import CameraFeed from '../+components/CameraFeed.svelte';
 
-	let {
-		cam_name = $bindable(null),
-	}: { cam_name: string | null } = $props();
+	let { cam_name = $bindable(null) }: { cam_name: string | null } = $props();
 
 	let config: Config | null = $state(null);
-	config_.subscribe((val) => { config = val; });
+	config_.subscribe((val) => {
+		config = val;
+	});
 
 	let camera_mapping: { name: string; value: string }[] = $state([]);
 	$effect(() => {
@@ -72,14 +67,14 @@
 				more accurately calculate the proper parameters for each, so you can switch between
 				resolutions without recalibration!
 			</P>
-	
+
 			{#if calibrating}
 				<P size="lg" class="text-center mb-2">{calibrating_state}</P>
 				{#if status}
 					<Progressbar progress={(status.current_step / status.total_steps) * 100} color="blue" />
 				{/if}
 			{/if}
-	
+
 			<Button
 				class="mt-2"
 				color={calibrating ? 'red' : 'blue'}

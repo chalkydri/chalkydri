@@ -53,12 +53,9 @@ use re_sdk::{MemoryLimit, RecordingStream};
 use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
-use std::{
-    error::Error, net::Ipv4Addr, path::Path,
-    sync::Arc,
-};
+use std::{error::Error, net::Ipv4Addr, path::Path, sync::Arc};
 use tokio::sync::{RwLock, mpsc};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 // mimalloc is a very good general purpose allocator
 #[global_allocator]
@@ -165,9 +162,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let filter = EnvFilter::from_default_env();
     let layer = tracing_subscriber::fmt::layer().with_filter(filter);
-    tracing_subscriber::registry()
-        .with(layer)
-        .init();
+    tracing_subscriber::registry().with(layer).init();
 
     info!("starting up...");
 

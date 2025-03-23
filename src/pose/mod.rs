@@ -1,10 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
 use sophus_autodiff::{linalg::VecF64, prelude::*};
-use sophus_lie::{prelude::*, Isometry3F64, Rotation3F64};
-use tokio::sync::{mpsc, Mutex};
+use sophus_lie::{Isometry3F64, Rotation3F64, prelude::*};
+use tokio::sync::{Mutex, mpsc};
 
-use crate::{error::Error, Cfg, Nt};
+use crate::{Cfg, Nt, error::Error};
 
 /// Keeps pose transforms and ...
 #[derive(Clone)]

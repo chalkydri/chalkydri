@@ -69,34 +69,34 @@ async fn reconnector(
     loop {
         rx.recv().await;
         {
-        let mut sock_rd = sock_rd.write().await;
-        let mut sock_wr = sock_wr.write().await;
+            let mut sock_rd = sock_rd.write().await;
+            let mut sock_wr = sock_wr.write().await;
 
-        *sock_rd = None;
-        if let Some(sock_wr) = sock_wr.as_mut() {
-            sock_wr.close().await.unwrap();
-        }
-
-        // Repeatedly attempt to connect to the server
-        loop {
-            match tokio_tungstenite::connect_async(req.clone()).await {
-                Ok((sock, _)) => {
-                    let (sock_wr_, sock_rd_) = sock.split();
-
-                    {
-                        *sock_rd = Some(sock_rd_);
-                        *sock_wr = Some(sock_wr_);
-                    }
-
-                    info!("connected");
-                    break;
-                }
-                Err(err) => {
-                    error!("failed to connect: {err:?}");
-                }
+            *sock_rd = None;
+            if let Some(sock_wr) = sock_wr.as_mut() {
+                sock_wr.close().await.unwrap();
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+
+            // Repeatedly attempt to connect to the server
+            loop {
+                match tokio_tungstenite::connect_async(req.clone()).await {
+                    Ok((sock, _)) => {
+                        let (sock_wr_, sock_rd_) = sock.split();
+
+                        {
+                            *sock_rd = Some(sock_rd_);
+                            *sock_wr = Some(sock_wr_);
+                        }
+
+                        info!("connected");
+                        break;
+                    }
+                    Err(err) => {
+                        error!("failed to connect: {err:?}");
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
         }
 
         // Clear remaining trash
@@ -171,7 +171,9 @@ impl NtConn {
         let sock_rd_ = sock_rd.clone();
         let sock_wr_ = sock_wr.clone();
         tokio::spawn(async move {
-            reconnector(reconnect_rx, server, client_ident, sock_rd_, sock_wr_).await.unwrap();
+            reconnector(reconnect_rx, server, client_ident, sock_rd_, sock_wr_)
+                .await
+                .unwrap();
         });
 
         let server_topics = Arc::new(RwLock::new(HashMap::new()));

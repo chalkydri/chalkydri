@@ -7,7 +7,18 @@
 		type Config,
 		type VideoOrientation
 	} from '$lib/api';
-	import { Button, Card, Input, Label, Layout, Modal, P, Range, Select, Toggle } from 'flowbite-svelte';
+	import {
+		Button,
+		Card,
+		Input,
+		Label,
+		Layout,
+		Modal,
+		P,
+		Range,
+		Select,
+		Toggle
+	} from 'flowbite-svelte';
 	import { CheckIcon, PencilIcon, XIcon } from 'lucide-svelte';
 	import { onMount } from 'svelte';
 	import { derived, type Writable, writable } from 'svelte/store';
@@ -140,7 +151,12 @@
 			</div>
 
 			<div>
-				<Button color="blue" on:click={() => { calibrating = true; }}>Calibrate</Button>
+				<Button
+					color="blue"
+					on:click={() => {
+						calibrating = true;
+					}}>Calibrate</Button
+				>
 			</div>
 
 			{#if camera.subsystems}

@@ -32,9 +32,7 @@ impl Stream for MjpegStream {
                             ]
                             .concat(),
                         );
-                        bytes.extend_from_slice(
-                            frame
-                        );
+                        bytes.extend_from_slice(frame);
                     }
 
                     return Poll::Ready(Some(Ok(bytes.into())));
@@ -49,4 +47,3 @@ impl Stream for MjpegStream {
         }
     }
 }
-
