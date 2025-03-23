@@ -18,7 +18,7 @@ use mjpeg::MjpegStream;
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
 use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc, time::Duration};
-use tokio::sync::{mpsc, watch, Mutex, MutexGuard, RwLock};
+use tokio::{sync::{mpsc, watch, Mutex, MutexGuard, RwLock}, task::LocalSet};
 use tracing::{Level, Span};
 
 #[cfg(feature = "rerun")]

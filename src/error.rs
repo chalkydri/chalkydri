@@ -1,4 +1,4 @@
-use transforms::errors::TransformError;
+//use transforms::errors::TransformError;
 
 /// Chalkydri's error type
 #[derive(Debug)]
@@ -7,8 +7,8 @@ pub enum Error {
     FailedToReadConfig,
     FailedToMapBuffer,
     FailedToPullSample,
-    FailedToAddTransform(tokio::sync::mpsc::error::SendError<transforms::Transform>),
-    FailedToGetPose(TransformError),
+    //FailedToAddTransform(tokio::sync::mpsc::error::SendError<transforms::Transform>),
+    //FailedToGetPose(TransformError),
 }
 
 impl std::fmt::Display for Error {

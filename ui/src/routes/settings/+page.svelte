@@ -18,10 +18,14 @@
 	import { config, updateConfig, loadConfig } from '$lib/config';
 	import CameraFeed from '../+components/CameraFeed.svelte';
 	import { TrashIcon } from 'lucide-svelte';
+	import Calibration from '../+components/Calibration.svelte';
 
 	let cfg: Config | null = $state(null);
 	let saving = $state(false);
 	let managing_field_layouts = $state(false);
+
+	let calibrating = $state(false);
+	let calibrating_cam_name: string | null = $state(null);
 
 	async function save() {
 		saving = true;
@@ -149,6 +153,10 @@
 				</Card>
 			{/each}
 		{/if}
+	</Modal>
+
+	<Modal bind:open={calibrating} autoclose outsideclose>
+		<Calibration bind:cam_name={calibrating_cam_name} />
 	</Modal>
 {:else}
 	<Skeleton />

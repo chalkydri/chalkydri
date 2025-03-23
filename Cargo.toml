@@ -57,13 +57,13 @@ rustix = { version = "0.38.44", features = ["all-apis"] }
 futures-executor = "0.3.31"
 sysinfo = "0.33.1"
 libblur = "0.17.0"
-transforms = "0.5.1"
 nalgebra = { version = "0.33.2", default-features = false, features = ["matrixmultiply", "rayon"] }
 image = "0.25.5"
 tracing = { version = "0.1.41", features = ["log"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "tracing-log"] }
-nt_client = "0.3.0"
 turbojpeg = { version = "1.3.0", default-features = false, features = ["pkg-config"] }
+sophus_autodiff = { version = "0.14.0", features = ["simd"] }
+sophus_lie = { version = "0.14.0", features = ["simd"] }
 
 [build-dependencies]
 bindgen = { version = "*", default-features = false, features = ["runtime"] }

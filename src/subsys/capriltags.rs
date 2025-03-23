@@ -25,11 +25,10 @@ use re_types::{
     archetypes::{Boxes2D, Points2D},
     components::{PinholeProjection, PoseRotationQuat, Position2D, ViewCoordinates},
 };
+use sophus_autodiff::linalg::{MatF64, VecF64};
+use sophus_lie::{Isometry3F64, Rotation2F64, Rotation3F64};
 use std::time::Instant;
 use tokio::sync::watch;
-use transforms::Transform;
-use transforms::geometry::{Quaternion, Vector3};
-use transforms::time::Timestamp;
 
 use crate::Cfg;
 use crate::calibration::CalibratedModel;
@@ -44,6 +43,7 @@ pub struct CApriltagsDetector {
     model: CalibratedModel,
     name: String,
     pose_est: PoseEstimator,
+    layout: HashMap<usize, Isometry3F64>,
 }
 impl Subsystem for CApriltagsDetector {
     const NAME: &'static str = "capriltags";
@@ -101,14 +101,16 @@ impl Subsystem for CApriltagsDetector {
             .build()
             .unwrap();
 
-        let mut pose_est = PoseEstimator::new().unwrap();
-        layout.load(&mut pose_est).await.unwrap();
+        let mut pose_est = PoseEstimator::new().await.unwrap();
+        let layout = layout.load(&mut pose_est).await.unwrap();
+        pose_est.nt_loop().await;
 
         Ok(Self {
             model,
             det,
             name: cam_config.name,
             pose_est,
+            layout,
         })
     }
     async fn process(
@@ -168,48 +170,37 @@ impl Subsystem for CApriltagsDetector {
                                     let cam_rotation = pose.rotation().data().to_vec();
 
                                     // Convert the camera's translation and rotation matrices into proper Rust datatypes
-                                    let translation = Vector3::new(
+                                    let translation = VecF64::<3>::new(
                                         cam_translation[0],
                                         cam_translation[1],
                                         cam_translation[2],
                                     );
                                     let cam_rotation =
-                                        na::UnitQuaternion::from_rotation_matrix(&na::Rotation3::from_matrix(&na::Matrix3::new(
+                                        Rotation3F64::try_from_mat(MatF64::<3, 3>::new(
                                                 cam_rotation[0], cam_rotation[1], cam_rotation[2],
                                                 cam_rotation[3], cam_rotation[4], cam_rotation[5],
                                                 cam_rotation[6], cam_rotation[7], cam_rotation[8],
-                                        )));
-                                    let rotation = Quaternion {
-                                        w: cam_rotation.w,
-                                        x: cam_rotation.i,
-                                        y: cam_rotation.j,
-                                        z: cam_rotation.k,
-                                    };
-
-                                    let transform = Transform {
-                                        translation,
-                                        rotation,
-                                        timestamp: Timestamp::now(),
-                                        child: "robot".into(),
-                                        parent: format!("tag{}", det.id()),
-                                    };
+                                        )).unwrap();
 
                                     debug!(
                                         "detected tag id {}: tl={cam_translation:?} ro={cam_rotation:?}",
                                         det.id()
                                     );
 
-                                    self.pose_est.add_transform(transform).await.unwrap();
 
-                                    // Try to get the tag's pose from the field layout
-                                    //if let Some((tag_translation, tag_rotation)) =
-                                    //    self.layout.get(&(det.id() as u64))
-                                    //{
-                                    //    //let translation = *tag_translation * translation;
-                                    //    //let rotation = *tag_rotation * rotation;
+                                    let tag_est_pos = Isometry3F64::from_translation_and_rotation(translation, cam_rotation);
+                                    //Try to get the tag's pose from the field layout
+                                    if let Some(tag_field_pos) =
+                                        self.layout.get(&det.id())
+                                    {
+                                        //let translation = *tag_translation * translation;
+                                        //let rotation = *tag_rotation * rotation;
+                                        self.pose_est.add_transform(tag_est_pos, *tag_field_pos);
 
-                                    //    return Some((translation, rotation, det.decision_margin() as f64));
-                                    //}
+
+
+                                        //return Some((translation, rotation, det.decision_margin() as f64));
+                                    }
                                 }
                         }
 
@@ -248,7 +239,8 @@ pub struct AprilTagFieldLayout {
     pub field: Field,
 }
 impl AprilTagFieldLayout {
-    pub async fn load(&self, pose_est: &mut PoseEstimator) -> Result<(), Error> {
+    pub async fn load(&self, pose_est: &mut PoseEstimator) -> Result<HashMap<usize, Isometry3F64>, Error> {
+        let mut tags: HashMap<usize, Isometry3F64> = HashMap::new();
         for LayoutTag {
             id,
             pose:
@@ -259,26 +251,23 @@ impl AprilTagFieldLayout {
         } in self.tags.clone()
         {
             // Turn the field layout values into Rust datatypes
-            let translation = Vector3::new(translation.x, translation.y, translation.z);
-            let rotation = Quaternion {
-                w: quaternion.w,
-                x: quaternion.x,
-                y: quaternion.y,
-                z: quaternion.z,
-            };
+            let translation = VecF64::<3>::new(translation.x, translation.y, translation.z);
+            let rotation = na::UnitQuaternion::from_quaternion(na::Quaternion::new(
+                quaternion.x,
+                quaternion.y,
+                quaternion.z,
+                quaternion.w,
+            )).to_rotation_matrix();
+            let rotation = Rotation3F64::try_from_mat(
+                rotation.matrix()
+            ).unwrap();
 
-            let transform = Transform {
-                translation,
-                rotation,
-                parent: "field".into(),
-                child: format!("tag{id}"),
-                timestamp: Timestamp::zero(),
-            };
+            let isometry = Isometry3F64::from_translation_and_rotation(translation, rotation);
 
-            pose_est.add_transform(transform).await?;
+            tags.insert(id as usize, isometry);
         }
 
-        Ok(())
+        Ok(tags)
     }
 }
 

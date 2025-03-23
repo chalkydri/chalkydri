@@ -26,8 +26,6 @@ pub use error::{NtError, Result};
 
 use std::collections::{BTreeMap, HashMap};
 use std::marker::PhantomData;
-use std::net::IpAddr;
-use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -38,7 +36,7 @@ use messages::*;
 use futures_util::{SinkExt, StreamExt};
 use rmp::decode::Bytes;
 use tokio::net::TcpStream;
-use tokio::sync::{watch, RwLock, Semaphore};
+use tokio::sync::{watch, RwLock};
 use tokio::{
     sync::{mpsc, Mutex},
     task::AbortHandle,
@@ -52,23 +50,75 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 // I wanna keep my face on today
 
+async fn reconnector(
+    mut rx: mpsc::Receiver<()>,
+    server: String,
+    client_ident: String,
+    sock_rd: Arc<RwLock<Option<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>>,
+    sock_wr: Arc<RwLock<Option<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>,
+) -> Result<()> {
+    // Build the WebSocket URL and turn it into tungstenite's client req type
+    let mut req = format!("ws://{server}:5810/nt/{client_ident}").into_client_request()?;
+
+    // Add header as specified in WPILib's spec
+    req.headers_mut().append(
+        header::SEC_WEBSOCKET_PROTOCOL,
+        HeaderValue::from_static("v4.1.networktables.first.wpi.edu"),
+    );
+
+    loop {
+        rx.recv().await;
+        {
+        let mut sock_rd = sock_rd.write().await;
+        let mut sock_wr = sock_wr.write().await;
+
+        *sock_rd = None;
+        if let Some(sock_wr) = sock_wr.as_mut() {
+            sock_wr.close().await.unwrap();
+        }
+
+        // Repeatedly attempt to connect to the server
+        loop {
+            match tokio_tungstenite::connect_async(req.clone()).await {
+                Ok((sock, _)) => {
+                    let (sock_wr_, sock_rd_) = sock.split();
+
+                    {
+                        *sock_rd = Some(sock_rd_);
+                        *sock_wr = Some(sock_wr_);
+                    }
+
+                    info!("connected");
+                    break;
+                }
+                Err(err) => {
+                    error!("failed to connect: {err:?}");
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        }
+
+        // Clear remaining trash
+        while let Some(_) = rx.recv().await {}
+    }
+}
+
 /// A NetworkTables connection
 pub struct NtConn {
-    reconnect: Arc<Semaphore>,
+    reconnect_tx: mpsc::Sender<()>,
 
     /// Next sequential ID
     next_id: Arc<Mutex<i32>>,
+
+    /// Outgoing client-to-server message queue
+    c2s_tx: mpsc::UnboundedSender<Message>,
 
     /// Incoming request receiver event loop abort handle
     incoming_abort: Arc<RwLock<Option<AbortHandle>>>,
     /// Outgoing request sender event loop abort handle
     outgoing_abort: Arc<RwLock<Option<AbortHandle>>>,
 
-    /// Outgoing client-to-server message queue
-    c2s_tx: mpsc::UnboundedSender<Message>,
-
-    client_ident: Arc<RwLock<String>>,
-    server: Arc<RwLock<String>>,
     sock_rd: Arc<RwLock<Option<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>>,
     sock_wr: Arc<RwLock<Option<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>,
 
@@ -102,7 +152,10 @@ impl NtConn {
     ///     // ...
     /// }
     /// ```
-    pub async fn new(server: impl Into<IpAddr>, client_ident: impl Into<String>) -> Result<Self> {
+    pub async fn new(server: impl Into<String>, client_ident: impl Into<String>) -> Result<Self> {
+        let server = server.into();
+        let client_ident = client_ident.into();
+
         let client_server = Arc::new(RwLock::new(HashMap::new()));
         let server_client = Arc::new(RwLock::new(HashMap::new()));
         let sock_wr: Arc<
@@ -114,20 +167,26 @@ impl NtConn {
         // Setup channels for control
         let (c2s_tx, c2s_rx) = mpsc::unbounded_channel::<Message>();
 
+        let (reconnect_tx, reconnect_rx) = mpsc::channel::<()>(1);
+        let sock_rd_ = sock_rd.clone();
+        let sock_wr_ = sock_wr.clone();
+        tokio::spawn(async move {
+            reconnector(reconnect_rx, server, client_ident, sock_rd_, sock_wr_).await.unwrap();
+        });
+
         let server_topics = Arc::new(RwLock::new(HashMap::new()));
         let values = Arc::new(RwLock::new(HashMap::new()));
         let value_tx = Arc::new(RwLock::new(HashMap::new()));
 
         let conn = Self {
-            reconnect: Arc::new(Semaphore::const_new(1)),
+            reconnect_tx,
             next_id: Arc::new(Mutex::const_new(0)),
-            c2s_tx,
 
             client_server,
             server_client,
 
-            client_ident: Arc::new(RwLock::new(client_ident.into())),
-            server: Arc::new(RwLock::new(server.into().to_string())),
+            c2s_tx,
+
             sock_rd,
             sock_wr,
 
@@ -143,7 +202,7 @@ impl NtConn {
         conn.init_background_event_loops(c2s_rx).await;
         trace!("initialized background event loop...");
 
-        conn.connect().await?;
+        conn.reconnect_tx.send(()).await.unwrap();
 
         Ok(conn)
     }
@@ -175,15 +234,7 @@ impl NtConn {
                     }
 
                     if reconnect {
-                        match conn.reconnect.try_acquire() {
-                            Ok(_) => {
-                                while let Err(err) = conn.connect().await {
-                                    error!("failed to reconnect: {err:?}");
-                                    tokio::time::sleep(Duration::from_millis(20)).await;
-                                }
-                            }
-                            _ => {}
-                        }
+                        conn.reconnect_tx.send(()).await;
                         reconnect = false;
                     }
 
@@ -226,15 +277,7 @@ impl NtConn {
                     }
 
                     if reconnect {
-                        match conn.reconnect.try_acquire() {
-                            Ok(_) => {
-                                while let Err(err) = conn.connect().await {
-                                    error!("failed to reconnect: {err:?}");
-                                    tokio::time::sleep(Duration::from_millis(20)).await;
-                                }
-                            }
-                            _ => {}
-                        }
+                        conn.reconnect_tx.send(()).await;
                         reconnect = false;
                     }
 
@@ -321,52 +364,6 @@ impl NtConn {
                 return Err(NtError::NeedReconnect);
             }
             Err(err) => error!("error reading incoming message: {err:?}"),
-        }
-
-        Ok(())
-    }
-
-    /// Connect (or reconnect) to the NetworkTables server
-    async fn connect(&self) -> Result<()> {
-        // Get server and client_ident into something we can work with
-        let server = self.server.read().await.clone();
-        let client_ident = self.client_ident.read().await.clone();
-
-        // Build the WebSocket URL and turn it into tungstenite's client req type
-        let mut req = format!("ws://{server}:5810/nt/{client_ident}").into_client_request()?;
-
-        // Add header as specified in WPILib's spec
-        req.headers_mut().append(
-            header::SEC_WEBSOCKET_PROTOCOL,
-            HeaderValue::from_static("v4.1.networktables.first.wpi.edu"),
-        );
-
-        // Repeatedly attempt to connect to the server
-        loop {
-            match tokio_tungstenite::connect_async(req.clone()).await {
-                Ok((sock, _)) => {
-                    let (sock_wr, sock_rd) = sock.split();
-
-                    {
-                        let mut sock_rd_ = self.sock_rd.write().await;
-                        let mut sock_wr_ = self.sock_wr.write().await;
-                        if let Some(sock_wr) = sock_wr_.deref_mut() {
-                            sock_wr.close().await.unwrap();
-                        }
-                        *sock_rd_ = Some(sock_rd);
-                        *sock_wr_ = Some(sock_wr);
-                    }
-
-                    self.server_client.write().await.clear();
-                    self.client_server.write().await.clear();
-
-                    break;
-                }
-                Err(err) => {
-                    error!("failed to connect: {err:?}");
-                }
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         Ok(())
@@ -574,7 +571,7 @@ impl NtConn {
 impl Clone for NtConn {
     fn clone(&self) -> Self {
         Self {
-            reconnect: self.reconnect.clone(),
+            reconnect_tx: self.reconnect_tx.clone(),
             next_id: self.next_id.clone(),
 
             incoming_abort: self.incoming_abort.clone(),
@@ -582,8 +579,6 @@ impl Clone for NtConn {
 
             c2s_tx: self.c2s_tx.clone(),
 
-            client_ident: self.client_ident.clone(),
-            server: self.server.clone(),
             sock_wr: self.sock_wr.clone(),
             sock_rd: self.sock_rd.clone(),
 

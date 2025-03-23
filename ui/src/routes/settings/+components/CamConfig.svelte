@@ -7,15 +7,17 @@
 		type Config,
 		type VideoOrientation
 	} from '$lib/api';
-	import { Button, Card, Input, Label, Layout, P, Range, Select, Toggle } from 'flowbite-svelte';
+	import { Button, Card, Input, Label, Layout, Modal, P, Range, Select, Toggle } from 'flowbite-svelte';
 	import { CheckIcon, PencilIcon, XIcon } from 'lucide-svelte';
 	import { onMount } from 'svelte';
 	import { derived, type Writable, writable } from 'svelte/store';
+	import Calibration from '../../+components/Calibration.svelte';
 
 	let {
 		disabled = $bindable(false),
 		camera = $bindable(null)
 	}: { disabled: boolean; camera: Camera | null } = $props();
+	let calibrating = $state(false);
 	var camera_settings: { name: string; value: CameraSettings }[] = $state([]);
 	let editing_name: string | null = $state(null);
 	let field_layout_options: { name: string; value: string }[] | null = $state(null);
@@ -137,7 +139,9 @@
 				/>
 			</div>
 
-			<div></div>
+			<div>
+				<Button color="blue" on:click={() => { calibrating = true; }}>Calibrate</Button>
+			</div>
 
 			{#if camera.subsystems}
 				<Card padding="lg" class="mt-2 col-span-2">
@@ -169,3 +173,9 @@
 		</Layout>
 	{/if}
 </Card>
+
+<Modal bind:open={calibrating}>
+	{#if camera}
+		<Calibration bind:cam_name={camera.name} />
+	{/if}
+</Modal>

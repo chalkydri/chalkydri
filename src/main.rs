@@ -54,10 +54,10 @@ use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
 use std::{
-    error::Error, fs::File, io::Write, net::Ipv4Addr, os::unix::process::CommandExt, path::Path,
-    process::Command, sync::Arc,
+    error::Error, net::Ipv4Addr, path::Path,
+    sync::Arc,
 };
-use tokio::sync::{RwLock, mpsc, oneshot};
+use tokio::sync::{RwLock, mpsc};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 // mimalloc is a very good general purpose allocator
@@ -133,7 +133,7 @@ static Nt: Lazy<NtConn> = Lazy::new(|| {
 
         let nt: NtConn;
 
-        match NtConn::new(roborio_ip, dev_name.clone()).await {
+        match NtConn::new(Ipv4Addr::from(roborio_ip).to_string(), dev_name.clone()).await {
             Ok(conn) => {
                 nt = conn;
             }
@@ -185,8 +185,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::select!(
         _ = api => {},
         _ = tokio::signal::ctrl_c() => {},
-        _ = rx.recv() => {
-        },
+        _ = rx.recv() => {},
     );
 
     Cfg.read().await.save("chalkydri.toml").await.unwrap();
