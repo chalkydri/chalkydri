@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+          sudo apt-get install -y pkg-config libssl-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libturbojpeg0-dev
 
       - name: Generate build info
         id: build_info
