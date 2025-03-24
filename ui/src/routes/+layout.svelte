@@ -82,7 +82,7 @@
 						</svelte:fragment>
 					</SidebarItem>
 					<SidebarGroup class="ml-3">
-						<SidebarItem label="Front Right" href="/camera">
+						<SidebarItem label="Front Right" href="/camera/Front Right">
 							<svelte:fragment slot="icon">
 								<CameraIcon />
 							</svelte:fragment>

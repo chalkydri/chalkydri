@@ -17,26 +17,26 @@
 	"dependencies": {
 		"@hey-api/client-fetch": "^0.8.3",
 		"@types/ace": "^0.0.52",
-		"ace-code": "^1.39.0",
-		"ace-linters": "^1.5.0",
+		"ace-code": "^1.39.1",
+		"ace-linters": "^1.5.1",
 		"ace-python-ruff-linter": "^1.1.0",
 		"flowbite": "^3.1.2",
 		"flowbite-svelte": "^0.47.4",
-		"flowbite-svelte-icons": "^2.0.2",
+		"flowbite-svelte-icons": "^2.1.0",
 		"lucide-svelte": "^0.477.0"
 	},
 	"devDependencies": {
-		"@hey-api/openapi-ts": "^0.64.10",
+		"@hey-api/openapi-ts": "^0.64.13",
 		"@sveltejs/adapter-static": "^3.0.8",
-		"@sveltejs/kit": "^2.19.0",
+		"@sveltejs/kit": "^2.20.2",
 		"@sveltejs/vite-plugin-svelte": "^5.0.3",
-		"@tailwindcss/vite": "^4.0.13",
+		"@tailwindcss/vite": "^4.0.15",
 		"prettier": "^3.5.3",
 		"prettier-plugin-svelte": "^3.3.3",
-		"svelte": "^5.0.0",
-		"svelte-check": "^4.0.0",
-		"tailwindcss": "^4.0.0",
-		"typescript": "^5.0.0",
-		"vite": "^6.0.0"
+		"svelte": "^5.25.3",
+		"svelte-check": "^4.1.5",
+		"tailwindcss": "^4.0.15",
+		"typescript": "^5.8.2",
+		"vite": "^6.2.2"
 	}
 }
