@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libturbojpeg0-dev
+          sudo apt-get install -y pkg-config libssl-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libjpeg-turbo-dev
 
       - name: Generate build info
         id: build_info
@@ -46,7 +46,7 @@ jobs:
           bun run build
           cd ..
           
-          cargo build --release
+          cargo build --release --features build-jpeg-turbo
           # Create a directory for the artifacts
           mkdir -p pi5-build
           # Copy the compiled binary and any needed files
