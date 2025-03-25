@@ -27,8 +27,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          wget https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-official_3.1.0_amd64.deb
-          sudo apt-get install -y pkg-config libssl-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev ./libjpeg-turbo-official_3.1.0_amd64.deb
+          wget https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-official_3.1.0_arm64.deb
+          sudo apt-get install -y pkg-config libssl-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev ./libjpeg-turbo-official_3.1.0_arm64.deb
 
       - name: Generate build info
         id: build_info
