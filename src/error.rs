@@ -9,6 +9,11 @@ pub enum Error {
     FailedToPullSample,
     //FailedToAddTransform(tokio::sync::mpsc::error::SendError<transforms::Transform>),
     //FailedToGetPose(TransformError),
+    NoFieldLayouts,
+    FieldLayoutNotSelected,
+    FieldLayoutDoesNotExist,
+
+    InvalidTag,
 }
 
 impl std::fmt::Display for Error {

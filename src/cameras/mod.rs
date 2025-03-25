@@ -6,10 +6,7 @@
 mod mjpeg;
 
 use gstreamer::{
-    BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element, ElementFactory,
-    FlowError, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure,
-    glib::{BoolError, WeakRef},
-    prelude::*,
+    glib::{BoolError, WeakRef}, prelude::*, Buffer, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element, ElementFactory, FlowError, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
@@ -27,12 +24,7 @@ use tracing::{Level, Span};
 #[cfg(feature = "rerun")]
 use crate::Rerun;
 use crate::{
-    Cfg, Nt,
-    calibration::Calibrator,
-    config::{self, CameraSettings, CfgFraction},
-    error::Error,
-    subsys::capriltags::CApriltagsDetector,
-    subsystem::Subsystem,
+    calibration::Calibrator, config::{self, CameraSettings, CfgFraction}, error::Error, subsystems::{capriltags::CApriltagsDetector, SubsysManager, Subsystem}, Cfg, Nt
 };
 
 #[derive(Clone)]
@@ -52,6 +44,7 @@ pub struct CameraManager {
     calibrators: Arc<Mutex<HashMap<String, Calibrator>>>,
     mjpeg_streams: Arc<Mutex<HashMap<String, MjpegStream>>>,
     restart_tx: mpsc::Sender<()>,
+    subsys_man: SubsysManager,
 }
 impl CameraManager {
     /// Initialize a camera manager
@@ -221,14 +214,12 @@ impl CameraManager {
                                 debug!("dropped lock");
                             }
 
-                            if cam_config.calib.is_some() {
-                                Self::add_subsys::<CApriltagsDetector>(
-                                    &pipeline,
-                                    &tee,
-                                    cam_config.clone(),
-                                    cam_config.subsystems.capriltags.enabled,
-                                );
-                            }
+                            Self::add_subsys::<CApriltagsDetector>(
+                                &pipeline,
+                                &tee,
+                                cam_config.clone(),
+                                cam_config.subsystems.capriltags.enabled,
+                            );
 
                             tokio::task::block_in_place(|| pipelines.blocking_write())
                                 .insert(id, pipeline);
@@ -279,12 +270,15 @@ impl CameraManager {
             bus.set_sync_handler(|_, _| BusSyncReply::Pass);
         }
 
+        let subsys_man = SubsysManager::new().await.unwrap();
+
         Self {
             dev_prov,
             pipelines,
             calibrators,
             mjpeg_streams,
             restart_tx,
+            subsys_man,
         }
     }
 
@@ -439,7 +433,7 @@ impl CameraManager {
         cam: &Element,
         cam_config: config::Camera,
         enabled: bool,
-    ) {
+    ) -> watch::Receiver<Option<Vec<u8>>> {
         let span = span!(Level::INFO, "subsys", subsystem = S::NAME);
         let _enter = span.enter();
 
@@ -479,7 +473,8 @@ impl CameraManager {
                 .new_sample(move |_| match appsink_.pull_sample() {
                     Ok(sample) => {
                         let buf = sample.buffer().unwrap();
-                        if let Err(err) = tx.send(Some(buf.to_owned())) {
+                        let buf = buf.to_owned().into_mapped_buffer_readable().unwrap().to_vec();
+                        if let Err(err) = tx.send(Some(buf)) {
                             error!("failed to send frame to subsys appsink: {err:?}");
                         }
 
@@ -496,17 +491,19 @@ impl CameraManager {
 
         debug!("linked subsys junk");
 
-        let cam_config = cam_config.clone();
-        std::thread::spawn(move || {
-            debug!("capriltags worker thread started");
-            futures_executor::block_on(async move {
-                debug!("initializing subsystem...");
-                let mut subsys = S::init(cam_config).await.unwrap();
+        //let cam_config = cam_config.clone();
+        //std::thread::spawn(move || {
+        //    debug!("capriltags worker thread started");
+        //    futures_executor::block_on(async move {
+        //        debug!("initializing subsystem...");
+        //        let mut subsys = S::init(cam_config).await.unwrap();
 
-                debug!("starting subsystem...");
-                subsys.process(Nt.clone(), rx).await.unwrap();
-            });
-        });
+        //        debug!("starting subsystem...");
+        //        subsys.process(Nt.clone(), rx).await.unwrap();
+        //    });
+        //});
+
+        rx
     }
 
     /// Add [Calibrator] to pipeline

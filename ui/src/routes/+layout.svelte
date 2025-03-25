@@ -20,7 +20,7 @@
 		SidebarWrapper,
 		Toast
 	} from 'flowbite-svelte';
-	import { CameraIcon, HomeIcon, PencilRulerIcon, SettingsIcon } from 'lucide-svelte';
+	import { CameraIcon, Hammer, HammerIcon, HomeIcon, PaintRollerIcon, PencilRulerIcon, SettingsIcon } from 'lucide-svelte';
 
 	let hide_sidebar = $state(false);
 	let connected = $state(false);
@@ -73,7 +73,7 @@
 					</SidebarItem>
 					<SidebarItem label="Custom code" href="/custom">
 						<svelte:fragment slot="icon">
-							<PencilRulerIcon />
+							<PaintRollerIcon />
 						</svelte:fragment>
 					</SidebarItem>
 					<SidebarItem label="Settings" href="/settings">
@@ -88,6 +88,11 @@
 							</svelte:fragment>
 						</SidebarItem>
 					</SidebarGroup>
+					<SidebarItem label="Tools" href="/tools">
+						<svelte:fragment slot="icon">
+							<PencilRulerIcon />
+						</svelte:fragment>
+					</SidebarItem>
 				</SidebarGroup>
 			</SidebarWrapper>
 		</Sidebar>

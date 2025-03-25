@@ -5,14 +5,15 @@ import { onMount } from 'svelte';
 
 const config: Writable<Config> = writable();
 //onMount(async () => {
-setInterval(async function () {
+async function loadConfig() {
 	try {
 		let loaded_config = (await configuration()).data;
 		if (loaded_config) {
 			config.set(loaded_config);
 		}
 	} catch (e) {}
-}, Infinity);
+}
+loadConfig();
 //});
 
 const connected: Writable<boolean> = writable();

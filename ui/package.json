@@ -16,6 +16,7 @@
 	},
 	"dependencies": {
 		"@hey-api/client-fetch": "^0.8.3",
+		"@lucide/lab": "^0.1.2",
 		"@types/ace": "^0.0.52",
 		"ace-code": "^1.39.1",
 		"ace-linters": "^1.5.1",

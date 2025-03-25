@@ -6,7 +6,17 @@ use tokio::sync::watch;
 
 use crate::config;
 
-//pub type Buffer = Arc<Vec<u8>>;
+mod manager;
+#[cfg(feature = "apriltags")]
+pub mod apriltags;
+#[cfg(feature = "capriltags")]
+pub mod capriltags;
+#[cfg(feature = "ml")]
+pub mod ml;
+#[cfg(feature = "python")]
+pub mod python;
+
+pub use manager::SubsysManager;
 
 /// A processing subsystem
 ///
@@ -26,7 +36,7 @@ pub trait Subsystem: Sized {
     type Error: Debug + Send + 'static;
 
     /// Initialize the subsystem
-    async fn init(cam_config: config::Camera) -> Result<Self, Self::Error>;
+    async fn init() -> Result<Self, Self::Error>;
 
     /// Initialize the subsystem's preprocessing pipeline chunk
     fn preproc(
@@ -36,22 +46,24 @@ pub trait Subsystem: Sized {
 
     /// Process a frame
     async fn process(
-        &mut self,
+        &self,
+        manager: SubsysManager,
         nt: NtConn,
-        rx: watch::Receiver<Option<Buffer>>,
+        cam_config: config::Camera,
+        rx: watch::Receiver<Option<Vec<u8>>>,
     ) -> Result<Self::Output, Self::Error>;
 }
 
-pub async fn frame_proc_loop(
-    mut rx: watch::Receiver<Option<Buffer>>,
-    mut func: impl AsyncFnMut(Buffer),
+pub async fn frame_proc_loop<F: AsyncFnMut(Vec<u8>) + Sync + Send + 'static>(
+    mut rx: watch::Receiver<Option<Vec<u8>>>,
+    mut func: F,
 ) {
     loop {
         'inner: loop {
             match rx.changed().await {
                 Ok(()) => match rx.borrow_and_update().clone() {
                     Some(frame) => {
-                        func(frame).await;
+                        futures_executor::block_on(async { func(frame).await });
                     }
                     None => {
                         warn!("waiting on first frame...");

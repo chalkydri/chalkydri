@@ -1,4 +1,4 @@
-use crate::{error::Error, subsys::capriltags::AprilTagFieldLayout};
+use crate::{error::Error, pose::field_layout::AprilTagFieldLayout};
 use std::{
     collections::HashMap,
     fs::File,
@@ -35,6 +35,8 @@ def_cfg! {
         rerun: Option<Rerun>,
         cameras: Option<Vec<Camera>>,
         device_name: Option<String>,
+
+        field_layout: Option<String>,
         field_layouts: Option<HashMap<String, AprilTagFieldLayout>>,
     }
     Rerun {
@@ -51,6 +53,7 @@ def_cfg! {
         auto_exposure: bool,
         manual_exposure: Option<u32>,
         orientation: VideoOrientation,
+        cam_offsets: CameraOffsets,
     }
     CameraSettings {
         width: u32,
@@ -62,6 +65,15 @@ def_cfg! {
         num: u32,
         den: u32,
     }
+    CameraOffsets {
+        translation: CameraOffsetDimensions,
+        rotation: CameraOffsetDimensions,
+    }
+    CameraOffsetDimensions {
+        x: f64,
+        y: f64,
+        z: f64,
+    }
     Subsystems {
         capriltags: CAprilTagsSubsys,
         ml: MlSubsys,
@@ -69,7 +81,6 @@ def_cfg! {
     CAprilTagsSubsys {
         enabled: bool,
         gamma: Option<f64>,
-        field_layout: Option<String>,
         max_frame_rate: u8,
     }
     MlSubsys {
@@ -113,7 +124,6 @@ impl Default for Camera {
             subsystems: Subsystems {
                 capriltags: CAprilTagsSubsys {
                     enabled: false,
-                    field_layout: None,
                     gamma: None,
                     max_frame_rate: 40,
                 },
@@ -121,6 +131,18 @@ impl Default for Camera {
             },
             calib: None,
             orientation: VideoOrientation::None,
+            cam_offsets: CameraOffsets {
+                translation: CameraOffsetDimensions {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                rotation: CameraOffsetDimensions {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+            },
         }
     }
 }

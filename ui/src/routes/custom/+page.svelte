@@ -12,7 +12,7 @@
 
 	import { LanguageProvider } from 'ace-linters';
 
-	import { Button, Card, Input, P } from 'flowbite-svelte';
+	import { Button, Card, Checkbox, Input, P } from 'flowbite-svelte';
 	import { onMount } from 'svelte';
 	import type { Editor, EditSession } from 'ace-code';
 	import { CheckIcon, PencilIcon, PlusIcon, TrashIcon, XIcon } from 'lucide-svelte';
@@ -75,7 +75,8 @@
 					<XIcon size="14pt" />
 				</Button>
 			{:else}
-				<P size="lg" class="mr-auto">My subsys</P>
+				<Checkbox class="pr-2" />
+				<P size="lg" class="mr-auto hover:cursor-pointer" onclick={() => { alert(1); }}>My subsys</P>
 				<Button
 					size="xs"
 					color="blue"

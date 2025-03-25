@@ -36,8 +36,7 @@ mod config;
 mod error;
 //mod logger;
 mod pose;
-mod subsys;
-mod subsystem;
+mod subsystems;
 mod utils;
 
 #[cfg(feature = "web")]
@@ -63,7 +62,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 use utils::gen_team_ip;
 
-use subsystem::Subsystem;
+use subsystems::Subsystem;
 
 #[allow(non_upper_case_globals)]
 static Cfg: Lazy<Arc<RwLock<Config>>> = Lazy::new(|| {
