@@ -77,6 +77,7 @@ def_cfg! {
     Subsystems {
         capriltags: CAprilTagsSubsys,
         ml: MlSubsys,
+        custom: Vec<CustomSubsys>,
     }
     CAprilTagsSubsys {
         enabled: bool,
@@ -128,6 +129,7 @@ impl Default for Camera {
                     max_frame_rate: 40,
                 },
                 ml: MlSubsys { enabled: false },
+                custom: Vec::new(),
             },
             calib: None,
             orientation: VideoOrientation::None,

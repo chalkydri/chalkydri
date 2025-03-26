@@ -6,7 +6,10 @@
 mod mjpeg;
 
 use gstreamer::{
-    glib::{BoolError, WeakRef}, prelude::*, Buffer, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element, ElementFactory, FlowError, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure
+    Buffer, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element,
+    ElementFactory, FlowError, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure,
+    glib::{BoolError, WeakRef},
+    prelude::*,
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
@@ -24,7 +27,11 @@ use tracing::{Level, Span};
 #[cfg(feature = "rerun")]
 use crate::Rerun;
 use crate::{
-    calibration::Calibrator, config::{self, CameraSettings, CfgFraction}, error::Error, subsystems::{capriltags::CApriltagsDetector, SubsysManager, Subsystem}, Cfg, Nt
+    Cfg, Nt,
+    calibration::Calibrator,
+    config::{self, CameraSettings, CfgFraction},
+    error::Error,
+    subsystems::{SubsysManager, Subsystem},
 };
 
 #[derive(Clone)]
@@ -68,6 +75,8 @@ impl CameraManager {
         let mjpeg_streams: Arc<Mutex<HashMap<String, MjpegStream>>> =
             Arc::new(Mutex::new(HashMap::new()));
 
+        let subsys_man = SubsysManager::new().await.unwrap();
+
         // Create a device monitor to watch for new devices
         let dev_prov = DeviceProviderFactory::find("v4l2deviceprovider")
             .unwrap()
@@ -81,6 +90,7 @@ impl CameraManager {
         let calibrators_ = calibrators.clone();
         let mjpeg_streams_ = mjpeg_streams.clone();
         let pipelines_ = pipelines.clone();
+        let manager = subsys_man.clone();
         bus.set_sync_handler(move |_, msg| {
             let calibrators = &calibrators_;
             let mjpeg_streams = &mjpeg_streams_;
@@ -214,12 +224,7 @@ impl CameraManager {
                                 debug!("dropped lock");
                             }
 
-                            Self::add_subsys::<CApriltagsDetector>(
-                                &pipeline,
-                                &tee,
-                                cam_config.clone(),
-                                cam_config.subsystems.capriltags.enabled,
-                            );
+                            manager.spawn(cam_config.clone(), &pipeline, &tee);
 
                             tokio::task::block_in_place(|| pipelines.blocking_write())
                                 .insert(id, pipeline);
@@ -269,8 +274,6 @@ impl CameraManager {
             // Hook up event handler for the pipeline
             bus.set_sync_handler(|_, _| BusSyncReply::Pass);
         }
-
-        let subsys_man = SubsysManager::new().await.unwrap();
 
         Self {
             dev_prov,
@@ -473,7 +476,11 @@ impl CameraManager {
                 .new_sample(move |_| match appsink_.pull_sample() {
                     Ok(sample) => {
                         let buf = sample.buffer().unwrap();
-                        let buf = buf.to_owned().into_mapped_buffer_readable().unwrap().to_vec();
+                        let buf = buf
+                            .to_owned()
+                            .into_mapped_buffer_readable()
+                            .unwrap()
+                            .to_vec();
                         if let Err(err) = tx.send(Some(buf)) {
                             error!("failed to send frame to subsys appsink: {err:?}");
                         }

@@ -2,8 +2,8 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use field_layout::{AprilTagFieldLayout, Field};
 use sophus_autodiff::{linalg::VecF64, prelude::*};
-use sophus_lie::{prelude::*, HasAverage, Isometry3F64, Rotation3F64};
-use tokio::sync::{mpsc, Mutex, RwLock};
+use sophus_lie::{HasAverage, Isometry3F64, Rotation3F64, prelude::*};
+use tokio::sync::{Mutex, RwLock, mpsc};
 
 use crate::{Cfg, Nt, error::Error};
 
@@ -89,7 +89,7 @@ impl PoseEstimator {
                 //let cam_fcs_abs_y = cam_fcs_abs.translation().y;
                 //let cam_fcs_abs_z = cam_fcs_abs.translation().z;
 
-                //let robot_angle = cam_fcs_abs.rotation() + 
+                //let robot_angle = cam_fcs_abs.rotation() +
 
                 //
                 self.poses_tx.send(cam_fcs_abs).unwrap();
@@ -164,7 +164,8 @@ impl PoseEstimator {
                     pose.translation().x,
                     pose.translation().y,
                     pose.translation().z,
-                ]).await;
+                ])
+                .await;
                 let rot = pose.rotation().matrix().as_slice().to_vec();
                 r.set(rot).await;
 

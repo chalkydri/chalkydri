@@ -6,11 +6,11 @@ use tokio::sync::watch;
 
 use crate::config;
 
-mod manager;
 #[cfg(feature = "apriltags")]
 pub mod apriltags;
 #[cfg(feature = "capriltags")]
 pub mod capriltags;
+mod manager;
 #[cfg(feature = "ml")]
 pub mod ml;
 #[cfg(feature = "python")]

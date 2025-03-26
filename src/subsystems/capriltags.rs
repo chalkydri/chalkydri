@@ -29,12 +29,12 @@ use re_types::{
 use sophus_autodiff::linalg::{MatF64, VecF64};
 use sophus_lie::{Isometry3F64, Rotation3F64};
 use std::time::Instant;
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{Mutex, watch};
 
-use crate::{Cfg, Nt};
 use crate::calibration::CalibratedModel;
 use crate::error::Error;
 use crate::pose::PoseEstimator;
+use crate::{Cfg, Nt};
 use crate::{Subsystem, config, subsystems::frame_proc_loop};
 
 use super::SubsysManager;
@@ -118,84 +118,102 @@ impl Subsystem for CApriltagsDetector {
         frame_proc_loop(rx, async move |buf| {
             let proc_st_time = Instant::now();
 
-                debug!("loading image...");
-                let settings = cam_config.settings.clone().unwrap();
-                match unsafe { Image::from_luma8(settings.width as _, settings.height as _, buf.as_ptr() as *mut _) } {
-                    Ok(img) => {
-                        let dets = tokio::task::block_in_place(|| { det.blocking_lock() }).detect(&img);
+            debug!("loading image...");
+            let settings = cam_config.settings.clone().unwrap();
+            match unsafe {
+                Image::from_luma8(
+                    settings.width as _,
+                    settings.height as _,
+                    buf.as_ptr() as *mut _,
+                )
+            } {
+                Ok(img) => {
+                    let dets = tokio::task::block_in_place(|| det.blocking_lock()).detect(&img);
 
-                        for det in &dets {
-                                // Extract camera calibration values from the [CalibratedModel]
-                                let OpenCVModel5 { fx, fy, cx, cy, .. } =
-                                    if let GenericModel::OpenCVModel5(model) = model.inner_model() {
-                                        model
-                                    } else {
-                                        panic!("camera model type not supported yet");
-                                    };
+                    for det in &dets {
+                        // Extract camera calibration values from the [CalibratedModel]
+                        let OpenCVModel5 { fx, fy, cx, cy, .. } =
+                            if let GenericModel::OpenCVModel5(model) = model.inner_model() {
+                                model
+                            } else {
+                                panic!("camera model type not supported yet");
+                            };
 
-                                // Estimate tag pose with the camera calibration values
-                                if let Some(pose) = det.estimate_tag_pose(&TagParams {
-                                    fx,
-                                    fy,
-                                    cx,
-                                    cy,
-                                    tagsize: TAG_SIZE,
-                                }) {
-                                    // Extract the camera's translation and rotation matrices from the [Pose]
-                                    let cam_translation = pose.translation().data().to_vec();
-                                    let cam_rotation = pose.rotation().data().to_vec();
+                        // Estimate tag pose with the camera calibration values
+                        if let Some(pose) = det.estimate_tag_pose(&TagParams {
+                            fx,
+                            fy,
+                            cx,
+                            cy,
+                            tagsize: TAG_SIZE,
+                        }) {
+                            // Extract the camera's translation and rotation matrices from the [Pose]
+                            let cam_translation = pose.translation().data().to_vec();
+                            let cam_rotation = pose.rotation().data().to_vec();
 
-                                    // Convert the camera's translation and rotation matrices into proper Rust datatypes
-                                    let translation = VecF64::<3>::new(
-                                        cam_translation[0],
-                                        cam_translation[1],
-                                        cam_translation[2],
-                                    );
-                                    let cam_rotation =
-                                        Rotation3F64::try_from_mat(MatF64::<3, 3>::new(
-                                                cam_rotation[0], cam_rotation[1], cam_rotation[2],
-                                                cam_rotation[3], cam_rotation[4], cam_rotation[5],
-                                                cam_rotation[6], cam_rotation[7], cam_rotation[8],
-                                        )).unwrap();
+                            // Convert the camera's translation and rotation matrices into proper Rust datatypes
+                            let translation = VecF64::<3>::new(
+                                cam_translation[0],
+                                cam_translation[1],
+                                cam_translation[2],
+                            );
+                            let cam_rotation = Rotation3F64::try_from_mat(MatF64::<3, 3>::new(
+                                cam_rotation[0],
+                                cam_rotation[1],
+                                cam_rotation[2],
+                                cam_rotation[3],
+                                cam_rotation[4],
+                                cam_rotation[5],
+                                cam_rotation[6],
+                                cam_rotation[7],
+                                cam_rotation[8],
+                            ))
+                            .unwrap();
 
-                                    debug!(
-                                        "detected tag id {}: tl={cam_translation:?} ro={cam_rotation:?}",
-                                        det.id()
-                                    );
+                            debug!(
+                                "detected tag id {}: tl={cam_translation:?} ro={cam_rotation:?}",
+                                det.id()
+                            );
 
+                            let tag_est_pos = Isometry3F64::from_translation_and_rotation(
+                                translation,
+                                cam_rotation,
+                            );
+                            //Try to get the tag's pose from the field layout
+                            //let translation = *tag_translation * translation;
+                            //let rotation = *tag_rotation * rotation;
+                            futures_executor::block_on(
+                                manager
+                                    .pose_est
+                                    .add_transform_from_tag(tag_est_pos, det.id()),
+                            )
+                            .unwrap();
 
-                                    let tag_est_pos = Isometry3F64::from_translation_and_rotation(translation, cam_rotation);
-                                    //Try to get the tag's pose from the field layout
-                                        //let translation = *tag_translation * translation;
-                                        //let rotation = *tag_rotation * rotation;
-                                    futures_executor::block_on(manager.pose_est.add_transform_from_tag(tag_est_pos, det.id())).unwrap();
-
-                                        //return Some((translation, rotation, det.decision_margin() as f64));
-                                }
-                        }
-
-
-                        if !dets.is_empty() {
-                            futures_executor::block_on(async { 
-                                tag_detected.set(true).await;
-
-                                delay.set(proc_st_time.elapsed().as_millis_f64()).await;
-                            });
-                        } else {
-                            futures_executor::block_on(async { 
-                                tag_detected.set(false).await;
-                            });
-
-                            debug!("no tag detected");
+                            //return Some((translation, rotation, det.decision_margin() as f64));
                         }
                     }
-                    Err(err) => {
-                        futures_executor::block_on(async { 
+
+                    if !dets.is_empty() {
+                        futures_executor::block_on(async {
+                            tag_detected.set(true).await;
+
+                            delay.set(proc_st_time.elapsed().as_millis_f64()).await;
+                        });
+                    } else {
+                        futures_executor::block_on(async {
                             tag_detected.set(false).await;
                         });
-                        error!("failed to convert image to C apriltags type: {err:?}");
+
+                        debug!("no tag detected");
                     }
                 }
+                Err(err) => {
+                    futures_executor::block_on(async {
+                        tag_detected.set(false).await;
+                    });
+                    error!("failed to convert image to C apriltags type: {err:?}");
+                }
+            }
         })
         .await;
 
@@ -204,4 +222,3 @@ impl Subsystem for CApriltagsDetector {
         Ok(())
     }
 }
-
