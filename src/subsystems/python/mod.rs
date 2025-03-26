@@ -46,16 +46,22 @@ impl Subsystem for PythonSubsys {
 
             for camera in futures_executor::block_on(Cfg.read()).cameras.clone().unwrap() {
                 for subsys in camera.subsystems.custom {
+                    // Add a null terminator to the end of all of these things
                     let code = [subsys.code.as_bytes(), &[0u8]].concat();
                     let file_name = [b"custom_code.py".as_slice(), &[0u8]].concat();
                     let module_name = [b"custom_code".as_slice(), &[0u8]].concat();
+
+                    // Convert them all to CStrs
                     let code = CStr::from_bytes_with_nul(&code).unwrap();
                     let file_name = CStr::from_bytes_with_nul(&file_name).unwrap();
                     let module_name = CStr::from_bytes_with_nul(&module_name).unwrap();
 
+                    // Load the code in
                     let module = PyModule::from_code(py, code, file_name, module_name).unwrap();
+                    // Unbind the module from Python's GIL
                     let module = module.unbind();
 
+                    // Save It for Later
                     modules.push(module);
                 }
             }
@@ -66,28 +72,28 @@ impl Subsystem for PythonSubsys {
                     let topics = Arc::new(RwLock::new(HashMap::<String, NtTopic<f64>>::new()));
                     frame_proc_loop(rx, async move |buf| {
                         if let Some(settings) = &cam_config.settings {
-                            Python::with_gil(|py| -> PyResult<()> {
+                            let py_ret = Python::with_gil(|py| -> PyResult<()> {
                                 let arr = ndarray::Array::from_shape_vec(
                                     (settings.height as usize, settings.width as usize, 3usize),
                                     buf,
                                 )
-                                .unwrap();
+                                .expect("something is really braken");
                                 let nparr = numpy::PyArray::from_array(py, &arr);
 
                                 for module in &modules {
                                     let ret: HashMap<String, f64> = module
-                                        .getattr(py, "run")
-                                        .unwrap()
-                                        .call1(py, (nparr.clone(),))
-                                        .unwrap()
-                                        .extract(py)
-                                        .unwrap();
+                                        .getattr(py, "run")?
+                                        .call1(py, (nparr.clone(),))?
+                                        .extract(py)?;
+
                                     for (k, v) in ret {
                                         let (k, v) = (k.clone(), v.clone());
                                         let topics = topics.clone();
                                         handle_.spawn(async move {
                                             let topic_name = format!("/chalkydri/subsystems/{k}");
+
                                             let mut topics = topics.write().await;
+
                                             if let Some(topic) = topics.get_mut(&k) {
                                                 topic.set(v).await.unwrap();
                                             } else {
@@ -95,13 +101,18 @@ impl Subsystem for PythonSubsys {
                                                 topic.set(v).await.unwrap();
                                                 topics.insert(topic_name, topic);
                                             }
+
                                             drop(topics);
                                         });
                                     }
                                 }
 
                                 Ok(())
-                            }).unwrap();
+                            });
+
+                            if let Err(err) = py_ret {
+                                error!("{err}");
+                            }
                         }
                     }).await;
                 });
