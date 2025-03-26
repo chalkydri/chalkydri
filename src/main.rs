@@ -182,7 +182,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
         _ = rx.recv() => {},
     );
 
-    Cfg.read().await.save("chalkydri.toml").await.unwrap();
-
     Ok(())
 }

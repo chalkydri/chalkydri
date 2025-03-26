@@ -91,6 +91,7 @@ impl CameraManager {
         let mjpeg_streams_ = mjpeg_streams.clone();
         let pipelines_ = pipelines.clone();
         let manager = subsys_man.clone();
+        let rt_handle = tokio::runtime::Handle::current();
         bus.set_sync_handler(move |_, msg| {
             let calibrators = &calibrators_;
             let mjpeg_streams = &mjpeg_streams_;
@@ -224,7 +225,9 @@ impl CameraManager {
                                 debug!("dropped lock");
                             }
 
-                            manager.spawn(cam_config.clone(), &pipeline, &tee);
+                            rt_handle.block_on(async {
+                                manager.spawn(cam_config.clone(), &pipeline, &tee).await;
+                            });
 
                             tokio::task::block_in_place(|| pipelines.blocking_write())
                                 .insert(id, pipeline);

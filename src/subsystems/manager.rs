@@ -35,7 +35,7 @@ impl SubsysManager {
             python,
         })
     }
-    pub fn spawn(&self, cam_config: config::Camera, pipeline: &Pipeline, cam: &Element) {
+    pub async fn spawn(&self, cam_config: config::Camera, pipeline: &Pipeline, cam: &Element) {
         //if let Some(cameras) = Cfg.read().await.cameras {
         //    for camera in cameras {
         //        let cam_config = camera.clone();
@@ -50,8 +50,6 @@ impl SubsysManager {
         #[cfg(feature = "python")]
         let python_rx =
             CameraManager::add_subsys::<PythonSubsys>(pipeline, cam, cam_config.clone(), true);
-        std::thread::spawn(|| {
-            futures_executor::block_on(async move {
                 let manager_ = manager.clone();
                 #[cfg(feature = "capriltags")]
                 {
@@ -70,8 +68,6 @@ impl SubsysManager {
                         .await
                         .unwrap();
                 }
-            })
-        });
         //    }
         //}
     }

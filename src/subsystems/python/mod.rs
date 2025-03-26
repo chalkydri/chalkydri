@@ -1,18 +1,20 @@
 mod api;
 
-use std::{any::Any, collections::HashMap, ffi::CStr};
+use std::{any::Any, collections::HashMap, ffi::CStr, sync::Arc};
 
 use gstreamer::{
     Caps, Element, ElementFactory,
     prelude::{GstBinExt, GstBinExtManual},
 };
+use minint::NtTopic;
 use numpy::{
     PyArrayMethods,
     ndarray::{self, ShapeBuilder},
 };
 use pyo3::{ffi::c_str, types::PyDict};
+use tokio::sync::RwLock;
 
-use crate::{Cfg, config, error::Error, subsystems::Subsystem};
+use crate::{config, error::Error, subsystems::Subsystem, Cfg, Nt};
 
 use pyo3::prelude::*;
 
@@ -37,10 +39,12 @@ impl Subsystem for PythonSubsys {
         cam_config: crate::config::Camera,
         rx: tokio::sync::watch::Receiver<Option<Vec<u8>>>,
     ) -> Result<Self::Output, Self::Error> {
+        let handle = tokio::runtime::Handle::current();
+
         Python::with_gil(|py| -> PyResult<()> {
             let mut modules = Vec::new();
 
-            for camera in Cfg.blocking_read().cameras.clone().unwrap() {
+            for camera in futures_executor::block_on(Cfg.read()).cameras.clone().unwrap() {
                 for subsys in camera.subsystems.custom {
                     let code = [subsys.code.as_bytes(), &[0u8]].concat();
                     let file_name = [b"custom_code.py".as_slice(), &[0u8]].concat();
@@ -57,36 +61,54 @@ impl Subsystem for PythonSubsys {
             }
 
             py.allow_threads(move || {
-                futures_executor::block_on(frame_proc_loop(rx, async move |buf| {
-                    if let Some(settings) = &cam_config.settings {
-                        Python::with_gil(|py| -> PyResult<()> {
-                            let arr = ndarray::Array2::from_shape_vec(
-                                (settings.width as usize, settings.height as usize)
-                                    .strides((settings.width as usize, 1usize)),
-                                buf,
-                            )
-                            .unwrap();
-                            let nparr = numpy::PyArray2::from_array(py, &arr);
+                let handle_ = handle.clone();
+                handle.spawn(async move {
+                    let topics = Arc::new(RwLock::new(HashMap::<String, NtTopic<f64>>::new()));
+                    frame_proc_loop(rx, async move |buf| {
+                        if let Some(settings) = &cam_config.settings {
+                            Python::with_gil(|py| -> PyResult<()> {
+                                let arr = ndarray::Array::from_shape_vec(
+                                    (settings.height as usize, settings.width as usize, 3usize),
+                                    buf,
+                                )
+                                .unwrap();
+                                let nparr = numpy::PyArray::from_array(py, &arr);
 
-                            for module in &modules {
-                                let ret: HashMap<String, f64> = module
-                                    .getattr(py, "run")
-                                    .unwrap()
-                                    .call1(py, (nparr.clone(),))
-                                    .unwrap()
-                                    .extract(py)
-                                    .unwrap();
-                                debug!("{ret:?}");
-                            }
+                                for module in &modules {
+                                    let ret: HashMap<String, f64> = module
+                                        .getattr(py, "run")
+                                        .unwrap()
+                                        .call1(py, (nparr.clone(),))
+                                        .unwrap()
+                                        .extract(py)
+                                        .unwrap();
+                                    for (k, v) in ret {
+                                        let (k, v) = (k.clone(), v.clone());
+                                        let topics = topics.clone();
+                                        handle_.spawn(async move {
+                                            let topic_name = format!("/chalkydri/subsystems/{k}");
+                                            let mut topics = topics.write().await;
+                                            if let Some(topic) = topics.get_mut(&k) {
+                                                topic.set(v).await.unwrap();
+                                            } else {
+                                                let mut topic = Nt.publish::<f64>(topic_name.clone()).await.unwrap();
+                                                topic.set(v).await.unwrap();
+                                                topics.insert(topic_name, topic);
+                                            }
+                                            drop(topics);
+                                        });
+                                    }
+                                }
 
-                            Ok(())
-                        });
-                    }
-                }));
+                                Ok(())
+                            }).unwrap();
+                        }
+                    }).await;
+                });
             });
 
             Ok(())
-        });
+        }).unwrap();
 
         Ok::<Self::Output, Self::Error>(())
     }
@@ -100,9 +122,7 @@ impl Subsystem for PythonSubsys {
             .property(
                 "caps",
                 &Caps::builder("video/x-raw")
-                    .field("width", &1280)
-                    .field("height", &720)
-                    .field("format", "RGB")
+                    .field("format", "BGR")
                     .build(),
             )
             .build()
