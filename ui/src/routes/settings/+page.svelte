@@ -13,7 +13,7 @@
 	} from 'flowbite-svelte';
 	import { _loadConfig, _saveConfig } from './+page';
 	import { onMount } from 'svelte';
-	import { configure, saveConfiguration, type Config, type Camera } from '$lib/api';
+	import { configure, saveConfiguration, type Config, type Camera, restart } from '$lib/api';
 	import CamConfig from './+components/CamConfig.svelte';
 	import { config, updateConfig, loadConfig } from '$lib/config';
 	import CameraFeed from '../+components/CameraFeed.svelte';
@@ -40,6 +40,8 @@
 		}
 
 		saving = false;
+
+		await restart();
 	}
 
 	let camera_mapping = $state({} as { name: string; value: Camera }[]);

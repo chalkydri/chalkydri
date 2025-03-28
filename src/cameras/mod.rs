@@ -370,7 +370,7 @@ impl CameraManager {
                             if let Some(capriltags_valve) = pipeline.by_name("capriltags_valve") {
                                 capriltags_valve.set_property(
                                     "drop",
-                                    !cam_config.subsystems.capriltags.enabled,
+                                    cam_config.subsystems.capriltags.is_none(),
                                 );
                             }
                         }

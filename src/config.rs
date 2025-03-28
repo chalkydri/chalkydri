@@ -38,6 +38,8 @@ def_cfg! {
 
         field_layout: Option<String>,
         field_layouts: Option<HashMap<String, AprilTagFieldLayout>>,
+
+        custom_subsystems: HashMap<String, CustomSubsystem>,
     }
     Rerun {
         server_address: Option<String>,
@@ -48,7 +50,7 @@ def_cfg! {
         settings: Option<CameraSettings>,
         //#[serde(skip_deserializing)]
         possible_settings: Option<Vec<CameraSettings>>,
-        subsystems: Subsystems,
+        subsystems: CameraSubsystems,
         calib: Option<serde_json::Value>,
         auto_exposure: bool,
         manual_exposure: Option<u32>,
@@ -74,22 +76,17 @@ def_cfg! {
         y: f64,
         z: f64,
     }
-    Subsystems {
-        capriltags: CAprilTagsSubsys,
-        ml: MlSubsys,
-        custom: Vec<CustomSubsys>,
+    CameraSubsystems {
+        capriltags: Option<CAprilTagsSubsys>,
+        ml: Option<MlSubsys>,
+        custom: Vec<String>,
     }
     CAprilTagsSubsys {
-        enabled: bool,
-        gamma: Option<f64>,
         max_frame_rate: u8,
     }
     MlSubsys {
-        enabled: bool,
     }
-    CustomSubsys {
-        name: String,
-        enabled: bool,
+    CustomSubsystem {
         code: String,
     }
 }
@@ -122,13 +119,9 @@ impl Default for Camera {
             auto_exposure: true,
             manual_exposure: None,
             possible_settings: None,
-            subsystems: Subsystems {
-                capriltags: CAprilTagsSubsys {
-                    enabled: false,
-                    gamma: None,
-                    max_frame_rate: 40,
-                },
-                ml: MlSubsys { enabled: false },
+            subsystems: CameraSubsystems {
+                capriltags: Some(CAprilTagsSubsys { max_frame_rate: 40 }),
+                ml: None,
                 custom: Vec::new(),
             },
             calib: None,

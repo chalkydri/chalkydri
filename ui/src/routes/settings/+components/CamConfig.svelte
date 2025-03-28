@@ -14,6 +14,7 @@
 		Label,
 		Layout,
 		Modal,
+		MultiSelect,
 		P,
 		Range,
 		Select,
@@ -32,6 +33,7 @@
 	var camera_settings: { name: string; value: CameraSettings }[] = $state([]);
 	let editing_name: string | null = $state(null);
 	let field_layout_options: { name: string; value: string }[] | null = $state(null);
+	let enable_capriltags: boolean = $state(false);
 
 	function updateMappings() {
 		if (config && config.field_layouts) {
@@ -43,7 +45,21 @@
 	}
 
 	onMount(() => {
+		if (camera && camera.subsystems.capriltags) {
+			enable_capriltags = true;
+		}
 		updateMappings();
+	});
+	$effect(() => {
+		if (camera) {
+			if (enable_capriltags) {
+				camera.subsystems.capriltags = {
+					max_frame_rate: 40,
+				};
+			} else {
+				camera.subsystems.capriltags = null;
+			}
+		}
 	});
 </script>
 
@@ -162,27 +178,32 @@
 			{#if camera.subsystems}
 				<Card padding="lg" class="mt-2 col-span-2">
 					<P size="lg">Subsystems</P>
-					{#if camera.subsystems.capriltags}
-						<Card padding="xs" class="mt-2">
-							<Toggle color="blue" bind:disabled bind:checked={camera.subsystems.capriltags.enabled}
-								>C AprilTags</Toggle
-							>
-							{#if config}
-								{#if camera.subsystems.capriltags.enabled && config.field_layouts}
-									<Select
-										bind:value={camera.subsystems.capriltags.field_layout}
-										items={Object.keys(config.field_layouts).map((thing) => {
-											return { name: thing, value: thing };
-										})}
-									/>
-								{/if}
-							{/if}
-						</Card>
-					{/if}
 					<Card padding="xs" class="mt-2">
+						<Toggle color="blue" bind:disabled bind:checked={enable_capriltags}
+							>C AprilTags</Toggle
+						>
+						{#if config}
+							{#if enable_capriltags && config.field_layouts}
+							{/if}
+						{/if}
+					</Card>
+					<!--<Card padding="xs" class="mt-2">
 						<Toggle color="blue" bind:disabled bind:checked={camera.subsystems.ml.enabled}
 							>Machine Learning</Toggle
 						>
+					</Card>-->
+					<Card padding="xs" class="mt-2">
+						<P>Custom subsystems</P>
+						{#if config}
+							{#if config.custom_subsystems}
+								<MultiSelect items={Object.keys(config.custom_subsystems).map((name) => {
+									return {
+										name: name,
+										value: name,
+									};
+								})} bind:value={camera.subsystems.custom} />
+							{/if}
+						{/if}
 					</Card>
 				</Card>
 			{/if}

@@ -50,24 +50,24 @@ impl SubsysManager {
         #[cfg(feature = "python")]
         let python_rx =
             CameraManager::add_subsys::<PythonSubsys>(pipeline, cam, cam_config.clone(), true);
-                let manager_ = manager.clone();
-                #[cfg(feature = "capriltags")]
-                {
-                    manager
-                        .capriltags
-                        .process(manager_, Nt.clone(), cam_config, capriltags_rx)
-                        .await
-                        .unwrap();
-                }
+        let manager_ = manager.clone();
+        #[cfg(feature = "capriltags")]
+        {
+            manager
+                .capriltags
+                .process(manager_, Nt.clone(), cam_config, capriltags_rx)
+                .await
+                .unwrap();
+        }
 
-                #[cfg(feature = "python")]
-                {
-                    manager
-                        .python
-                        .process(manager_, Nt.clone(), cam_config, python_rx)
-                        .await
-                        .unwrap();
-                }
+        #[cfg(feature = "python")]
+        {
+            manager
+                .python
+                .process(manager_, Nt.clone(), cam_config, python_rx)
+                .await
+                .unwrap();
+        }
         //    }
         //}
     }
