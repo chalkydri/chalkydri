@@ -1,17 +1,20 @@
 use std::fmt::Debug;
 
+pub use bsint::BsInt;
 use rmp::{decode::RmpRead, encode::RmpWrite};
+
+mod bsint;
 
 #[derive(Clone, Debug)]
 pub enum Data {
     Bool(bool),
     F64(f64),
-    I32(i32),
+    Int(BsInt),
     F32(f32),
     String(String),
     BoolArray(Vec<bool>),
     F64Array(Vec<f64>),
-    I32Array(Vec<i32>),
+    IntArray(Vec<BsInt>),
     F32Array(Vec<f32>),
     StringArray(Vec<String>),
 }
@@ -20,14 +23,14 @@ impl Data {
         Ok(match data_type {
             <bool as DataWrap>::MSGPCK => Self::Bool(<bool as DataWrap>::decode(rd)?),
             <f64 as DataWrap>::MSGPCK => Self::F64(<f64 as DataWrap>::decode(rd)?),
-            <i32 as DataWrap>::MSGPCK => Self::I32(<i32 as DataWrap>::decode(rd)?),
+            <BsInt as DataWrap>::MSGPCK => Self::Int(<BsInt as DataWrap>::decode(rd)?),
             <f32 as DataWrap>::MSGPCK => Self::F32(<f32 as DataWrap>::decode(rd)?),
             <String as DataWrap>::MSGPCK => Self::String(<String as DataWrap>::decode(rd)?),
             <Vec<bool> as DataWrap>::MSGPCK => {
                 Self::BoolArray(<Vec<bool> as DataWrap>::decode(rd)?)
             }
             <Vec<f64> as DataWrap>::MSGPCK => Self::F64Array(<Vec<f64> as DataWrap>::decode(rd)?),
-            <Vec<i32> as DataWrap>::MSGPCK => Self::I32Array(<Vec<i32> as DataWrap>::decode(rd)?),
+            <Vec<BsInt> as DataWrap>::MSGPCK => Self::IntArray(<Vec<BsInt> as DataWrap>::decode(rd)?),
             <Vec<f32> as DataWrap>::MSGPCK => Self::F32Array(<Vec<f32> as DataWrap>::decode(rd)?),
             <Vec<String> as DataWrap>::MSGPCK => {
                 Self::StringArray(<Vec<String> as DataWrap>::decode(rd)?)
@@ -135,24 +138,7 @@ impl DataType for f64 {
         Ok(())
     }
 }
-impl DataType for i32 {
-    const DATATYPE_MSGPCK: u8 = 2;
-    const ARRAYDATATYPE_MSGPCK: u8 = 18;
-    const DATATYPE_STRING: &'static str = "int";
-    const ARRAYDATATYPE_STRING: &'static str = "int[]";
 
-    fn decode<R: RmpRead>(rd: &mut R) -> Result<Self, ()> {
-        let ret = rmp::decode::read_i32(rd).map_err(|_| ())?;
-
-        Ok(ret)
-    }
-
-    fn encode<W: RmpWrite>(wr: &mut W, val: Self) -> Result<(), ()> {
-        rmp::encode::write_i32(wr, val).map_err(|_| ())?;
-
-        Ok(())
-    }
-}
 
 impl DataType for f32 {
     const DATATYPE_MSGPCK: u8 = 3;

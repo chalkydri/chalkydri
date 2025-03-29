@@ -27,6 +27,7 @@ pub enum NtError {
     /// Other errors
     Other(String),
     NeedReconnect,
+    TimeOverflow,
 }
 
 impl Display for NtError {
@@ -43,6 +44,7 @@ impl Display for NtError {
             NtError::LockError(msg) => write!(f, "Lock error: {msg}"),
             NtError::Other(msg) => write!(f, "Error: {msg}"),
             NtError::NeedReconnect => write!(f, "Disconnected from NT server! Must reconnect"),
+            NtError::TimeOverflow => write!(f, "Time overflow"),
         }
     }
 }

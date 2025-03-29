@@ -14,6 +14,9 @@ log = "0.4.21"
 fastrand = "2.1.0"
 futures-util = { version = "0.3.30", features = ["tokio-io", "sink"] }
 rmp = "0.8.14"
+quanta = "0.12.5"
+tracing = { version = "0.1.41", features = ["log", "async-await"] }
+num-traits = "0.2.19"
 
 [profile.release]
 opt-level = 3
@@ -22,3 +25,6 @@ strip = true
 
 [dev-dependencies]
 env_logger = "0.11.7"
+
+[[example]]
+name = "pub"
