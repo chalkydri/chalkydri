@@ -15,18 +15,106 @@ extern crate rayon;
 pub mod utils;
 
 use cam_geom::IntrinsicParametersPerspective;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 // use pose_estimation::pose_estimation;
 use ril::{Line, Rgb};
 // TODO: ideally we'd use alloc here and only pull in libstd for sync::atomic when the multi-thread feature is enabled
 use std::{
-    alloc::{alloc_zeroed, dealloc, Layout},
-    sync::atomic::{AtomicUsize, Ordering},
+    alloc::{alloc, alloc_zeroed, dealloc, Layout},
+    sync::{atomic::{AtomicUsize, Ordering}, Arc, Mutex},
+    time::Instant,
 };
 
 #[cfg(feature = "multi-thread")]
 use rayon::iter::{ParallelBridge, ParallelIterator};
 
 use crate::utils::*;
+
+/// Union-Find data structure for connected components
+#[derive(Debug, Clone)]
+pub struct UnionFind {
+    parent: *mut usize,
+    cluster_sizes: *mut usize,
+    len: usize,
+}
+
+impl UnionFind {
+    pub fn new(len: usize) -> Self {
+        unsafe {
+            let st = Instant::now();
+            let uf = UnionFind {
+                parent: alloc(Layout::array::<usize>(len).unwrap()) as *mut usize,
+                cluster_sizes: alloc(Layout::array::<usize>(len).unwrap()) as *mut usize,
+                len,
+            };
+            for i in 0..len {
+                *uf.parent.add(i) = i;
+                *uf.cluster_sizes.add(i) = 1;
+            }
+            dbg!(st.elapsed());
+            uf
+        }
+    }
+
+    #[inline(always)]
+    pub fn find(&mut self, id: usize) -> usize {
+        unsafe {
+            let curr = self.parent.add(id);
+            if *curr != id {
+                *curr = self.find(*curr);
+            }
+            *curr
+        }
+    }
+
+    #[inline(always)]
+    pub fn union(&mut self, id1: usize, id2: usize) {
+        let root1 = self.find(id1);
+        let root2 = self.find(id2);
+
+        if root1 != root2 {
+            unsafe {
+                if self.get_size(root1) < self.get_size(root2) {
+                    *self.parent.add(root1) = root2;
+                    *self.cluster_sizes.add(root2) += self.get_size(root1);
+                } else {
+                    *self.parent.add(root2) = root1;
+                    *self.cluster_sizes.add(root1) += self.get_size(root2);
+                }
+            }
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_size(&self, id: usize) -> usize {
+        unsafe { *self.cluster_sizes.add(id) }
+    }
+}
+impl Drop for UnionFind {
+    fn drop(&mut self) {
+        unsafe {
+            dealloc(
+                self.parent as *mut u8,
+                Layout::array::<usize>(self.len).unwrap(),
+            );
+            dealloc(
+                self.cluster_sizes as *mut u8,
+                Layout::array::<usize>(self.len).unwrap(),
+            );
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug)]
+struct ClusterHash {
+    hash: u32,
+    id: u64,
+    data: Vec<(usize, usize)>,
+}
+
+fn u64hash_2(x: u64) -> u32 {
+    ((x >> 32) ^ x) as u32
+}
 
 /// Raw buffers used by a [`detector`](Detector)
 ///
@@ -357,22 +445,145 @@ impl Detector {
         }
     }
 
+    pub fn connected_components(&self) -> UnionFind {
+        let width = self.width;
+        let buf = self.bufs.buf;
+
+        let mut uf = UnionFind::new(self.width * self.height);
+        for y in 0..self.height {
+            for x in 1..width - 1 {
+                unsafe {
+                    let i = px(x, y, self.width);
+
+                    let p = *buf.add(i);
+                    if !p.is_good() {
+                        continue;
+                    }
+
+                    if x > 0 {
+                        let left_i = px(x - 1, y, width);
+                        if *buf.add(left_i) == p {
+                            uf.union(i, left_i);
+                        }
+                    }
+
+                    if y > 0 {
+                        let top_i = px(x, y - 1, width);
+                        if *buf.add(top_i) == p {
+                            uf.union(i, top_i);
+                        }
+
+                        if p.is_white() {
+                            if x > 0 {
+                                let top_left_i = px(x - 1, y - 1, width);
+                                if *buf.add(top_left_i) == p {
+                                    uf.union(i, top_left_i);
+                                }
+                            }
+                            if x < width - 1 {
+                                let top_right_i = px(x + 1, y - 1, width);
+                                if *buf.add(top_right_i) == p {
+                                    uf.union(i, top_right_i);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        uf
+    }
+
+    //pub fn do_cluster(&self, cluster_map_size: usize) {
+    //    //
+    //}
+
+    //pub fn cluster(&self, threads: usize) -> Vec<Vec<(usize, usize)>> {
+    //    let mut uf = self.connected_components();
+    //    let cluster_map_size = (0.2 * self.width as f64 * self.height as f64) as usize;
+
+    //    if self.height <= 2 {
+    //        let mut uf = uf.clone();
+    //        return self.do_cluster(cluster_map_size);
+    //    }
+
+    //    let sz = self.height - 1;
+    //    let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
+    //    let chunk_sz = (1 + sz / (8 * pool.current_num_threads())) as usize;
+
+    //    let clusters = Arc::new(Mutex::new(Vec::new()));
+    //    
+    //    (1..sz).into_par_iter().chunks(chunk_sz).for_each(|i| {
+    //        let local_cluster_map_sz = cluster_map_size / (sz / chunk_sz + 1);
+    //        let local_clusters = self.do_cluster(cluster_map_size);
+    //        let mut clusters = clusters.lock().unwrap();
+    //        clusters.push(local_clusters);
+    //    });
+
+    //    // Merge results from all threads
+    //let mut clusters_list = clusters.lock().unwrap().clone();
+    //if clusters_list.is_empty() {
+    //    return Vec::new();
+    //}
+
+    //let mut length = clusters_list.len();
+    //// Combine clusters in a tree-like manner for efficiency
+    //while length > 1 {
+    //    let mut write = 0;
+    //    for i in (0..length - 1).step_by(2) {
+    //        clusters_list[write] = self.merge_clusters(
+    //            clusters_list[i].clone(),
+    //            clusters_list[i + 1].clone()
+    //        );
+    //        write += 1;
+    //    }
+
+    //    if length % 2 != 0 {
+    //        clusters_list[write] = clusters_list[length - 1].clone();
+    //        write += 1;
+    //    }
+
+    //    length = write;
+    //}
+
+    //// Safety check to prevent out-of-bounds access
+    //if clusters_list.is_empty() {
+    //    return Vec::new();
+    //}
+
+    //// Convert cluster hashes to vector of points
+    //clusters_list.remove(0)
+    //    .into_iter()
+    //    .map(|cluster_hash| cluster_hash.data)
+    //    .collect()
+    //}
+
     pub fn draw(&self) {
         let mut img = ril::Image::new(self.width as u32, self.height as u32, Rgb::black());
+        let mut conn_comp = self.connected_components();
         for (x1, y1, x2, y2) in self.lines.clone() {
-            img.draw(
-                &ril::draw::Ellipse::circle(x1 as u32, y1 as u32, 2)
-                    .with_fill(Rgb::from_hex("ffa500").unwrap()),
-            );
-            img.draw(
-                &ril::draw::Ellipse::circle(x2 as u32, y2 as u32, 2)
-                    .with_fill(Rgb::from_hex("ff0000").unwrap()),
-            );
+
+            //img.draw(
+            //    &ril::draw::Ellipse::circle(x1 as u32, y1 as u32, 2)
+            //        .with_fill(Rgb::from_hex("ffa500").unwrap()),
+            //);
+            //img.draw(
+            //    &ril::draw::Ellipse::circle(x2 as u32, y2 as u32, 2)
+            //        .with_fill(Rgb::from_hex("ff0000").unwrap()),
+            //);
+if conn_comp.find(unsafe { px(x1, y1, self.width) }) == conn_comp.find(unsafe { px(x2, y2, self.width) }) {
             img.draw(&Line::new(
                 (x1 as u32, y1 as u32),
                 (x2 as u32, y2 as u32),
                 Rgb::white(),
             ));
+}
+//            let (parent_x, parent_y) = (parent_id % self.width, parent_id / self.width);
+//            img.draw(
+//                &ril::draw::Ellipse::circle(parent_x as u32, parent_y as u32, 2)
+//                    .with_fill(Rgb::from_hex("0000ff").unwrap()),
+//            );
         }
         img.save(ril::ImageFormat::Png, "lines.png").unwrap();
     }

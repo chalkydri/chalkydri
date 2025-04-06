@@ -12,7 +12,7 @@ fn simple_bench(c: &mut Criterion) {
     let mut img = img.to_vec();
     let img = img.as_mut_slice();
 
-    let mut det = chalkydri_apriltags::Detector::new(1080, 720);
+    let mut det = chalkydri_apriltags::Detector::new(703, 905, &[]);
 
     c.bench_function("simple bench", |b| {
         b.iter_custom(|iters| {
