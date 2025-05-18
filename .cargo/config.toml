@@ -1,2 +1,2 @@
-[build]
-rustflags = "-C target-feature=-crt-static"
+[env]
+RUSTFLAGS = "-C target-feature=-crt-static"

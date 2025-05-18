@@ -4,11 +4,12 @@
  */
 
 mod mjpeg;
+mod publisher;
 
 use gstreamer::{
-    Buffer, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element,
+    BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element,
     ElementFactory, FlowError, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure,
-    glib::{BoolError, WeakRef},
+    glib::WeakRef,
     prelude::*,
 };
 
@@ -17,17 +18,16 @@ use minint::NtConn;
 use mjpeg::MjpegStream;
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
-use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc, time::Duration};
+use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc};
 use tokio::{
     sync::{Mutex, MutexGuard, RwLock, mpsc, watch},
-    task::LocalSet,
 };
-use tracing::{Level, Span};
+use tracing::Level;
 
 #[cfg(feature = "rerun")]
 use crate::Rerun;
 use crate::{
-    Cfg, Nt,
+    Cfg,
     calibration::Calibrator,
     config::{self, CameraSettings, CfgFraction},
     error::Error,
@@ -233,6 +233,12 @@ impl CameraManager {
                                 .insert(id, pipeline);
 
                             futures_executor::block_on(async {
+                                let _source = ManuallyDrop::new(
+                                    nt.publish::<String>(format!(
+                                        "/CameraPublisher/{}/source",
+                                        cam_config.name,
+                                    )).await.unwrap()
+                                );
                                 let mut streams = ManuallyDrop::new(
                                     nt.publish(format!(
                                         "/CameraPublisher/{}/streams",
@@ -718,6 +724,7 @@ impl CameraManager {
         Ok(())
     }
 
+    /// Start the given camera's pipeline
     pub async fn start(&self, name: String) {
         // Start the pipeline
         if let Some(pipeline) = self.pipelines.read().await.get(&name) {
@@ -725,6 +732,8 @@ impl CameraManager {
         }
         //.expect("Unable to set the pipeline to the `Playing` state.");
     }
+
+    /// Pause the given camera's pipeline
     pub async fn pause(&self, name: String) {
         if let Some(pipeline) = self.pipelines.read().await.get(&name) {
             pipeline

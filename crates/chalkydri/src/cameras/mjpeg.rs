@@ -13,6 +13,7 @@ pub struct MjpegStream {
 }
 impl Stream for MjpegStream {
     type Item = Result<Bytes, Error>;
+
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
         _cx: &mut std::task::Context<'_>,
@@ -21,19 +22,18 @@ impl Stream for MjpegStream {
             match self.rx.has_changed() {
                 Ok(true) => {
                     info!("working!!!");
-                    let mut bytes = Vec::new();
-                    bytes.clear();
-                    if let Some(frame) = self.get_mut().rx.borrow_and_update().as_deref() {
-                        bytes.extend_from_slice(
-                            &[
-                                b"--frame\r\nContent-Length: ",
-                                frame.len().to_string().as_bytes(),
-                                b"\r\nContent-Type: image/jpeg\r\n\r\n",
-                            ]
-                            .concat(),
-                        );
-                        bytes.extend_from_slice(frame);
-                    }
+
+                    let bytes = if let Some(frame) = self.get_mut().rx.borrow_and_update().as_deref() {
+                        [
+                            b"--frame\r\nContent-Length: ",
+                            frame.len().to_string().as_bytes(),
+                            b"\r\nContent-Type: image/jpeg\r\n\r\n",
+                            frame,
+                        ]
+                        .concat()
+                    } else {
+                        Vec::new()
+                    };
 
                     return Poll::Ready(Some(Ok(bytes.into())));
                 }

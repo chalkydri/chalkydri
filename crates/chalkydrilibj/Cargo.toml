@@ -3,5 +3,8 @@ name = "chalkydrilib"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
-sophus = { version = "0.14.0", features = ["simd"] }
+jni = "0.21.1"

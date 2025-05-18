@@ -23,6 +23,7 @@ pub struct PoseEstimator {
 impl PoseEstimator {
     pub async fn new() -> Result<Self, Error> {
         let (poses_tx, poses_rx) = mpsc::unbounded_channel();
+
         let est = Self {
             layout: Arc::new(RwLock::new(None)),
             tag_mappings: Arc::new(RwLock::new(None)),
@@ -30,7 +31,7 @@ impl PoseEstimator {
             poses_rx: Arc::new(Mutex::new(poses_rx)),
         };
 
-        est.load_layout();
+        est.load_layout().await?;
 
         Ok(est)
     }

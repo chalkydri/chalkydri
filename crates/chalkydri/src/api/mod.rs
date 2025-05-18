@@ -2,8 +2,6 @@
 //! JSON API used by the web UI and possibly third-party applications
 //!
 
-use std::{fs::File, io::Write};
-
 use actix_web::{
     App, HttpResponse, HttpServer, Responder, get,
     http::{
@@ -23,7 +21,10 @@ use crate::{Cfg, cameras::CameraManager, config::Config};
 
 #[derive(OpenApi)]
 #[openapi(
-    info(title = "Chalkydri Manager API"),
+    info(
+        title = "Chalkydri Manager API",
+        version = env!("CARGO_PKG_VERSION"),
+    ),
     paths(
         info,
         configuration,
@@ -42,7 +43,7 @@ use crate::{Cfg, cameras::CameraManager, config::Config};
 struct ApiDoc;
 
 #[derive(rust_embed::Embed)]
-#[folder = "ui/build/"]
+#[folder = "../../ui/build/"]
 struct Assets;
 
 fn handle_embedded_file(path: &str) -> HttpResponse {
@@ -111,7 +112,7 @@ pub struct Info {
     pub mem_usage: u8,
 }
 
-/// Chalkydri version and info
+/// Get Chalkydri's version and system information
 #[utopia::path(
     responses(
         (status = 200, body = Info),
@@ -119,9 +120,6 @@ pub struct Info {
 )]
 #[get("/api/info")]
 pub(super) async fn info() -> impl Responder {
-    #[cfg(feature = "python")]
-    let sys = "rpi";
-
     let mut system = System::new();
     system.refresh_cpu_usage();
     system.refresh_memory();
@@ -162,7 +160,7 @@ pub(super) async fn configuration(data: web::Data<CameraManager>) -> impl Respon
     web::Json(cfgg)
 }
 
-/// Set configuration
+/// Set the configuration without saving it to the disk
 #[utopia::path(
     responses(
         (status = 200, body = Config),
@@ -184,7 +182,7 @@ pub(super) async fn configure(
     web::Json(Cfg.read().await.clone())
 }
 
-/// Save configuration
+/// Save the configuration to disk
 #[utopia::path(
     responses(
         (status = 200, body = Config),
@@ -203,6 +201,7 @@ pub(super) async fn save_configuration(web::Json(cfgg): web::Json<Config>) -> im
     web::Json(cfgg)
 }
 
+/// Calibrate the given camera's intrinsic parameters
 #[utopia::path(
     responses(
         (status = 200),
@@ -264,6 +263,7 @@ pub(super) async fn calibration_status(data: web::Data<CameraManager>) -> impl R
     })
 }
 
+/// Complete a calibration step for the given camera
 #[utopia::path(
     responses(
         (status = 200),
@@ -287,6 +287,7 @@ pub(super) async fn calibration_step(
     })
 }
 
+/// Restart Chalkydri
 #[utopia::path(
     responses(
         (status = 200),
@@ -299,6 +300,7 @@ pub(super) async fn restart(data: web::Data<CameraManager>) -> impl Responder {
     HttpResponse::Ok().await.unwrap()
 }
 
+/// Restart the system
 #[utopia::path(
     responses(
         (status = 200),
@@ -311,6 +313,7 @@ pub(super) async fn sys_reboot() -> impl Responder {
     web::Json(())
 }
 
+/// Power off the system
 #[utopia::path(
     responses(
         (status = 200),
@@ -329,6 +332,7 @@ struct SysInfo {
     mem_usage: u8,
 }
 
+/// Get system information
 #[utopia::path(
     responses(
         (status = 200),
@@ -347,6 +351,7 @@ pub(super) async fn sys_info() -> impl Responder {
     web::Json(SysInfo { uptime, mem_usage })
 }
 
+/// Get an MJPEG camera stream for the given camera
 #[get("/stream/{cam_name}")]
 pub(super) async fn stream(
     path: web::Path<String>,

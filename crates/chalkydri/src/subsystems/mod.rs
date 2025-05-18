@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use gstreamer::{Buffer, Element, Pipeline};
+use gstreamer::{Element, Pipeline};
 use minint::NtConn;
 use tokio::sync::watch;
 
@@ -40,7 +40,7 @@ pub trait Subsystem: Sized {
 
     /// Initialize the subsystem's preprocessing pipeline chunk
     fn preproc(
-        config: config::Camera,
+        cam_config: config::Camera,
         pipeline: &Pipeline,
     ) -> Result<(Element, Element), Self::Error>;
 
@@ -54,6 +54,7 @@ pub trait Subsystem: Sized {
     ) -> Result<Self::Output, Self::Error>;
 }
 
+/// Run frame processing loop
 pub async fn frame_proc_loop<F: AsyncFnMut(Vec<u8>) + Sync + Send + 'static>(
     mut rx: watch::Receiver<Option<Vec<u8>>>,
     mut func: F,

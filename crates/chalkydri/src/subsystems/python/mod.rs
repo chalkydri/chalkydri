@@ -8,10 +8,8 @@ use gstreamer::{
 };
 use minint::NtTopic;
 use numpy::{
-    PyArrayMethods,
     ndarray::{self, ShapeBuilder},
 };
-use pyo3::{ffi::c_str, types::PyDict};
 use tokio::sync::RwLock;
 
 use crate::{Cfg, Nt, config, error::Error, subsystems::Subsystem};
@@ -32,6 +30,7 @@ impl Subsystem for PythonSubsys {
     async fn init() -> Result<Self, Self::Error> {
         Ok::<Self, Self::Error>(PythonSubsys)
     }
+
     async fn process(
         &self,
         manager: super::SubsysManager,
@@ -50,6 +49,7 @@ impl Subsystem for PythonSubsys {
                 .unwrap()
             {
                 for subsys in camera.subsystems.custom {
+                    // Read custom subsystems from the configuration
                     let subsystems = futures_executor::block_on(Cfg.read())
                         .custom_subsystems
                         .clone();
@@ -69,7 +69,7 @@ impl Subsystem for PythonSubsys {
                         // Unbind the module from Python's GIL
                         let module = module.unbind();
 
-                        // Save It for Later
+                        // Save It for Later :)
                         modules.push(module);
                     }
                 }
@@ -135,6 +135,7 @@ impl Subsystem for PythonSubsys {
 
         Ok::<Self::Output, Self::Error>(())
     }
+
     fn preproc(
         config: crate::config::Camera,
         pipeline: &gstreamer::Pipeline,

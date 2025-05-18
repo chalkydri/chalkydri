@@ -1,30 +1,37 @@
 //!
-//! Chalkydri core
+//! # Chalkydri
+//!
+//! This crate contains Chalkydri itself.
+//!
+//! This code runs on the vision coprocessor(s) and does all the heavy lifting.
 //!
 
 #![feature(duration_millis_float)]
-// Unsafe code is NOT allowed in Chalkydri core.
-// If unsafe code is required, it should be part of a different crate.
-//#![forbid(unsafe_code)]
 #![allow(unreachable_code)]
 
+// These deps are needed no matter what
 #[macro_use]
 extern crate tracing;
-#[cfg(feature = "web")]
-extern crate actix_web;
-extern crate env_logger;
-extern crate minint;
-extern crate tokio;
-#[cfg(feature = "web")]
-extern crate utoipa as utopia;
 #[macro_use]
 extern crate serde;
+extern crate tokio;
+extern crate minint;
+
+// Web server and OpenAPI documentation generator
+#[cfg(feature = "web")]
+extern crate actix_web;
+#[cfg(feature = "web")]
+extern crate utoipa as utopia;
+
+// Apriltag stuff
 #[cfg(feature = "capriltags")]
 extern crate apriltag;
 #[cfg(feature = "apriltags")]
 extern crate chalkydri_apriltags;
+
 #[cfg(feature = "python")]
 extern crate pyo3;
+
 #[cfg(feature = "ml")]
 extern crate tfledge;
 
@@ -34,7 +41,6 @@ mod calibration;
 mod cameras;
 mod config;
 mod error;
-//mod logger;
 mod pose;
 mod subsystems;
 mod utils;
@@ -62,10 +68,10 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 use utils::gen_team_ip;
 
-use subsystems::Subsystem;
-
+/// Chalkydri's loaded, active configuration
 #[allow(non_upper_case_globals)]
 static Cfg: Lazy<Arc<RwLock<Config>>> = Lazy::new(|| {
+    // Try a few different paths for the config file, exiting early if we find one that exists
     let mut path = Path::new("/boot/chalkydri.toml");
     if !path.exists() {
         path = Path::new("/etc/chalkydri.toml");
@@ -74,7 +80,8 @@ static Cfg: Lazy<Arc<RwLock<Config>>> = Lazy::new(|| {
         }
     }
 
-    Arc::new(RwLock::new(Config::load(path).unwrap()))
+    // If all else fails, we'll just use a default configuration
+    Arc::new(RwLock::new(Config::load(path).unwrap_or_default()))
 });
 
 #[cfg(feature = "rerun")]
@@ -159,6 +166,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 "#
     );
 
+    // Set up logging
     let filter = EnvFilter::from_default_env();
     let layer = tracing_subscriber::fmt::layer().with_filter(filter);
     tracing_subscriber::registry().with(layer).init();
@@ -169,13 +177,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let _ = rustix::system::delete_module(c"rpivid_hevc", 0);
     let _ = rustix::system::delete_module(c"pisp_be", 0);
 
+    // Initialize GStreamer
     gstreamer::init().unwrap();
     debug!("initialized gstreamer");
 
+    // Create the shutdown channel
     let (tx, mut rx) = mpsc::channel::<()>(1);
+    // Spawn the camera manager
     let cam_man = CameraManager::new(Nt.clone(), tx).await;
+    // Spawn the web server
     let api = tokio::spawn(run_api(cam_man.clone()));
 
+    // Poll the API server future until the end of time, ctrl+c, or a message on the shutdown channel
     tokio::select!(
         _ = api => {},
         _ = tokio::signal::ctrl_c() => {},

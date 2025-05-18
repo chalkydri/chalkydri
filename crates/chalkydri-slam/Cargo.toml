@@ -1,0 +1,7 @@
+[package]
+name = "chalkydri-slam"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+factrs = { version = "0.2.0", features = ["rayon"] }

@@ -7,6 +7,8 @@
 )]
 #![warn(clippy::infinite_loop)]
 
+#[macro_use]
+extern crate statrs;
 #[cfg(feature = "multi-thread")]
 extern crate rayon;
 
@@ -14,14 +16,19 @@ extern crate rayon;
 // mod pose_estimation;
 pub mod utils;
 
-use cam_geom::IntrinsicParametersPerspective;
+use libblur::{BlurImage, BlurImageMut};
+use nalgebra::Vector;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 // use pose_estimation::pose_estimation;
 use ril::{Line, Rgb};
+use statrs::statistics::{Data, Distribution, Max, Median, Min, OrderStatistics};
 // TODO: ideally we'd use alloc here and only pull in libstd for sync::atomic when the multi-thread feature is enabled
 use std::{
     alloc::{alloc, alloc_zeroed, dealloc, Layout},
-    sync::{atomic::{AtomicUsize, Ordering}, Arc, Mutex},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
     time::Instant,
 };
 
@@ -41,7 +48,7 @@ pub struct UnionFind {
 impl UnionFind {
     pub fn new(len: usize) -> Self {
         unsafe {
-            let st = Instant::now();
+            //let st = Instant::now();
             let uf = UnionFind {
                 parent: alloc(Layout::array::<usize>(len).unwrap()) as *mut usize,
                 cluster_sizes: alloc(Layout::array::<usize>(len).unwrap()) as *mut usize,
@@ -51,7 +58,7 @@ impl UnionFind {
                 *uf.parent.add(i) = i;
                 *uf.cluster_sizes.add(i) = 1;
             }
-            dbg!(st.elapsed());
+            //dbg!(st.elapsed());
             uf
         }
     }
@@ -181,33 +188,74 @@ impl Detector {
     ///
     /// We should investigate combining the variations for unbalanced images and triclass
     /// thresholding.
-    pub fn calc_otsu(&mut self, input: &[u8]) {
-        let mut i = 0usize;
-        // Histogram
-        let mut hist = [0usize; 256];
+    pub fn calc_otsu(&mut self, input: &mut [u8]) {
+        //libblur::fast_gaussian(&mut BlurImageMut::borrow(input, self.width as u32, self.height as u32, libblur::FastBlurChannels::Channels3), 7, libblur::ThreadingPolicy::Adaptive, libblur::EdgeMode::Clamp).unwrap();
 
         // Calculate histogram
-        for i in 0..self.width * self.height {
-            unsafe {
-                // Red, green, and blue are each represent with 1 byte
-                let gray = grayscale(input.get_unchecked((i * 3)..(i * 3) + 3));
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let mut pixels = Vec::new();
 
-                let pix = hist.get_unchecked_mut(*input.get_unchecked(i) as usize);
-                *pix = (*pix).unchecked_add(1);
+                const BLOCK_SIZE: usize = 5;
+                const C: u8 = 4;
+
+                unsafe {
+                    let x_min = x.saturating_sub(BLOCK_SIZE.saturating_div(2));
+                    let x_max = x
+                        .unchecked_add(BLOCK_SIZE.saturating_div(2))
+                        .min(self.width - 1);
+                    let y_min = y.saturating_sub(BLOCK_SIZE.saturating_div(2));
+                    let y_max = y
+                        .saturating_add(BLOCK_SIZE.saturating_div(2))
+                        .min(self.height - 1);
+
+                    //let mut total = 0u16;
+                    for x in x_min..=x_max {
+                        for y in y_min..=y_max {
+                            // Red, green, and blue are each represent with 1 byte
+                            let i = px(x, y, self.width);
+                            let gray = grayscale(input.get_unchecked((i * 3)..(i * 3) + 3));
+
+                            pixels.push(gray as f64);
+                            //total = total.unchecked_add(gray as u16);
+                        }
+                    }
+                    //let total_pixels = y_max.unchecked_sub(y_min) * x_max.saturating_sub(x_min);
+                    //let mean = (total / (total_pixels as u16)) as u8;
+                    let mut data = Data::new(pixels);
+                    //let mean = data.mean().unwrap();
+                    let i = px(x, y, self.width);
+                    let p = grayscale(input.get_unchecked((i * 3)..(i * 3) + 3));
+
+                    //if p > mean + C {
+                    //    *self.bufs.buf.add(i) = Color::White;
+                    //} else if p < mean - C {
+                    //    *self.bufs.buf.add(i) = Color::Black;
+                    //} else {
+                    //    *self.bufs.buf.add(i) = Color::Other;
+                    //}
+                    if (y > 0 && x > 0) && (data.max() - data.min()) < 5.0 {
+                        let gray = data.median();
+                        if gray < 60.0 {
+                            *self.bufs.buf.add(i) = Color::Black;
+                        } else if gray > 160.0 {
+                            *self.bufs.buf.add(i) = Color::White;
+                        } else {
+                            *self.bufs.buf.add(i) = Color::Other;
+                        }
+                        //*self.bufs.buf.add(i) = *self.bufs.buf.add(px(x - 1, y - 1, self.width));
+                    } else {
+                        if p >= data.upper_quartile() as u8 {
+                            *self.bufs.buf.add(i) = Color::White;
+                        } else if p <= data.lower_quartile() as u8 {
+                            *self.bufs.buf.add(i) = Color::Black;
+                        } else {
+                            *self.bufs.buf.add(i) = Color::Other;
+                        }
+                    }
+                }
             }
         }
-
-        let mut sum = 0u32;
-        let mut sum_b = 0u32;
-        let mut var_max = 0f64;
-        let mut thresh = 0u8;
-
-        //for t in 0..256 {
-        //    sum += t as u32 * hist[t];
-
-        //    let w_b =
-
-        //println!("{:?} {i}", st.elapsed());
     }
 
     /// Process an RGB frame
@@ -218,9 +266,14 @@ impl Detector {
         // Check that the input is RGB
         assert_eq!(input.len(), self.width * self.height * 3);
 
-        unsafe {
-            self.thresh(input);
-        }
+        let mut copy = input.to_vec();
+        //let adaptive_thresh = Instant::now();
+        self.calc_otsu(&mut copy);
+        //dbg!(adaptive_thresh.elapsed());
+
+        //unsafe {
+        //    self.thresh(input);
+        //}
         // Reset points_len to 0
         self.points_len.store(0, Ordering::SeqCst);
         // Clear the lines Vec
@@ -513,7 +566,7 @@ impl Detector {
     //    let chunk_sz = (1 + sz / (8 * pool.current_num_threads())) as usize;
 
     //    let clusters = Arc::new(Mutex::new(Vec::new()));
-    //    
+    //
     //    (1..sz).into_par_iter().chunks(chunk_sz).for_each(|i| {
     //        let local_cluster_map_sz = cluster_map_size / (sz / chunk_sz + 1);
     //        let local_clusters = self.do_cluster(cluster_map_size);
@@ -562,8 +615,20 @@ impl Detector {
     pub fn draw(&self) {
         let mut img = ril::Image::new(self.width as u32, self.height as u32, Rgb::black());
         let mut conn_comp = self.connected_components();
+        for x in 0..self.width {
+            for y in 0..self.height {
+                img.set_pixel(
+                    x as u32,
+                    y as u32,
+                    match unsafe { *self.bufs.buf.add(px(x, y, self.width)) } {
+                        Color::Black => Rgb::black(),
+                        Color::White => Rgb::white(),
+                        Color::Other => Rgb::from_hex("777777").unwrap(),
+                    },
+                );
+            }
+        }
         for (x1, y1, x2, y2) in self.lines.clone() {
-
             //img.draw(
             //    &ril::draw::Ellipse::circle(x1 as u32, y1 as u32, 2)
             //        .with_fill(Rgb::from_hex("ffa500").unwrap()),
@@ -572,18 +637,25 @@ impl Detector {
             //    &ril::draw::Ellipse::circle(x2 as u32, y2 as u32, 2)
             //        .with_fill(Rgb::from_hex("ff0000").unwrap()),
             //);
-if conn_comp.find(unsafe { px(x1, y1, self.width) }) == conn_comp.find(unsafe { px(x2, y2, self.width) }) {
-            img.draw(&Line::new(
-                (x1 as u32, y1 as u32),
-                (x2 as u32, y2 as u32),
-                Rgb::white(),
-            ));
-}
-//            let (parent_x, parent_y) = (parent_id % self.width, parent_id / self.width);
-//            img.draw(
-//                &ril::draw::Ellipse::circle(parent_x as u32, parent_y as u32, 2)
-//                    .with_fill(Rgb::from_hex("0000ff").unwrap()),
-//            );
+            //img.draw(&Line::new(
+            //    (x1 as u32, y1 as u32),
+            //    (x2 as u32, y2 as u32),
+            //    Rgb::from_hex("ff0000").unwrap(),
+            //));
+            if conn_comp.find(unsafe { px(x1, y1, self.width) })
+                == conn_comp.find(unsafe { px(x2, y2, self.width) })
+            {
+                img.draw(&Line::new(
+                    (x1 as u32, y1 as u32),
+                    (x2 as u32, y2 as u32),
+                    Rgb::from_hex("00ff00").unwrap(),
+                ));
+            }
+            //            let (parent_x, parent_y) = (parent_id % self.width, parent_id / self.width);
+            //            img.draw(
+            //                &ril::draw::Ellipse::circle(parent_x as u32, parent_y as u32, 2)
+            //                    .with_fill(Rgb::from_hex("0000ff").unwrap()),
+            //            );
         }
         img.save(ril::ImageFormat::Png, "lines.png").unwrap();
     }

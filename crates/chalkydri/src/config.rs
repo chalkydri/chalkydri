@@ -110,6 +110,22 @@ impl Config {
         Ok(())
     }
 }
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            team_number: u16::MAX,
+            ntables_ip: None,
+            rerun: None,
+            cameras: None,
+            device_name: None,
+
+            field_layout: None,
+            field_layouts: None,
+
+            custom_subsystems: HashMap::new(),
+        }
+    }
+}
 impl Default for Camera {
     fn default() -> Self {
         Self {

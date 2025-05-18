@@ -1,13 +1,14 @@
-extern crate jni;
+extern crate sophus;
 
-use jni::JNIEnv;
-use jni::objects::JString;
-use jni::JClass;
+use sophus::timeseries::TimeSeries;
+use sophus::autodiff::linalg::VecF64;
+use sophus::lie::{Rotation3F64, Isometry3F64};
+use core::f64::consts::FRAC_PI_4;
 
-#[no_mangle]
-pub extern "system" fn Java_me_waterga_chalkydri_Chalkydri_getCamera<'local>(
-    mut env: JNIEnv<'local>,
-    input: JString<'local>,
-) -> JClass<'local> {
-    //
+pub struct PoseEstimator {
+}
+impl PoseEstimator {
+    pub fn new() {
+        optimize_nlls();
+    }
 }

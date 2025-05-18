@@ -1,5 +1,7 @@
 //use transforms::errors::TransformError;
 
+use minint::NtError;
+
 /// Chalkydri's error type
 #[derive(Debug)]
 pub enum Error {
@@ -14,6 +16,7 @@ pub enum Error {
     FieldLayoutDoesNotExist,
 
     InvalidTag,
+    NtError(NtError),
 }
 
 impl std::fmt::Display for Error {
