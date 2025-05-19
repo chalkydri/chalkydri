@@ -72,20 +72,3 @@ quanta = "0.12.5"
 [build-dependencies]
 bindgen = { version = "*", default-features = false, features = ["runtime"] }
 
-# Compile dependencies with optimization level 3 even when in debug mode
-# This can reduce the time required to build when actively developing and testing.
-[profile.dev.package.'*']
-opt-level = 3
-
-# Compile everything with extreme optimizations when in release mode
-[profile.release]
-# Optimization level 3 is the most extreme level of optimization.
-# It isn't *always* the most optimized for every codebase, but I haven't bothered testing.
-# TODO: do that testing
-opt-level = 3
-# Link Time Optimization
-#lto = true
-# Strip extra symbols (used for debugging and such)
-strip = true
-# Code generation-- only 1 worker generates more optimized code in theory
-codegen-units = 1

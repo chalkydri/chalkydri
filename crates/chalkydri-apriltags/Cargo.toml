@@ -27,11 +27,3 @@ harness = false
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports"] }
 
-[profile.release]
-opt-level = 3
-lto = true
-strip = true
-
-[profile.bench]
-inherits = "release"
-
