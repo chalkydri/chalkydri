@@ -45,6 +45,8 @@ def_cfg! {
         server_address: Option<String>,
     }
     Camera {
+        #[serde(skip_deserializing)]
+        online: bool,
         id: String,
         name: String,
         settings: Option<CameraSettings>,
@@ -77,9 +79,14 @@ def_cfg! {
         z: f64,
     }
     CameraSubsystems {
+        mjpeg: Option<MjpegSubsys>,
         capriltags: Option<CAprilTagsSubsys>,
         ml: Option<MlSubsys>,
         custom: Vec<String>,
+    }
+    MjpegSubsys {
+        width: u32,
+        height: u32,
     }
     CAprilTagsSubsys {
         max_frame_rate: u8,
@@ -129,6 +136,7 @@ impl Default for Config {
 impl Default for Camera {
     fn default() -> Self {
         Self {
+            online: false,
             id: String::new(),
             name: String::new(),
             settings: None,
@@ -136,6 +144,10 @@ impl Default for Camera {
             manual_exposure: None,
             possible_settings: None,
             subsystems: CameraSubsystems {
+                mjpeg: Some(MjpegSubsys {
+                    width: 1280,
+                    height: 720,
+                }),
                 capriltags: Some(CAprilTagsSubsys { max_frame_rate: 40 }),
                 ml: None,
                 custom: Vec::new(),

@@ -1,16 +1,18 @@
 use gstreamer::{Element, Pipeline};
 use tracing::Level;
 
-use crate::subsystems::Subsystem;
+use crate::{cameras::{mjpeg::MjpegProc, pipeline::Preprocessor}, subsystems::Subsystem};
 #[cfg(feature = "capriltags")]
 use super::capriltags::{self, CApriltagsDetector};
 #[cfg(feature = "python")]
 use super::python::PythonSubsys;
-use crate::{Nt, cameras::CameraManager, config, error::Error, pose::PoseEstimator};
+use crate::{Nt, cameras::CamManager, config, error::Error, pose::PoseEstimator};
 
 #[derive(Clone)]
 pub struct SubsysManager {
     pub pose_est: PoseEstimator,
+    
+    mjpeg: MjpegProc,
     #[cfg(feature = "capriltags")]
     capriltags: CApriltagsDetector,
     #[cfg(feature = "python")]
@@ -18,11 +20,13 @@ pub struct SubsysManager {
 }
 impl SubsysManager {
     /// Initialize the [`subsystem`](Subsystem) manager
-    pub async fn new() -> Result<Self, Error> {
+    pub async fn new(pipeline: &Pipeline) -> Result<Self, Error> {
         let span = span!(Level::INFO, "subsys_manager");
         let _enter = span.enter();
 
         let pose_est = PoseEstimator::new().await?;
+
+        let mjpeg = <MjpegProc as Preprocessor>::new(pipeline);
 
         #[cfg(feature = "capriltags")]
         let capriltags = CApriltagsDetector::init().await.unwrap();
@@ -33,6 +37,7 @@ impl SubsysManager {
         Ok(Self {
             pose_est,
 
+            mjpeg,
             #[cfg(feature = "capriltags")]
             capriltags,
             #[cfg(feature = "python")]
@@ -41,35 +46,14 @@ impl SubsysManager {
     }
 
     /// Spawn subsystems for a camera
-    pub async fn spawn(&self, cam_config: config::Camera, pipeline: &Pipeline, cam: &Element) {
+    pub async fn start(&self, cam_config: config::Camera, pipeline: &Pipeline, cam: &Element) {
         let manager = self.clone();
         let manager_ = manager.clone();
 
-        #[cfg(feature = "capriltags")]
-        {
-            let span = span!(Level::INFO, "capriltags_subsys", camera = cam_config.name);
-            let capriltags_rx = CameraManager::add_subsys::<CApriltagsDetector>(
-                pipeline,
-                cam,
-                cam_config.clone(),
-                true,
-            );
-            manager
-                .capriltags
-                .process(manager_, Nt.clone(), cam_config, capriltags_rx)
-                .await
-                .unwrap();
-        }
-
-        #[cfg(feature = "python")]
-        {
-            let python_rx =
-                CameraManager::add_subsys::<PythonSubsys>(pipeline, cam, cam_config.clone(), true);
-            manager
-                .python
-                .process(manager_, Nt.clone(), cam_config, python_rx)
-                .await
-                .unwrap();
-        }
+        manager
+            .mjpeg
+            .process(manager_, Nt.clone(), cam_config)
+            .await
+            .unwrap();
     }
 }

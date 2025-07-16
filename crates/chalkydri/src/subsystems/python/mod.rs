@@ -1,18 +1,15 @@
 mod api;
 
-use std::{any::Any, collections::HashMap, ffi::CStr, sync::Arc};
+use std::{collections::HashMap, ffi::CStr, sync::Arc};
 
-use gstreamer::{
-    Caps, Element, ElementFactory,
-    prelude::{GstBinExt, GstBinExtManual},
-};
+use gstreamer::{Caps, Element, ElementFactory, prelude::GstBinExtManual};
 use minint::NtTopic;
-use numpy::{
-    ndarray::{self, ShapeBuilder},
-};
+use numpy::ndarray;
 use tokio::sync::RwLock;
 
-use crate::{Cfg, Nt, config, error::Error, subsystems::Subsystem};
+use crate::{
+    Cfg, Nt, cameras::pipeline::Preprocessor, config, error::Error, subsystems::Subsystem,
+};
 
 use pyo3::prelude::*;
 
@@ -25,6 +22,7 @@ impl Subsystem for PythonSubsys {
 
     type Error = Error;
     type Config = Vec<config::CustomSubsystem>;
+    type Preproc = PythonPreproc;
     type Output = ();
 
     async fn init() -> Result<Self, Self::Error> {
@@ -33,10 +31,11 @@ impl Subsystem for PythonSubsys {
 
     async fn process(
         &self,
-        manager: super::SubsysManager,
         nt: minint::NtConn,
-        cam_config: crate::config::Camera,
-        rx: tokio::sync::watch::Receiver<Option<Vec<u8>>>,
+        cam_config: config::Camera,
+        rx: tokio::sync::watch::Receiver<
+            Option<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>,
+        >,
     ) -> Result<Self::Output, Self::Error> {
         let handle = tokio::runtime::Handle::current();
 
@@ -79,15 +78,10 @@ impl Subsystem for PythonSubsys {
                 let handle_ = handle.clone();
                 handle.spawn(async move {
                     let topics = Arc::new(RwLock::new(HashMap::<String, NtTopic<f64>>::new()));
-                    frame_proc_loop(rx, async move |buf| {
+                    frame_proc_loop::<Self::Preproc, _>(rx, async move |buf| {
                         if let Some(settings) = &cam_config.settings {
                             let py_ret = Python::with_gil(|py| -> PyResult<()> {
-                                let arr = ndarray::Array::from_shape_vec(
-                                    (settings.height as usize, settings.width as usize, 3usize),
-                                    buf,
-                                )
-                                .expect("something is really braken");
-                                let nparr = numpy::PyArray::from_array(py, &arr);
+                                let nparr = numpy::PyArray::from_array(py, &buf);
 
                                 for module in &modules {
                                     let ret: HashMap<String, f64> = module
@@ -135,11 +129,17 @@ impl Subsystem for PythonSubsys {
 
         Ok::<Self::Output, Self::Error>(())
     }
+}
 
-    fn preproc(
-        config: crate::config::Camera,
-        pipeline: &gstreamer::Pipeline,
-    ) -> Result<(gstreamer::Element, gstreamer::Element), Self::Error> {
+pub struct PythonPreproc {
+    videoconvertscale: Arc<Element>,
+    filter: Arc<Element>,
+}
+impl Preprocessor for PythonPreproc {
+    type Frame = ndarray::Array3<u8>;
+    type Subsys = PythonSubsys;
+
+    fn new(pipeline: &gstreamer::Pipeline) -> Self {
         // Create the elements
         let videoconvertscale = ElementFactory::make("videoconvertscale").build().unwrap();
         let filter = ElementFactory::make("capsfilter")
@@ -153,9 +153,40 @@ impl Subsystem for PythonSubsys {
         // Add them to the pipeline
         pipeline.add_many([&videoconvertscale, &filter]).unwrap();
 
-        // Link them
-        Element::link_many([&videoconvertscale, &filter]).unwrap();
+        Self {
+            videoconvertscale: videoconvertscale.into(),
+            filter: filter.into(),
+        }
+    }
+    fn link(&self, src: Element, sink: Element) {
+        Element::link_many([&src, &self.videoconvertscale, &self.filter, &sink]).unwrap();
+    }
+    fn unlink(&self, src: Element, sink: Element) {
+        Element::unlink_many([&src, &self.videoconvertscale, &self.filter, &sink]);
+    }
+    fn sampler(
+        appsink: &gstreamer_app::AppSink,
+        tx: tokio::sync::watch::Sender<Option<Arc<Self::Frame>>>,
+    ) -> Result<Option<()>, Error> {
+        let sample = appsink
+            .pull_sample()
+            .map_err(|_| Error::FailedToPullSample)?;
+        let buf = sample.buffer().unwrap();
+        let buf = buf
+            .to_owned()
+            .into_mapped_buffer_readable()
+            .unwrap()
+            .to_vec();
 
-        Ok((videoconvertscale, filter))
+        let arr = ndarray::Array::from_shape_vec(
+            //(settings.height as usize, settings.width as usize, 3usize),
+            (1280, 720, 3),
+            buf,
+        )
+        .expect("something is really braken");
+
+        tx.send(Arc::new(Some(arr))).unwrap();
+
+        Ok(Some(()))
     }
 }

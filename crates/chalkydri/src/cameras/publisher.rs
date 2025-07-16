@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use minint::{NtSubscription, NtTopic};
 
-use crate::{config, Nt};
+use crate::{Nt, config};
 
 struct Cam<'p> {
     source: NtTopic<'p, String>,
@@ -74,12 +74,18 @@ impl CamPublisher<'_> {
             .to_string();
 
         cam.source.set("usb:0".to_string()).await.unwrap();
-        cam.streams.set(vec![format!(
-            "mjpeg:http://{hostname}.local:6942/stream/{}",
-            cam_config.id,
-        )]).await.unwrap();
+        cam.streams
+            .set(vec![format!(
+                "mjpeg:http://{hostname}.local:6942/stream/{}",
+                cam_config.id,
+            )])
+            .await
+            .unwrap();
         cam.description.set("Chalkydri".to_string()).await.unwrap();
         cam.connected.set(true).await.unwrap();
-        cam.modes.set(vec!["On".to_owned(), "Off".to_owned()]).await.unwrap();
+        cam.modes
+            .set(vec!["On".to_owned(), "Off".to_owned()])
+            .await
+            .unwrap();
     }
 }

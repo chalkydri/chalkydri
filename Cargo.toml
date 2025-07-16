@@ -8,6 +8,7 @@ members = [
   "crates/chalkydrilib",
   "crates/minint",
 ]
+default-members = ["crates/chalkydri"]
 
 [workspace.dependencies]
 tracing = { version = "0.1.41", features = ["log"] }

@@ -3,24 +3,28 @@
  * PLES SEND HELP
  */
 
-mod mjpeg;
+pub(crate) mod mjpeg;
+pub(crate) mod pipeline;
+mod providers;
 mod publisher;
 
 use gstreamer::{
-    BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element,
-    ElementFactory, FlowError, FlowSuccess, Fraction, MessageView, Pipeline, State, Structure,
-    glib::WeakRef,
-    prelude::*,
+    Bin, Bus, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element,
+    ElementFactory, FlowError, FlowSuccess, Fraction, Message, MessageView, PadDirection, Pipeline,
+    State, Structure, glib::WeakRef, prelude::*,
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use minint::NtConn;
-use mjpeg::MjpegStream;
+use pipeline::CamPipeline;
+use providers::{CamProvider, ProviderEvent, V4l2Provider};
+use publisher::CamPublisher;
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
 use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc};
 use tokio::{
     sync::{Mutex, MutexGuard, RwLock, mpsc, watch},
+    task::JoinHandle,
 };
 use tracing::Level;
 
@@ -31,7 +35,7 @@ use crate::{
     calibration::Calibrator,
     config::{self, CameraSettings, CfgFraction},
     error::Error,
-    subsystems::{SubsysManager, Subsystem},
+    subsystems::Subsystem,
 };
 
 #[derive(Clone)]
@@ -40,6 +44,161 @@ pub struct CameraCtx {
     tee: WeakRef<Element>,
 }
 
+#[derive(Clone)]
+pub struct CamManager {
+    v4l2_prov: Arc<Mutex<V4l2Provider>>,
+    pub pipelines: Arc<RwLock<HashMap<String, CamPipeline>>>,
+
+    restart_tx: mpsc::Sender<()>,
+    dev_msg_tx: mpsc::Sender<ProviderEvent>,
+    pub new_dev_rx: Arc<Mutex<mpsc::Receiver<config::Camera>>>,
+}
+impl CamManager {
+    pub async fn new(nt: NtConn, restart_tx: mpsc::Sender<()>) -> (Self, impl Future<Output = ()>) {
+        let v4l2_prov = Arc::new(Mutex::new(V4l2Provider::init()));
+
+        let pipelines = Arc::new(RwLock::new(HashMap::new()));
+
+        let (dev_msg_tx, dev_msg_rx) = mpsc::channel(20);
+        let (new_dev_tx, new_dev_rx) = mpsc::channel(20);
+
+        let pipelines_ = pipelines.clone();
+        let runner = Self::spawn_dev_msg_handler(pipelines_, dev_msg_rx, new_dev_tx);
+
+        (
+            Self {
+                v4l2_prov,
+                pipelines,
+
+                restart_tx,
+                dev_msg_tx,
+                new_dev_rx: Arc::new(Mutex::new(new_dev_rx)),
+            },
+            runner,
+        )
+    }
+
+    pub async fn start_dev_providers(&self) {
+        self.v4l2_prov
+            .lock()
+            .await
+            .register_handler(self.dev_msg_tx.clone());
+        self.v4l2_prov.lock().await.start();
+    }
+    pub async fn stop_dev_providers(&self) {
+        self.v4l2_prov.lock().await.stop();
+        self.v4l2_prov.lock().await.unregister_handler();
+    }
+
+    async fn spawn_dev_msg_handler(
+        pipelines: Arc<RwLock<HashMap<String, CamPipeline>>>,
+        mut rx: mpsc::Receiver<ProviderEvent>,
+        tx: mpsc::Sender<config::Camera>,
+    ) {
+        debug!("starting dev msg handler...");
+        'outer: while let Some(event) = rx.recv().await {
+            match event {
+                ProviderEvent::Connected(id, dev) => {
+                    let id = V4l2Provider::get_id(&dev);
+                    println!("idfk: {id}");
+
+                    if let Some(cameras) = Cfg.read().await.cameras.clone() {
+                        for cam in cameras {
+                            if id == cam.id {
+                                let pipeline = CamPipeline::new(dev.clone(), cam).await;
+                                let _ = pipelines.write().await.insert(id.clone(), pipeline);
+                                println!("existing cam: {id}");
+                                continue 'outer;
+                            }
+                        }
+                    }
+
+                    println!("new cam: {id}");
+                    tx.send(config::Camera {
+                        id,
+                        possible_settings: Some(
+                            dev.caps()
+                                .unwrap()
+                                .iter()
+                                //.filter(|cap| cap.name().as_str() == "video/x-raw")
+                                .filter_map(|cap| {
+                                    let width = cap.get::<i32>("width").ok().map(|v| v as u32);
+                                    let height = cap.get::<i32>("height").ok().map(|v| v as u32);
+                                    let frame_rate =
+                                        cap.get::<Fraction>("framerate").ok().map(|v| {
+                                            CfgFraction {
+                                                num: v.numer() as u32,
+                                                den: v.denom() as u32,
+                                            }
+                                        });
+                                    if width.is_none() || height.is_none() {
+                                        //panic!("Either width or height doesn't exist. Need to look into that...");
+                                        None
+                                    } else {
+                                        Some(CameraSettings {
+                                            width: width.unwrap(),
+                                            height: height.unwrap(),
+                                            frame_rate,
+                                            format: Some(
+                                                cap.get::<String>("format").unwrap_or_default(),
+                                            ),
+                                        })
+                                    }
+                                })
+                                .collect(),
+                        ),
+                        ..Default::default()
+                    })
+                    .await
+                    .unwrap();
+                }
+                ProviderEvent::Disconnected(id, dev) => {
+                    let mut pipelines = pipelines.write().await;
+                    if pipelines.contains_key(&id) {
+                        pipelines.remove(&id);
+                    }
+                }
+            }
+        }
+
+        panic!("dev msg handler died");
+    }
+
+    pub async fn refresh_devices(&self) {
+        let mut cfgg = Cfg.write().await;
+
+        let mut cameras = cfgg.cameras.clone();
+
+        if let Some(ref mut cams) = cameras {
+            for mut cam in cams {
+                cam.online = self.pipelines.read().await.contains_key(&cam.id);
+            }
+        }
+
+        (*cfgg).cameras = cameras;
+    }
+
+    pub async fn update_pipeline(&self, cam_id: String) {
+        let cfgg = Cfg.read().await.clone();
+        let cam_config = cfgg
+            .cameras
+            .unwrap()
+            .iter()
+            .filter(|cam| cam.id == cam_id)
+            .next()
+            .unwrap()
+            .clone();
+        self.pipelines
+            .read()
+            .await
+            .get(&cam_id)
+            .unwrap()
+            .update(cam_config)
+            .await;
+    }
+}
+
+/*
 /// The camera manager
 ///
 /// This manages all of the GStreamer pipelines.
@@ -52,6 +211,7 @@ pub struct CameraManager {
     mjpeg_streams: Arc<Mutex<HashMap<String, MjpegStream>>>,
     restart_tx: mpsc::Sender<()>,
     subsys_man: SubsysManager,
+    publisher: Arc<Mutex<CamPublisher>>,
 }
 impl CameraManager {
     /// Initialize a camera manager
@@ -74,6 +234,7 @@ impl CameraManager {
             Arc::new(Mutex::new(HashMap::new()));
         let mjpeg_streams: Arc<Mutex<HashMap<String, MjpegStream>>> =
             Arc::new(Mutex::new(HashMap::new()));
+        let publisher = Arc::new(Mutex::new(CamPublisher::new()));
 
         let subsys_man = SubsysManager::new().await.unwrap();
 
@@ -90,12 +251,14 @@ impl CameraManager {
         let calibrators_ = calibrators.clone();
         let mjpeg_streams_ = mjpeg_streams.clone();
         let pipelines_ = pipelines.clone();
+        let publisher_ = publisher.clone();
         let manager = subsys_man.clone();
         let rt_handle = tokio::runtime::Handle::current();
         bus.set_sync_handler(move |_, msg| {
             let calibrators = &calibrators_;
             let mjpeg_streams = &mjpeg_streams_;
             let pipelines = &pipelines_;
+            let publisher = &publisher_;
             match msg.view() {
                 MessageView::DeviceAdded(msg) => {
                     let dev = msg.device();
@@ -232,34 +395,7 @@ impl CameraManager {
                             tokio::task::block_in_place(|| pipelines.blocking_write())
                                 .insert(id, pipeline);
 
-                            futures_executor::block_on(async {
-                                let _source = ManuallyDrop::new(
-                                    nt.publish::<String>(format!(
-                                        "/CameraPublisher/{}/source",
-                                        cam_config.name,
-                                    )).await.unwrap()
-                                );
-                                let mut streams = ManuallyDrop::new(
-                                    nt.publish(format!(
-                                        "/CameraPublisher/{}/streams",
-                                        cam_config.name
-                                    ))
-                                    .await
-                                    .unwrap(),
-                                );
-                                let hostname = rustix::system::uname()
-                                    .nodename()
-                                    .to_str()
-                                    .unwrap()
-                                    .to_string();
-                                streams
-                                    .set(vec![format!(
-                                        "mjpeg:http://{hostname}.local:6942/stream/{}",
-                                        cam_config.id
-                                    )])
-                                    .await
-                                    .unwrap();
-                            });
+                            publisher_.lock().await.publish(cam_config).await;
                         }
                     }
                 }
@@ -291,9 +427,11 @@ impl CameraManager {
             mjpeg_streams,
             restart_tx,
             subsys_man,
+            publisher,
         }
     }
 
+    /// Trigger a restart of Chalkydri
     pub async fn restart(&self) {
         self.restart_tx.send(()).await.unwrap();
     }
@@ -531,6 +669,8 @@ impl CameraManager {
         let span = span!(Level::INFO, "calib");
         let _enter = span.enter();
 
+        let bin = Bin::builder().name("calib").build();
+
         let valve = ElementFactory::make("valve")
             .property("drop", false)
             .build()
@@ -553,8 +693,7 @@ impl CameraManager {
             .build()
             .unwrap();
 
-        pipeline
-            .add_many([&valve, &queue, &videoconvertscale, &filter, &appsink])
+        bin.add_many([&valve, &queue, &videoconvertscale, &filter, &appsink])
             .unwrap();
         Element::link_many([&cam, &valve, &queue, &videoconvertscale, &filter, &appsink]).unwrap();
 
@@ -749,3 +888,4 @@ impl CameraManager {
         self.mjpeg_streams.lock().await
     }
 }
+*/

@@ -11,7 +11,8 @@ fn main() {
     let img = img.as_mut_slice();
 
     let st = Instant::now();
-    let mut det = chalkydri_apriltags::Detector::new(imgg.width() as usize, imgg.height() as usize, &[]);
+    let mut det =
+        chalkydri_apriltags::Detector::new(imgg.width() as usize, imgg.height() as usize, &[]);
     println!("{:?}", st.elapsed());
 
     let mut total = Duration::ZERO;
@@ -19,7 +20,7 @@ fn main() {
         let st = Instant::now();
         det.process_frame(img);
         det.draw();
-        
+
         //let conn_comp = Instant::now();
         det.connected_components();
         //dbg!(conn_comp.elapsed());

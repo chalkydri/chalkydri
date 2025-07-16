@@ -12,12 +12,12 @@
 
 #[macro_use]
 extern crate tracing;
+extern crate quanta;
 extern crate rmp;
 extern crate serde;
 extern crate serde_json;
 extern crate tokio;
 extern crate tokio_tungstenite;
-extern crate quanta;
 
 mod datatype;
 mod error;
@@ -36,6 +36,7 @@ use futures_util::stream::{SplitSink, SplitStream};
 use messages::*;
 
 use futures_util::{SinkExt, StreamExt};
+use quanta::{Clock, Instant};
 use rmp::decode::Bytes;
 use tokio::net::TcpStream;
 use tokio::sync::{watch, RwLock};
@@ -49,7 +50,6 @@ use tokio_tungstenite::tungstenite::{
     Error as TungsteniteError, Message,
 };
 use tokio_tungstenite::{tungstenite, MaybeTlsStream, WebSocketStream};
-use quanta::{Clock, Instant};
 
 // I wanna keep my face on today
 
@@ -334,12 +334,21 @@ impl NtConn {
     }
 
     async fn ping(&self) -> Result<()> {
-        self.c2s_tx.send(Message::Ping(tungstenite::Bytes::from_static(b"sigma sigma boy"))).unwrap();
+        self.c2s_tx
+            .send(Message::Ping(tungstenite::Bytes::from_static(
+                b"sigma sigma boy",
+            )))
+            .unwrap();
 
         Ok(())
     }
     async fn time_correct(&self) -> Result<()> {
-        self.write_bin_frame::<BsInt>(-1, Duration::ZERO.as_micros() as u64, (self.start_time.elapsed().as_micros() as u64).into()).unwrap();
+        self.write_bin_frame::<BsInt>(
+            -1,
+            Duration::ZERO.as_micros() as u64,
+            (self.start_time.elapsed().as_micros() as u64).into(),
+        )
+        .unwrap();
 
         Ok(())
     }
@@ -405,10 +414,10 @@ impl NtConn {
                         let curr_ts = self.start_time.elapsed();
                         if let Data::Int(BsInt::U64(pre_ts)) = data {
                             let rtt = curr_ts - Duration::from_micros(pre_ts);
-                            *self.offset.write().await = Duration::from_micros(timestamp) + (rtt/2);
+                            *self.offset.write().await =
+                                Duration::from_micros(timestamp) + (rtt / 2);
                         }
                     }
-
 
                     if let Some(value_tx) = self.value_tx.write().await.get(&(topic_id as i32)) {
                         if let Err(err) = value_tx.send((timestamp, data)) {

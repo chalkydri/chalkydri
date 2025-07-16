@@ -9,10 +9,7 @@ async fn main() -> Result<(), NtError> {
     env_logger::init();
     let conn = NtConn::new("127.0.0.1", "minint-test").await?;
 
-    let mut test = conn
-        .publish::<String>("/test")
-        .await
-        .unwrap();
+    let mut test = conn.publish::<String>("/test").await.unwrap();
 
     let mut i = 0;
     loop {

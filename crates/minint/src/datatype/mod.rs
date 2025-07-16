@@ -30,7 +30,9 @@ impl Data {
                 Self::BoolArray(<Vec<bool> as DataWrap>::decode(rd)?)
             }
             <Vec<f64> as DataWrap>::MSGPCK => Self::F64Array(<Vec<f64> as DataWrap>::decode(rd)?),
-            <Vec<BsInt> as DataWrap>::MSGPCK => Self::IntArray(<Vec<BsInt> as DataWrap>::decode(rd)?),
+            <Vec<BsInt> as DataWrap>::MSGPCK => {
+                Self::IntArray(<Vec<BsInt> as DataWrap>::decode(rd)?)
+            }
             <Vec<f32> as DataWrap>::MSGPCK => Self::F32Array(<Vec<f32> as DataWrap>::decode(rd)?),
             <Vec<String> as DataWrap>::MSGPCK => {
                 Self::StringArray(<Vec<String> as DataWrap>::decode(rd)?)
@@ -138,7 +140,6 @@ impl DataType for f64 {
         Ok(())
     }
 }
-
 
 impl DataType for f32 {
     const DATATYPE_MSGPCK: u8 = 3;

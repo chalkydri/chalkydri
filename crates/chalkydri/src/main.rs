@@ -14,8 +14,8 @@
 extern crate tracing;
 #[macro_use]
 extern crate serde;
-extern crate tokio;
 extern crate minint;
+extern crate tokio;
 
 // Web server and OpenAPI documentation generator
 #[cfg(feature = "web")]
@@ -47,7 +47,7 @@ mod utils;
 
 #[cfg(feature = "web")]
 use api::run_api;
-use cameras::CameraManager;
+use cameras::CamManager;
 use config::Config;
 use mimalloc::MiMalloc;
 use minint::NtConn;
@@ -184,7 +184,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create the shutdown channel
     let (tx, mut rx) = mpsc::channel::<()>(1);
     // Spawn the camera manager
-    let cam_man = CameraManager::new(Nt.clone(), tx).await;
+    let (cam_man, runner) = CamManager::new(Nt.clone(), tx).await;
+    cam_man.start_dev_providers().await;
     // Spawn the web server
     let api = tokio::spawn(run_api(cam_man.clone()));
 
@@ -192,6 +193,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::select!(
         _ = api => {},
         _ = tokio::signal::ctrl_c() => {},
+        _ = runner => {},
         _ = rx.recv() => {},
     );
 

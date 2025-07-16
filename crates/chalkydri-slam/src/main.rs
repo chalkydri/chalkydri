@@ -1,10 +1,15 @@
-use factrs::{assign_symbols, containers::FactorBuilder, core::{Factor, GaussNewton, Graph, Values, SE2, SE3, SO2, SO3}, linalg::{Matrix1x3, Matrix3}, traits::*};
+use factrs::{
+    assign_symbols,
+    containers::FactorBuilder,
+    core::{Factor, GaussNewton, Graph, SE2, SE3, SO2, SO3, Values},
+    linalg::{Matrix1x3, Matrix3},
+    traits::*,
+};
 
 #[macro_use]
 extern crate factrs;
 
-pub struct Slam {
-}
+pub struct Slam {}
 
 assign_symbols!(Tag: SE3; Robot: SE3);
 
