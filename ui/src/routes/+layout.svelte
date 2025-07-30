@@ -21,12 +21,25 @@
 		Toast
 	} from 'flowbite-svelte';
 	import { CameraIcon, Hammer, HammerIcon, HomeIcon, PaintRollerIcon, PencilRulerIcon, SettingsIcon } from 'lucide-svelte';
+	import type { Camera, Info } from '$lib/api';
 
 	let hide_sidebar = $state(false);
+
 	let connected = $state(false);
 	connected_.subscribe((val: boolean) => {
 		connected = val;
 	});
+
+  let info: Info | null = $state(null);
+  let new_cams: Array<Camera> = $state(Array());
+  sys_info.subscribe((val: Info | null) => {
+    if (val) {
+      val.new_cams.forEach((cam: Camera) => {
+        new_cams.push(cam);
+      });
+    }
+    info = val;
+  });
 	let { children } = $props();
 
 	function toggleSidebar() {
@@ -36,10 +49,13 @@
 
 <svelte:window />
 
+{#each new_cams as cam}
 <Toast transition={slide} class="rounded-md dark:bg-slate-700" position="top-right">
 	<P>A new camera is available!</P>
+  <P>{ cam.id }</P>
 	<Button class="mt-2" color="blue" size="sm">Set up now</Button>
 </Toast>
+{/each}
 
 <div class="bg-slate-50 dark:bg-slate-900 p-4 w-full h-screen">
 	<header>

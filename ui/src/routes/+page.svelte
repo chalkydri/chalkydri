@@ -28,7 +28,7 @@
 	}
 </script>
 
-{#if sys_info}
+{#if info}
 	<Layout cols="grid-cols-1 gap-2">
 		<Card padding="sm" class="gap-1">
 			<P size="lg">chalkydri</P>
@@ -36,7 +36,7 @@
 				<div class="flex gap-2 items-baseline">
 					<FilmIcon height="12" />
 					{#if connected}
-						<P>{sys_info.frame_rate} FPS</P>
+						<P> FPS</P>
 					{:else}
 						<Spinner color="blue" size={4} class="my-auto" />
 					{/if}
@@ -44,7 +44,7 @@
 				<div class="flex gap-2 items-baseline">
 					<CpuIcon height="12" />
 					{#if connected}
-						<P>{sys_info.cpu_usage}%</P>
+						<P>{info.cpu_usage}%</P>
 					{:else}
 						<Spinner color="blue" size={4} class="my-auto" />
 					{/if}
@@ -52,7 +52,7 @@
 				<div class="flex gap-2 items-baseline">
 					<MemoryStickIcon height="12" />
 					{#if connected}
-						<P>{sys_info.mem_usage}%</P>
+						<P>{info.mem_usage}%</P>
 					{:else}
 						<Spinner color="blue" size={4} class="my-auto" />
 					{/if}
@@ -60,7 +60,7 @@
 				<div class="flex gap-2 items-baseline">
 					<Clock3Icon height="12" />
 					{#if connected}
-						<P>{sys_info.uptime}%</P>
+						<P>{info.uptime}</P>
 					{:else}
 						<Spinner color="blue" size={4} class="my-auto" />
 					{/if}
