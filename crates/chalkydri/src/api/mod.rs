@@ -375,8 +375,10 @@ pub(super) async fn stream(path: web::Path<String>, data: web::Data<CamManager>)
 
     println!("{cam_name}");
 
+    error!("getting mjpeg stream");
     let mjpeg_stream = data.pipelines.read().await.get(&cam_name).unwrap().mjpeg_preproc.inner().clone();
         drop(data);
+        error!("dropped data");
 
         HttpResponse::Ok()
             .append_header(header::CacheControl(vec![CacheDirective::NoCache]))

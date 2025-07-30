@@ -20,8 +20,8 @@ pub struct MjpegProc {
     videorate: Arc<Element>,
     videoconvertscale: Arc<Element>,
     filter: Arc<Element>,
-    tx: watch::Sender<Option<Vec<u8>>>,
-    rx: watch::Receiver<Option<Vec<u8>>>,
+    pub(crate) tx: watch::Sender<Option<Arc<Vec<u8>>>>,
+    rx: watch::Receiver<Option<Arc<Vec<u8>>>>,
 }
 impl Preprocessor for MjpegProc {
     type Subsys = NoopSubsys<Self>;
@@ -94,6 +94,7 @@ impl Preprocessor for MjpegProc {
             .unwrap();
         match sample.buffer() {
             Some(buf) => {
+                debug!("encoding mjpeg frame");
                 let jpeg = turbojpeg::compress(
                     turbojpeg::Image {
                         width: 640,
@@ -111,7 +112,8 @@ impl Preprocessor for MjpegProc {
                     turbojpeg::Subsamp::None,
                 )
                 .unwrap();
-                while let Err(err) = tx.send(Some(jpeg.to_vec().into())) {
+                debug!("finished encoding mjpeg frame");
+                while let Err(err) = tx.send(Some(Arc::new(jpeg.to_vec().into()))) {
                     error!("error sending frame: {err:?}");
                 }
             }

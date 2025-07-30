@@ -105,7 +105,11 @@ impl CamManager {
                     if let Some(cameras) = Cfg.read().await.cameras.clone() {
                         for cam in cameras {
                             if id == cam.id {
-                                let pipeline = CamPipeline::new(dev.clone(), cam).await;
+                                let pipeline = CamPipeline::new(dev.clone(), cam.clone()).await;
+                                debug!("linking preprocs");
+                                pipeline.link_preprocs(cam);
+                                debug!("starting pipeline");
+                                pipeline.start();
                                 let _ = pipelines.write().await.insert(id.clone(), pipeline);
                                 println!("existing cam: {id}");
                                 continue 'outer;

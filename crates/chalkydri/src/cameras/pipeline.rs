@@ -82,7 +82,17 @@ impl CamPipeline {
             .add_many([&input, &filter, &jpegdec, &videoflip, &tee])
             .unwrap();
 
-        let mjpeg_preproc = PreprocWrap::new(MjpegProc::new(&pipeline));
+        // If we're getting an MJPEG stream from the cam, it needs to first be decoded
+        if is_mjpeg {
+            Element::link_many([&input, &filter, &jpegdec, &videoflip, &tee])
+                .unwrap();
+        } else {
+            Element::link_many([&input, &filter, &videoflip, &tee])
+                .unwrap();
+        }
+
+        let mjpeg_preproc = PreprocWrap::new(MjpegProc::new(&pipeline), &pipeline);
+        mjpeg_preproc.setup_sampler(mjpeg_preproc.inner().tx.clone()).unwrap();
 
         Self {
             dev,
@@ -97,15 +107,15 @@ impl CamPipeline {
             mjpeg_preproc,
         }
     }
-    fn link_preprocs(&self, cam_config: config::Camera) {
-        if cam_config.subsystems.mjpeg.is_some() {
+    pub(crate) fn link_preprocs(&self, cam_config: config::Camera) {
+        //if cam_config.subsystems.mjpeg.is_some() {
             self.mjpeg_preproc.link(self.tee.clone());
-        }
+        //}
     }
-    fn unlink_preprocs(&self, cam_config: config::Camera) {
-        if cam_config.subsystems.mjpeg.is_some() {
+    pub(crate) fn unlink_preprocs(&self, cam_config: config::Camera) {
+        //if cam_config.subsystems.mjpeg.is_some() {
             self.mjpeg_preproc.unlink(self.tee.clone());
-        }
+        //}
     }
 
     pub fn start(&self) {
@@ -146,15 +156,15 @@ impl CamPipeline {
 
             let camera = self.pipeline.by_name("camera").unwrap();
 
-            let mut extra_controls = camera.property::<Structure>("extra-controls");
-            extra_controls.set(
-                "auto_exposure",
-                if cam_config.auto_exposure { 3 } else { 1 },
-            );
-            if let Some(manual_exposure) = cam_config.manual_exposure {
-                extra_controls.set("exposure_time_absolute", &manual_exposure);
-            }
-            camera.set_property("extra-controls", extra_controls);
+            //let mut extra_controls = camera.property::<Structure>("extra-controls");
+            //extra_controls.set(
+            //    "auto_exposure",
+            //    if cam_config.auto_exposure { 3 } else { 1 },
+            //);
+            //if let Some(manual_exposure) = cam_config.manual_exposure {
+            //    extra_controls.set("exposure_time_absolute", &manual_exposure);
+            //}
+            //camera.set_property("extra-controls", extra_controls);
 
             self.pipeline
                 .by_name("videoflip")
@@ -220,11 +230,13 @@ pub struct PreprocWrap<P: Preprocessor> {
     appsink: Element,
 }
 impl<P: Preprocessor> PreprocWrap<P> {
-    pub fn new(inner: P) -> Self {
+    pub fn new(inner: P, pipeline: &Pipeline) -> Self {
         let appsink = ElementFactory::make("appsink")
             .name("mjpeg_appsink")
             .build()
             .unwrap();
+
+        pipeline.add(&appsink).unwrap();
 
         Self { inner, appsink }
     }
@@ -248,6 +260,7 @@ impl<P: Preprocessor> PreprocWrap<P> {
         appsink.set_callbacks(
             AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
+                    debug!("got sample");
                     P::sampler(appsink, tx.clone()).unwrap();
                     Ok(FlowSuccess::Ok)
                 })
