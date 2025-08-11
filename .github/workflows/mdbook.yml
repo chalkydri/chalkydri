@@ -22,7 +22,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # - name: Update source
       #   run: git config --global --add safe.directory /__w/chalkydri/chalkydri && git pull --force
