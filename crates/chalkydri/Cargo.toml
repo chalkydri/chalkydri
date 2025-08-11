@@ -57,7 +57,7 @@ futures-core = "0.3.31"
 futures-util = "0.3.31"
 rustix = { version = "0.38.44", features = ["all-apis"] }
 futures-executor = "0.3.31"
-sysinfo = "0.33.1"
+sysinfo = "0.37.0"
 libblur = "0.17.0"
 nalgebra = { version = "0.33.2", default-features = false, features = ["matrixmultiply", "rayon"] }
 image = "0.25.5"
