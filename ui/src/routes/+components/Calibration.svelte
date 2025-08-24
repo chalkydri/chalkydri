@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button, Card, Hr, Layout, P, Progressbar, Select } from 'flowbite-svelte';
-	import { _loadConfig } from '../settings/+page';
+	import { _loadConfig } from '../settings/page';
 	import type { CalibrationStatus } from '$lib/calibration';
 	import { onMount } from 'svelte';
 	import { calibrationIntrinsics, calibrationStatus, calibrationStep, type Config } from '$lib/api';

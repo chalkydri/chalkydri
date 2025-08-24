@@ -1,6 +1,13 @@
+use std::sync::{Arc, Mutex};
+
 use gstreamer::{Element, Pipeline};
+use tokio::task::JoinSet;
 use tracing::Level;
 
+#[cfg(feature = "python")]
+use crate::subsystems::python::PythonPreproc;
+#[cfg(feature = "capriltags")]
+use crate::{cameras::pipeline::PreprocWrap, subsystems::capriltags::CapriltagsPreproc};
 use crate::{cameras::{mjpeg::MjpegProc, pipeline::Preprocessor}, subsystems::Subsystem};
 #[cfg(feature = "capriltags")]
 use super::capriltags::{self, CApriltagsDetector};
@@ -11,12 +18,18 @@ use crate::{Nt, cameras::CamManager, config, error::Error, pose::PoseEstimator};
 #[derive(Clone)]
 pub struct SubsysManager {
     pub pose_est: PoseEstimator,
+
+    set: Arc<Mutex<JoinSet<()>>>,
     
-    mjpeg: MjpegProc,
     #[cfg(feature = "capriltags")]
     capriltags: CApriltagsDetector,
+    #[cfg(feature = "capriltags")]
+    capriltags_preproc: Arc<PreprocWrap<CapriltagsPreproc>>,
+
     #[cfg(feature = "python")]
     python: PythonSubsys,
+    #[cfg(feature = "python")]
+    python_preproc: Arc<PreprocWrap<PythonPreproc>>,
 }
 impl SubsysManager {
     /// Initialize the [`subsystem`](Subsystem) manager
@@ -26,22 +39,30 @@ impl SubsysManager {
 
         let pose_est = PoseEstimator::new().await?;
 
-        let mjpeg = <MjpegProc as Preprocessor>::new(pipeline);
-
         #[cfg(feature = "capriltags")]
         let capriltags = CApriltagsDetector::init().await.unwrap();
+        #[cfg(feature = "capriltags")]
+        let capriltags_preproc = Arc::new(PreprocWrap::new(pipeline));
 
         #[cfg(feature = "python")]
         let python = PythonSubsys::init().await.unwrap();
+        #[cfg(feature = "python")]
+        let python_preproc = Arc::new(PreprocWrap::new(pipeline));
 
         Ok(Self {
             pose_est,
 
-            mjpeg,
+            set: Arc::new(Mutex::new(JoinSet::new())),
+
             #[cfg(feature = "capriltags")]
             capriltags,
+            #[cfg(feature = "capriltags")]
+            capriltags_preproc,
+
             #[cfg(feature = "python")]
             python,
+            #[cfg(feature = "python")]
+            python_preproc,
         })
     }
 
@@ -50,10 +71,14 @@ impl SubsysManager {
         let manager = self.clone();
         let manager_ = manager.clone();
 
-        manager
-            .mjpeg
-            .process(manager_, Nt.clone(), cam_config)
-            .await
-            .unwrap();
+        #[cfg(feature = "capriltags")]
+        self.set.lock().unwrap().spawn(async move {
+            manager.capriltags_preproc.setup_sampler(None).unwrap();
+            manager
+                .capriltags
+                .process(Nt.clone(), cam_config, manager_.capriltags_preproc.rx())
+                .await
+                .unwrap();
+        });
     }
 }

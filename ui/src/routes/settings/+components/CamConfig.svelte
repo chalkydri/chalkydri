@@ -52,7 +52,7 @@
 	});
 	$effect(() => {
 		if (camera) {
-			if (enable_capriltags) {
+			if (enable_capriltags && camera.subsystems.capriltags == null) {
 				camera.subsystems.capriltags = {
 					max_frame_rate: 40,
 				};
@@ -183,7 +183,8 @@
 							>C AprilTags</Toggle
 						>
 						{#if config}
-							{#if enable_capriltags && config.field_layouts}
+							{#if enable_capriltags && camera.subsystems.capriltags}
+                <Input type="number" bind:disabled bind:value={camera.subsystems.capriltags.max_frame_rate} />
 							{/if}
 						{/if}
 					</Card>

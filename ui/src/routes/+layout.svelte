@@ -82,29 +82,29 @@
 		<Sidebar class="flexbox h-max">
 			<SidebarWrapper class="bg-slate-200 dark:bg-slate-800 rounded-md mt-2 h-[100%]">
 				<SidebarGroup>
-					<SidebarItem label="Home" href="/">
+					<SidebarItem label="Home" href="/#/">
 						<svelte:fragment slot="icon">
 							<HomeIcon />
 						</svelte:fragment>
 					</SidebarItem>
-					<SidebarItem label="Custom code" href="/custom">
+					<SidebarItem label="Custom code" href="/#/custom">
 						<svelte:fragment slot="icon">
 							<PaintRollerIcon />
 						</svelte:fragment>
 					</SidebarItem>
-					<SidebarItem label="Settings" href="/settings">
+					<SidebarItem label="Settings" href="/#/settings">
 						<svelte:fragment slot="icon">
 							<SettingsIcon />
 						</svelte:fragment>
 					</SidebarItem>
 					<SidebarGroup class="ml-3">
-						<SidebarItem label="Front Right" href="/camera/Front Right">
+						<SidebarItem label="Front Right" href="/#/camera/Front Right">
 							<svelte:fragment slot="icon">
 								<CameraIcon />
 							</svelte:fragment>
 						</SidebarItem>
 					</SidebarGroup>
-					<SidebarItem label="Tools" href="/tools">
+					<SidebarItem label="Tools" href="/#/tools">
 						<svelte:fragment slot="icon">
 							<PencilRulerIcon />
 						</svelte:fragment>

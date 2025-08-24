@@ -112,13 +112,13 @@
 						<XIcon size="14pt" />
 					</Button>
 				{:else}
-					<P size="lg" class="w-[30%] hover:cursor-text" onclick={async () => {
+					<P title="Name of the script (click to edit)" size="lg" class="w-[30%] hover:cursor-text" onclick={async () => {
 						if (subsys) {
 							editing_subsys_name = name;
 						}
 					}}>{name}</P>
-					<Button color="red" size="xs" class="ml-1"><XIcon size="14pt" /></Button>
-					<Button color="blue" size="xs" class="ml-1" onclick={async () => {
+					<Button title="Discard changes" color="red" size="xs" class="ml-1"><XIcon size="14pt" /></Button>
+					<Button title="Save changes" color="blue" size="xs" class="ml-1" onclick={async () => {
 						if (name && subsys) {
 							let cfg = $config;
 							if (editor) {

@@ -3,6 +3,7 @@
 		Button,
 		Card,
 		Fileupload,
+		Group,
 		Input,
 		Label,
 		Layout,
@@ -11,7 +12,7 @@
 		Select,
 		Skeleton
 	} from 'flowbite-svelte';
-	import { _loadConfig, _saveConfig } from './+page';
+	import { _loadConfig, _saveConfig } from './page';
 	import { onMount } from 'svelte';
 	import { configure, saveConfiguration, type Config, type Camera, restart } from '$lib/api';
 	import CamConfig from './+components/CamConfig.svelte';
@@ -87,8 +88,6 @@
 
 		<Label for="device_name" class="mt-2 mb-1">Device name</Label>
 		<Input id="device_name" bind:value={cfg.device_name} />
-
-		<Fileupload bind:files />
 	</Card>
 
 	<Card size="md" padding="sm" class="mt-2">
@@ -155,6 +154,11 @@
 				</Card>
 			{/each}
 		{/if}
+
+    <div>
+      <P class="mb-1">Add field layouts</P>
+		  <Fileupload id="files" bind:files />
+    </div>
 	</Modal>
 
 	<Modal bind:open={calibrating} autoclose outsideclose>

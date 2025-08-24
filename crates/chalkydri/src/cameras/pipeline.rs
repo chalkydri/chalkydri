@@ -7,7 +7,7 @@ use gstreamer::{
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use tokio::sync::watch;
 
-use crate::{Cfg, config, error::Error, subsystems::Subsystem};
+use crate::{config, error::Error, subsystems::{SubsysManager, Subsystem}, Cfg};
 
 use super::mjpeg::MjpegProc;
 
@@ -20,6 +20,8 @@ pub struct CamPipeline {
     jpegdec: Element,
     videoflip: Element,
     tee: Element,
+
+    subsys: SubsysManager,
 
     pub mjpeg_preproc: PreprocWrap<MjpegProc>,
 }
@@ -91,8 +93,10 @@ impl CamPipeline {
                 .unwrap();
         }
 
-        let mjpeg_preproc = PreprocWrap::new(MjpegProc::new(&pipeline), &pipeline);
-        mjpeg_preproc.setup_sampler(mjpeg_preproc.inner().tx.clone()).unwrap();
+        let mjpeg_preproc = PreprocWrap::<MjpegProc>::new(&pipeline);
+        mjpeg_preproc.setup_sampler(Some(mjpeg_preproc.inner().tx.clone())).unwrap();
+
+        let subsys = SubsysManager::new(&pipeline).await.unwrap();
 
         Self {
             dev,
@@ -105,6 +109,7 @@ impl CamPipeline {
             tee,
 
             mjpeg_preproc,
+            subsys,
         }
     }
     pub(crate) fn link_preprocs(&self, cam_config: config::Camera) {
@@ -228,17 +233,25 @@ impl<S: Subsystem> Preprocessor for NoopPreproc<S> {
 pub struct PreprocWrap<P: Preprocessor> {
     inner: P,
     appsink: Element,
+    tx: watch::Sender<Option<Arc<P::Frame>>>,
+    rx: watch::Receiver<Option<Arc<P::Frame>>>,
 }
 impl<P: Preprocessor> PreprocWrap<P> {
-    pub fn new(inner: P, pipeline: &Pipeline) -> Self {
+    pub fn new(pipeline: &Pipeline) -> Self {
+        let inner = <P as Preprocessor>::new(pipeline);
+
         let appsink = ElementFactory::make("appsink")
             .name("mjpeg_appsink")
             .build()
             .unwrap();
 
-        pipeline.add(&appsink).unwrap();
+        if let Err(err) = pipeline.add(&appsink) {
+            error!("failed to add appsink to pipeline: {err:?}");
+        }
 
-        Self { inner, appsink }
+        let (tx, rx) = watch::channel(None);
+
+        Self { inner, appsink, tx, rx }
     }
     pub fn link(&self, src: Element) {
         let appsink = self.appsink.clone();
@@ -250,12 +263,16 @@ impl<P: Preprocessor> PreprocWrap<P> {
     }
     pub fn setup_sampler(
         &self,
-        tx: watch::Sender<Option<Arc<P::Frame>>>,
+        tx: Option<watch::Sender<Option<Arc<P::Frame>>>>,
     ) -> Result<Option<()>, Error> {
         let appsink = self.appsink.clone().dynamic_cast::<AppSink>().unwrap();
         appsink.set_drop(true);
 
-        let tx = tx.clone();
+        let tx = if let Some(tx) = tx {
+            tx.clone()
+        } else {
+            self.tx.clone()
+        };
 
         appsink.set_callbacks(
             AppSinkCallbacks::builder()
@@ -271,5 +288,8 @@ impl<P: Preprocessor> PreprocWrap<P> {
     }
     pub fn inner(&self) -> &P {
         &self.inner
+    }
+    pub fn rx(&self) -> watch::Receiver<Option<Arc<P::Frame>>> {
+        self.rx.clone()
     }
 }

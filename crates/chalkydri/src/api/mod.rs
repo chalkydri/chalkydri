@@ -2,6 +2,8 @@
 //! JSON API used by the web UI and possibly third-party applications
 //!
 
+use std::sync::Arc;
+
 use actix_web::{
     App, HttpResponse, HttpServer, Responder, get,
     http::{
@@ -15,6 +17,7 @@ use mime_guess::from_path;
 use rust_embed::Embed;
 use rustix::system::RebootCommand;
 use sysinfo::System;
+use tokio::sync::Mutex;
 use utopia::{OpenApi, ToSchema};
 
 use crate::{
@@ -73,18 +76,25 @@ async fn dist(path: web::Path<String>) -> impl Responder {
     if Assets::get(path.as_str()).is_some() {
         handle_embedded_file(path.as_str()).map_into_boxed_body()
     } else {
-        HttpResponse::TemporaryRedirect()
-            .insert_header(("Location", "/"))
-            .body(())
-            .map_into_boxed_body()
+        handle_embedded_file("index.html").map_into_boxed_body()
     }
+}
+
+#[derive(Clone)]
+struct ApiData {
+    cam_man: CamManager,
+    sys_info: Arc<Mutex<System>>,
 }
 
 /// Run the API server
 pub async fn run_api(cam_man: CamManager) {
     HttpServer::new(move || {
+        let api_data = ApiData {
+            cam_man: cam_man.clone(),
+            sys_info: Arc::new(Mutex::new(System::new())),
+        };
         App::new()
-            .app_data(Data::new(cam_man.clone()))
+            .app_data(Data::new(api_data))
             .service(index)
             .service(info)
             .service(configuration)
@@ -122,16 +132,21 @@ pub struct Info {
     ),
 )]
 #[get("/api/info")]
-pub(super) async fn info(data: web::Data<CamManager>) -> impl Responder {
-    let mut system = System::new();
+pub(super) async fn info(data: web::Data<ApiData>) -> impl Responder {
+    let mut system = data.sys_info.lock().await;
+
     system.refresh_cpu_usage();
     system.refresh_memory();
 
+    // Get updated resource usage statistics
     let cpu_usage = (system.global_cpu_usage() * 100.0) as u8;
     let mem_usage = ((system.used_memory() as f64 / system.total_memory() as f64) * 100.0) as u8;
 
+    drop(system);
+
+    // Collect newly connected cameras we don't recognize
     let mut new_cams = Vec::new();
-    while let Ok(cam) = data.new_dev_rx.lock().await.try_recv() {
+    while let Ok(cam) = data.cam_man.new_dev_rx.lock().await.try_recv() {
         new_cams.push(cam);
     }
 
@@ -150,8 +165,8 @@ pub(super) async fn info(data: web::Data<CamManager>) -> impl Responder {
     ),
 )]
 #[get("/api/configuration")]
-pub(super) async fn configuration(data: web::Data<CamManager>) -> impl Responder {
-    let cam_man = data.get_ref();
+pub(super) async fn configuration(data: web::Data<ApiData>) -> impl Responder {
+    let cam_man = &data.cam_man;
 
     cam_man.refresh_devices().await;
 
@@ -173,7 +188,7 @@ pub(super) async fn configuration(data: web::Data<CamManager>) -> impl Responder
     web::Json(cfgg)
 }
 
-/// Set the configuration without saving it to the disk
+/// Set the configuration without writing it to the disk
 #[utopia::path(
     responses(
         (status = 200, body = Config),
@@ -181,10 +196,10 @@ pub(super) async fn configuration(data: web::Data<CamManager>) -> impl Responder
 )]
 #[post("/api/configuration")]
 pub(super) async fn configure(
-    data: web::Data<CamManager>,
+    data: web::Data<ApiData>,
     web::Json(cfgg): web::Json<Config>,
 ) -> impl Responder {
-    let cam_man = data.get_ref();
+    let cam_man = &data.cam_man;
 
     *Cfg.write().await = cfgg;
     cam_man.refresh_devices().await;
@@ -199,7 +214,7 @@ pub(super) async fn configure(
     web::Json(Cfg.read().await.clone())
 }
 
-/// Save the configuration to disk
+/// Write the configuration to disk
 #[utopia::path(
     responses(
         (status = 200, body = Config),

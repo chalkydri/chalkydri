@@ -1,8 +1,7 @@
 <script lang="ts">
-	import { Button, Card, Checkbox, Input, P } from 'flowbite-svelte';
-	import { ArrowLeftIcon, CheckIcon, PencilIcon, PlusIcon, TrashIcon, XIcon } from 'lucide-svelte';
+	import { Button, Card, Checkbox, P } from 'flowbite-svelte';
+	import { PlusIcon, TrashIcon } from 'lucide-svelte';
 	import Editor from './+components/Editor.svelte';
-	import type { CustomSubsystem } from '$lib/api';
 	import { config } from '$lib';
 
 	let editing_subsys: string | null = $state(null);
@@ -19,44 +18,16 @@
 	
 		<Card padding="xs" size="sm">
 			<div class="flex flex-row items-center">
-				<!--{#if editing_subsys_name != null}
-					<Input type="text" class="px-2 py-1" size="lg" bind:value={editing_subsys_name} />
-					<Button
-						size="xs"
-						color="green"
-						class="ml-1"
-						on:click={() => {
-							if (editing_subsys_name) {
-								// = editing_subsys_name;
-							}
-							editing_subsys_name = null;
-						}}
-					>
-						<CheckIcon size="14pt" />
-					</Button>
-					<Button
-						size="xs"
-						color="red"
-						class="ml-1"
-						on:click={() => {
-							editing_subsys_name = null;
-						}}
-					>
-						<XIcon size="14pt" />
-					</Button>
-				{:else}
-				-->
 				{#each Object.keys($config.custom_subsystems) as subsystem}
 					<Checkbox class="pr-2" />
-					<P size="lg" class="mr-auto hover:cursor-pointer" onclick={async () => {
+					<P title="Edit the {subsystem} custom subsystem" size="lg" class="mr-auto hover:cursor-pointer" onclick={async () => {
 						editing_subsys = subsystem;
 					}}>{subsystem}</P>
-					<Button color="red" size="xs" class="ml-1"><TrashIcon size="14pt" /></Button>
-				<!--{/if}-->
+					<Button title="Delete the {subsystem} custom subsystem" color="red" size="xs" class="ml-1"><TrashIcon size="14pt" /></Button>
 				{/each}
 			</div>
 		</Card>
 		</div>
-		<Button color="blue" size="md" class="w-min"><PlusIcon size="12pt" /></Button>
+		<Button title="Create a new custom subsystem" color="blue" size="md" class="w-min"><PlusIcon size="12pt" /></Button>
 	</Card>
 {/if}

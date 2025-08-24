@@ -1,4 +1,4 @@
-use std::{fmt::Debug, marker::PhantomData};
+use std::{fmt::Debug, marker::PhantomData, sync::Arc};
 
 use minint::NtConn;
 use tokio::sync::watch;
@@ -9,13 +9,13 @@ use crate::{cameras::pipeline::Preprocessor, config};
 pub mod apriltags;
 #[cfg(feature = "capriltags")]
 pub mod capriltags;
-//mod manager;
+mod manager;
 #[cfg(feature = "ml")]
 pub mod ml;
 #[cfg(feature = "python")]
 pub mod python;
 
-//pub use manager::SubsysManager;
+pub use manager::SubsysManager;
 
 /// A processing subsystem
 ///
@@ -43,7 +43,7 @@ pub trait Subsystem: Sized {
         &self,
         nt: NtConn,
         cam_config: config::Camera,
-        rx: watch::Receiver<Option<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>,
+        rx: watch::Receiver<Option<Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>>,
     ) -> Result<Self::Output, Self::Error>;
 }
 
@@ -69,7 +69,7 @@ impl<P: Preprocessor> Subsystem for NoopSubsys<P> {
         &self,
         _nt: NtConn,
         _cam_config: config::Camera,
-        _rx: watch::Receiver<Option<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>,
+        _rx: watch::Receiver<Option<Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>>,
     ) -> Result<Self::Output, Self::Error> {
         Ok(())
     }
@@ -77,7 +77,7 @@ impl<P: Preprocessor> Subsystem for NoopSubsys<P> {
 
 /// Run frame processing loop
 pub async fn frame_proc_loop<P: Preprocessor, F: AsyncFnMut(P::Frame) + Sync + Send + 'static>(
-    mut rx: watch::Receiver<Option<P::Frame>>,
+    mut rx: watch::Receiver<Option<Arc<P::Frame>>>,
     mut func: F,
 ) {
     loop {
@@ -85,7 +85,7 @@ pub async fn frame_proc_loop<P: Preprocessor, F: AsyncFnMut(P::Frame) + Sync + S
             match rx.changed().await {
                 Ok(()) => match rx.borrow_and_update().clone() {
                     Some(frame) => {
-                        futures_executor::block_on(async { func(frame).await });
+                        futures_executor::block_on(async { func(Arc::into_inner(frame).unwrap()).await });
                     }
                     None => {
                         warn!("waiting on first frame...");

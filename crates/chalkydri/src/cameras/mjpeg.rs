@@ -15,6 +15,7 @@ use super::pipeline::Preprocessor;
 
 // /// Wrapper over frame buffer receiver
 
+/// Preprocessor for 
 #[derive(Clone)]
 pub struct MjpegProc {
     videorate: Arc<Element>,
@@ -27,6 +28,7 @@ impl Preprocessor for MjpegProc {
     type Subsys = NoopSubsys<Self>;
     type Frame = Vec<u8>;
 
+    #[tracing::instrument]
     fn new(pipeline: &Pipeline) -> Self {
         let videorate = ElementFactory::make("videorate")
             .property("max-rate", 20)
@@ -84,6 +86,7 @@ impl Preprocessor for MjpegProc {
             &sink,
         ]);
     }
+    #[tracing::instrument]
     fn sampler(
         appsink: &AppSink,
         tx: watch::Sender<Option<Arc<Self::Frame>>>,

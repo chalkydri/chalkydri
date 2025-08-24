@@ -178,8 +178,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let _ = rustix::system::delete_module(c"pisp_be", 0);
 
     // Initialize GStreamer
-    gstreamer::init().unwrap();
-    debug!("initialized gstreamer");
+    match gstreamer::init() {
+        Ok(()) => {
+            debug!("initialized gstreamer");
+        }
+        Err(e) => {
+            panic!("gstreamer failed to initialize: {e:?}");
+        }
+    }
 
     // Create the shutdown channel
     let (tx, mut rx) = mpsc::channel::<()>(1);

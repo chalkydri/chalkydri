@@ -6,6 +6,7 @@ members = [
 	"crates/chalkydri-slam",
   "crates/chalkydri-tfledge",
   "crates/chalkydrilib",
+  "crates/chalkydrilibj",
   "crates/minint",
 ]
 default-members = ["crates/chalkydri"]

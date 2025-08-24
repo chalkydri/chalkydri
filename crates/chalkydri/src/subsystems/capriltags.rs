@@ -32,12 +32,11 @@ use std::time::Instant;
 use tokio::sync::{Mutex, watch};
 
 use crate::calibration::CalibratedModel;
+use crate::cameras::pipeline::Preprocessor;
 use crate::error::Error;
 use crate::pose::PoseEstimator;
 use crate::{Cfg, Nt};
-use crate::{Subsystem, config, subsystems::frame_proc_loop};
-
-use super::SubsysManager;
+use crate::{subsystems::Subsystem, config, subsystems::frame_proc_loop};
 
 const TAG_SIZE: f64 = 0.1651;
 
@@ -51,37 +50,9 @@ impl Subsystem for CApriltagsDetector {
 
     type Config = config::CAprilTagsSubsys;
     type Output = ();
+    type Preproc = CapriltagsPreproc;
     type Error = Box<dyn std::error::Error + Send>;
-
-    fn preproc(
-        _cam_config: config::Camera,
-        pipeline: &gstreamer::Pipeline,
-    ) -> Result<(gstreamer::Element, gstreamer::Element), Self::Error> {
-        // The AprilTag preprocessing part:
-        //  tee ! gamma ! videoconvertscale ! capsfilter ! appsink
-
-        // Create the elements
-        let videoconvertscale = ElementFactory::make("videoconvertscale").build().unwrap();
-        let filter = ElementFactory::make("capsfilter")
-            .property(
-                "caps",
-                &Caps::builder("video/x-raw")
-                    .field("width", &1280)
-                    .field("height", &720)
-                    .field("format", "GRAY8")
-                    .build(),
-            )
-            .build()
-            .unwrap();
-
-        // Add them to the pipeline
-        pipeline.add_many([&videoconvertscale, &filter]).unwrap();
-
-        // Link them
-        Element::link_many([&videoconvertscale, &filter]).unwrap();
-
-        Ok((videoconvertscale, filter))
-    }
+    
     async fn init() -> Result<Self, Self::Error> {
         let det = Detector::builder()
             .add_family_bits(Family::tag_36h11(), 3)
@@ -94,10 +65,9 @@ impl Subsystem for CApriltagsDetector {
     }
     async fn process(
         &self,
-        manager: SubsysManager,
         nt: NtConn,
         cam_config: config::Camera,
-        rx: watch::Receiver<Option<Vec<u8>>>,
+        rx: watch::Receiver<Option<Arc<Vec<u8>>>>,
     ) -> Result<Self::Output, Self::Error> {
         let model = CalibratedModel::new(cam_config.calib.unwrap());
         let cam_name = cam_config.name.clone();
@@ -115,7 +85,7 @@ impl Subsystem for CApriltagsDetector {
         debug!("running frame processing loop...");
         let det = self.det.clone();
 
-        frame_proc_loop(rx, async move |buf| {
+        frame_proc_loop::<Self::Preproc, _>(rx, async move |buf| {
             let proc_st_time = Instant::now();
 
             debug!("loading image...");
@@ -182,12 +152,12 @@ impl Subsystem for CApriltagsDetector {
                             //Try to get the tag's pose from the field layout
                             //let translation = *tag_translation * translation;
                             //let rotation = *tag_rotation * rotation;
-                            futures_executor::block_on(
-                                manager
-                                    .pose_est
-                                    .add_transform_from_tag(tag_est_pos, det.id()),
-                            )
-                            .unwrap();
+                            //futures_executor::block_on(
+                            //    manager
+                            //        .pose_est
+                            //        .add_transform_from_tag(tag_est_pos, det.id()),
+                            //)
+                            //.unwrap();
 
                             //return Some((translation, rotation, det.decision_margin() as f64));
                         }
@@ -220,5 +190,64 @@ impl Subsystem for CApriltagsDetector {
         panic!("It shouldn't be possible to the frame processing loop early");
 
         Ok(())
+    }
+}
+
+pub struct CapriltagsPreproc {
+    videoconvertscale: Arc<Element>,
+    filter: Arc<Element>,
+}
+impl Preprocessor for CapriltagsPreproc {
+    type Frame = Vec<u8>;
+    type Subsys = CApriltagsDetector;
+
+    fn new(pipeline: &gstreamer::Pipeline) -> Self {
+        // The AprilTag preprocessing part:
+        //  tee ! gamma ! videoconvertscale ! capsfilter ! appsink
+
+        // Create the elements
+        let videoconvertscale = ElementFactory::make("videoconvertscale").build().unwrap();
+        let filter = ElementFactory::make("capsfilter")
+            .property(
+                "caps",
+                &Caps::builder("video/x-raw")
+                    .field("width", &1280)
+                    .field("height", &720)
+                    .field("format", "GRAY8")
+                    .build(),
+            )
+            .build()
+            .unwrap();
+
+        // Add them to the pipeline
+        pipeline.add_many([&videoconvertscale, &filter]).unwrap();
+
+        Self {
+            videoconvertscale: videoconvertscale.into(),
+            filter: filter.into(),
+        }
+    }
+
+    fn link(&self, src: Element, sink: Element) {
+        Element::link_many([&src, &self.videoconvertscale, &self.filter, &sink]);
+    }
+    fn unlink(&self, src: Element, sink: Element) {
+        Element::unlink_many([&src, &self.videoconvertscale, &self.filter, &sink]);
+    }
+
+    fn sampler(
+        appsink: &gstreamer_app::AppSink,
+        tx: watch::Sender<Option<Arc<Self::Frame>>>,
+    ) -> Result<Option<()>, Error> {
+        let sample = appsink.pull_sample().map_err(|_| Error::FailedToPullSample)?;
+        let buf = sample.buffer().unwrap();
+        let buf = buf
+            .to_owned()
+            .into_mapped_buffer_readable()
+            .unwrap()
+            .to_vec();
+        tx.send(Some(Arc::new(buf))).unwrap();
+
+        Ok(Some(()))
     }
 }
