@@ -55,7 +55,7 @@ rust-embed = { version = "8.5.0", features = ["actix"] }
 mime_guess = "2.0.5"
 futures-core = "0.3.31"
 futures-util = "0.3.31"
-rustix = { version = "0.38.44", features = ["all-apis"] }
+rustix = { version = "1.1.2", features = ["all-apis"] }
 futures-executor = "0.3.31"
 sysinfo = "0.33.1"
 libblur = "0.17.0"
