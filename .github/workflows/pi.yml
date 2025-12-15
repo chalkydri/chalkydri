@@ -62,7 +62,7 @@ jobs:
           echo "Built on native ARM64 runner" >> pi5-build/build_info.txt
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pi5-build-${{ steps.build_info.outputs.branch }}-${{ steps.build_info.outputs.commit_sha }}
           path: pi5-build/
