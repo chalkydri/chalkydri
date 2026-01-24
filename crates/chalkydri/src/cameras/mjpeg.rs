@@ -144,7 +144,7 @@ impl Stream for MjpegProc {
                     trace!("changed!");
                     let bytes =
                         if let Some(frame) = self.get_mut().rx.borrow_and_update().as_deref() {
-                        trace!("got mjpeg frame");
+                            trace!("got mjpeg frame");
                             [
                                 b"--frame\r\nContent-Length: ",
                                 frame.len().to_string().as_bytes(),

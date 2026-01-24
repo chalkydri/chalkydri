@@ -34,7 +34,10 @@ use crate::cameras::preproc::Preprocessor;
 use crate::error::Error;
 use crate::pose::PoseEstimator;
 use crate::{Cfg, Nt};
-use crate::{subsystems::Subsystem, config, subsystems::frame_proc_loop, subsystems::calibration::CalibratedModel};
+use crate::{
+    config, subsystems::Subsystem, subsystems::calibration::CalibratedModel,
+    subsystems::frame_proc_loop,
+};
 
 const TAG_SIZE: f64 = 0.1651;
 
@@ -50,7 +53,7 @@ impl Subsystem for CApriltagsDetector {
     type Output = ();
     type Preproc = CapriltagsPreproc;
     type Error = Box<dyn std::error::Error + Send>;
-    
+
     async fn init() -> Result<Self, Self::Error> {
         let det = Detector::builder()
             .add_family_bits(Family::tag_36h11(), 3)
@@ -122,18 +125,20 @@ impl Subsystem for CApriltagsDetector {
                             let cam_rotation = pose.rotation().data();
 
                             // Convert the camera's translation and rotation matrices into proper Rust datatypes
-                            let translation: na::Translation3<f64> = MatrixView3x1::from_slice(cam_translation).into_owned().into();
-                            let cam_rotation = na::UnitQuaternion::from_matrix(&MatrixView3::from_slice(cam_rotation).transpose());
+                            let translation: na::Translation3<f64> =
+                                MatrixView3x1::from_slice(cam_translation)
+                                    .into_owned()
+                                    .into();
+                            let cam_rotation = na::UnitQuaternion::from_matrix(
+                                &MatrixView3::from_slice(cam_rotation).transpose(),
+                            );
 
                             debug!(
                                 "detected tag id {}: tl={cam_translation:?} ro={cam_rotation:?}",
                                 det.id()
                             );
 
-                            let tag_est_pos = na::Isometry3::from_parts(
-                                translation,
-                                cam_rotation,
-                            );
+                            let tag_est_pos = na::Isometry3::from_parts(translation, cam_rotation);
                             //Try to get the tag's pose from the field layout
                             //let translation = *tag_translation * translation;
                             //let rotation = *tag_rotation * rotation;
@@ -151,7 +156,10 @@ impl Subsystem for CApriltagsDetector {
                     if !dets.is_empty() {
                         tag_detected.set(true).await.unwrap();
 
-                        delay.set(proc_st_time.elapsed().as_millis_f64()).await.unwrap();
+                        delay
+                            .set(proc_st_time.elapsed().as_millis_f64())
+                            .await
+                            .unwrap();
                     } else {
                         tag_detected.set(false).await.unwrap();
 
@@ -218,7 +226,9 @@ impl Preprocessor for CapriltagsPreproc {
         appsink: &gstreamer_app::AppSink,
         tx: watch::Sender<Option<Arc<Self::Frame>>>,
     ) -> Result<Option<()>, Error> {
-        let sample = appsink.pull_sample().map_err(|_| Error::FailedToPullSample)?;
+        let sample = appsink
+            .pull_sample()
+            .map_err(|_| Error::FailedToPullSample)?;
         let buf = sample.buffer().unwrap();
         let buf = buf
             .to_owned()

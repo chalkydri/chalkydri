@@ -48,7 +48,8 @@ impl CalibratedModel {
 const MIN_CORNERS: usize = 24;
 
 /// A camera calibrator
-pub struct Calibrator { //<P: Preprocessor<Frame = Image<u8>>> {
+pub struct Calibrator {
+    //<P: Preprocessor<Frame = Image<u8>>> {
     //preproc: P,
     valve: WeakRef<Element>,
     det: TagDetector,

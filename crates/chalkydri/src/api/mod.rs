@@ -311,7 +311,7 @@ pub(super) async fn calibration_step(
     let cam_name = path.to_string();
 
     let cam_man = data.get_ref().cam_man.clone();
-//    let current_step = cam_man.calib_step(cam_name).await;
+    //    let current_step = cam_man.calib_step(cam_name).await;
 
     web::Json(CalibrationStatus {
         width: 1280,
@@ -393,18 +393,27 @@ pub(super) async fn stream(path: web::Path<String>, data: web::Data<ApiData>) ->
     println!("{cam_name}");
 
     error!("getting mjpeg stream");
-    let mjpeg_stream = data.cam_man.pipelines.read().await.get(&cam_name).unwrap().mjpeg_preproc.inner().clone();
-        drop(data);
-        error!("dropped data");
+    let mjpeg_stream = data
+        .cam_man
+        .pipelines
+        .read()
+        .await
+        .get(&cam_name)
+        .unwrap()
+        .mjpeg_preproc
+        .inner()
+        .clone();
+    drop(data);
+    error!("dropped data");
 
-        HttpResponse::Ok()
-            .append_header(header::CacheControl(vec![CacheDirective::NoCache]))
-            .append_header((header::PRAGMA, "no-cache"))
-            .append_header((header::EXPIRES, 0))
-            .append_header((header::CONNECTION, "close"))
-            .append_header((
-                header::CONTENT_TYPE,
-                "multipart/x-mixed-replace; boundary=frame",
-            ))
-            .streaming(mjpeg_stream.clone())
+    HttpResponse::Ok()
+        .append_header(header::CacheControl(vec![CacheDirective::NoCache]))
+        .append_header((header::PRAGMA, "no-cache"))
+        .append_header((header::EXPIRES, 0))
+        .append_header((header::CONNECTION, "close"))
+        .append_header((
+            header::CONTENT_TYPE,
+            "multipart/x-mixed-replace; boundary=frame",
+        ))
+        .streaming(mjpeg_stream.clone())
 }

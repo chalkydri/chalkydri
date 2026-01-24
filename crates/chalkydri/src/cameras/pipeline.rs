@@ -7,7 +7,13 @@ use gstreamer::{
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use tokio::sync::watch;
 
-use crate::{cameras::preproc::PreprocWrap, config, error::Error, subsystems::{SubsysManager, Subsystem}, Cfg};
+use crate::{
+    Cfg,
+    cameras::preproc::PreprocWrap,
+    config,
+    error::Error,
+    subsystems::{SubsysManager, Subsystem},
+};
 
 use super::mjpeg::MjpegProc;
 
@@ -19,7 +25,6 @@ pub struct CamPipeline {
     cam_config: config::Camera,
     pipeline: Pipeline,
     //calibrator: Calibrator,
-
     input: Element,
     filter: Element,
     jpegdec: Element,
@@ -93,15 +98,15 @@ impl CamPipeline {
 
         // If we're getting an MJPEG stream from the cam, it needs to first be decoded
         if is_mjpeg {
-            Element::link_many([&input, &filter, &jpegdec, &videoflip, &tee])
-                .unwrap();
+            Element::link_many([&input, &filter, &jpegdec, &videoflip, &tee]).unwrap();
         } else {
-            Element::link_many([&input, &filter, &videoflip, &tee])
-                .unwrap();
+            Element::link_many([&input, &filter, &videoflip, &tee]).unwrap();
         }
 
         let mjpeg_preproc = PreprocWrap::<MjpegProc>::new(&pipeline);
-        mjpeg_preproc.setup_sampler(Some(mjpeg_preproc.inner().tx.clone())).unwrap();
+        mjpeg_preproc
+            .setup_sampler(Some(mjpeg_preproc.inner().tx.clone()))
+            .unwrap();
 
         let subsys = SubsysManager::new(&pipeline).await.unwrap();
 
@@ -124,10 +129,10 @@ impl CamPipeline {
     /// Link subsystem preprocessors
     pub(crate) async fn link_preprocs(&self, cam_config: config::Camera) {
         //if cam_config.subsystems.mjpeg.is_some() {
-            self.mjpeg_preproc.link(self.tee.clone());
+        self.mjpeg_preproc.link(self.tee.clone());
         //}
-            self.subsys.link(&self.tee);
-            //self.subsys.start(self.cam_config.clone(), &self.pipeline, &self.tee).await;
+        self.subsys.link(&self.tee);
+        //self.subsys.start(self.cam_config.clone(), &self.pipeline, &self.tee).await;
         //}
     }
 
@@ -143,7 +148,9 @@ impl CamPipeline {
     /// Start the pipeline
     pub async fn start(&self) {
         self.pipeline.set_state(State::Playing).unwrap();
-        self.subsys.start(self.cam_config.clone(), &self.pipeline, &self.tee).await;
+        self.subsys
+            .start(self.cam_config.clone(), &self.pipeline, &self.tee)
+            .await;
     }
 
     /// Pause the pipeline

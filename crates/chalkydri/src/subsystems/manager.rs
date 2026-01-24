@@ -12,9 +12,9 @@ use super::capriltags::{self, CApriltagsDetector};
 use super::python::PythonSubsys;
 #[cfg(feature = "python")]
 use crate::subsystems::python::PythonPreproc;
+use crate::{Nt, cameras::CamManager, config, error::Error, pose::PoseEstimator};
 #[cfg(feature = "capriltags")]
 use crate::{cameras::preproc::PreprocWrap, subsystems::capriltags::CapriltagsPreproc};
-use crate::{cameras::CamManager, config, error::Error, pose::PoseEstimator, Nt};
 use crate::{
     cameras::{mjpeg::MjpegProc, preproc::Preprocessor},
     subsystems::Subsystem,
@@ -103,13 +103,16 @@ impl SubsysManager {
             let cam_config = cam_config.clone();
             manager.python_preproc.setup_sampler(None).unwrap();
             let thread = std::thread::spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
                 rt.block_on(async move {
-                            manager_
-                                .python
-                                .process(Nt.handle(), cam_config, manager_.python_preproc.rx())
-                                .await
-                                .unwrap();
+                    manager_
+                        .python
+                        .process(Nt.handle(), cam_config, manager_.python_preproc.rx())
+                        .await
+                        .unwrap();
                 });
             });
 

@@ -1,6 +1,6 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
-use nt_client::{data::Properties, publish::Publisher, subscribe::Subscriber, NewClientOptions};
+use nt_client::{NewClientOptions, data::Properties, publish::Publisher, subscribe::Subscriber};
 
 use crate::{Nt, config};
 

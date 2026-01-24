@@ -13,7 +13,7 @@
     clippy::infinite_iter,
     clippy::infinite_loop,
     clippy::unconditional_recursion,
-    clippy::while_immutable_condition,
+    clippy::while_immutable_condition
 )]
 
 // These deps are needed no matter what

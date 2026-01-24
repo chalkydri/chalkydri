@@ -3,18 +3,18 @@ mod api;
 use std::{
     collections::HashMap,
     ffi::CStr,
-    pin::{pin, Pin},
+    pin::{Pin, pin},
     sync::Arc,
     task::{Context, Poll},
 };
 
-use gstreamer::{prelude::GstBinExtManual, Caps, Element, ElementFactory};
+use gstreamer::{Caps, Element, ElementFactory, prelude::GstBinExtManual};
 use nt_client::{data::Properties, publish::Publisher};
 use numpy::ndarray;
 use tokio::sync::{Mutex, RwLock};
 use tokio_util::task::TaskTracker;
 
-use crate::{cameras::preproc::Preprocessor, config, error::Error, subsystems::Subsystem, Cfg, Nt};
+use crate::{Cfg, Nt, cameras::preproc::Preprocessor, config, error::Error, subsystems::Subsystem};
 
 use pyo3::prelude::*;
 
@@ -48,93 +48,83 @@ impl Subsystem for PythonSubsys {
         let mut topics = Arc::new(RwLock::new(HashMap::<String, Publisher<f64>>::new()));
         let mut modules = Arc::new(RwLock::new(Vec::new()));
 
-            for camera in Cfg.read()
-                .await
-                .cameras
-                .clone()
-                .unwrap()
-            {
-                for subsys in camera.subsystems.custom {
-                    // Read custom subsystems from the configuration
-                    let subsystems = Cfg.read()
-                        .await
-                        .custom_subsystems
-                        .clone();
-                    if let Some(subsys) = subsystems.get(&subsys) {
-                        // Add a null terminator to the end of all of these things
-                        let code = [subsys.code.as_bytes(), &[0u8]].concat();
-                        let file_name = [b"custom_code.py".as_slice(), &[0u8]].concat();
-                        let module_name = [b"custom_code".as_slice(), &[0u8]].concat();
+        for camera in Cfg.read().await.cameras.clone().unwrap() {
+            for subsys in camera.subsystems.custom {
+                // Read custom subsystems from the configuration
+                let subsystems = Cfg.read().await.custom_subsystems.clone();
+                if let Some(subsys) = subsystems.get(&subsys) {
+                    // Add a null terminator to the end of all of these things
+                    let code = [subsys.code.as_bytes(), &[0u8]].concat();
+                    let file_name = [b"custom_code.py".as_slice(), &[0u8]].concat();
+                    let module_name = [b"custom_code".as_slice(), &[0u8]].concat();
 
-                        // Convert them all to CStrs
-                        let code = CStr::from_bytes_with_nul(&code).unwrap();
-                        let file_name = CStr::from_bytes_with_nul(&file_name).unwrap();
-                        let module_name = CStr::from_bytes_with_nul(&module_name).unwrap();
+                    // Convert them all to CStrs
+                    let code = CStr::from_bytes_with_nul(&code).unwrap();
+                    let file_name = CStr::from_bytes_with_nul(&file_name).unwrap();
+                    let module_name = CStr::from_bytes_with_nul(&module_name).unwrap();
 
-                        // Load the code in
-                        let module = Python::attach(|py| -> Py<PyModule> {
-                            PyModule::from_code(py, code, file_name, module_name).unwrap().into()
-                        });
+                    // Load the code in
+                    let module = Python::attach(|py| -> Py<PyModule> {
+                        PyModule::from_code(py, code, file_name, module_name)
+                            .unwrap()
+                            .into()
+                    });
 
-                        // Save It for Later :)
-                        modules.write().await.push(module);
-                    }
+                    // Save It for Later :)
+                    modules.write().await.push(module);
                 }
             }
+        }
 
-            let rx = rx.clone();
+        let rx = rx.clone();
 
-            trace!("a");
+        trace!("a");
 
-            let cam_config = cam_config.clone();
-            let modules = modules.clone();
-            if let Some(settings) = cam_config.settings {
-                let settings = settings.clone();
-                frame_proc_loop::<Self::Preproc, _>(rx.clone(), async move |buf| {
-                    let modules = modules.clone();
-                        let arr = ndarray::Array::from_shape_vec(
-                            //(settings.height as usize, settings.width as usize, 3usize),
-                            (1280, 720, 3),
-                            buf,
-                        )
-                        .expect("something is really braken");
-                        let nparr = Python::attach(|py| {
-                            numpy::PyArray::from_array(py, &arr).unbind()
-                        });
+        let cam_config = cam_config.clone();
+        let modules = modules.clone();
+        if let Some(settings) = cam_config.settings {
+            let settings = settings.clone();
+            frame_proc_loop::<Self::Preproc, _>(rx.clone(), async move |buf| {
+                let modules = modules.clone();
+                let arr = ndarray::Array::from_shape_vec(
+                    //(settings.height as usize, settings.width as usize, 3usize),
+                    (1280, 720, 3),
+                    buf,
+                )
+                .expect("something is really braken");
+                let nparr = Python::attach(|py| numpy::PyArray::from_array(py, &arr).unbind());
 
-                        for module in modules.read().await.iter() {
-                            let ret: HashMap<String, f64> = Python::attach(|py| {
-                                let module = module.bind(py);
-                                trace!("running module");
-                                 module
-                                    .getattr("run")
-                                    .unwrap()
-                                    .call1((nparr.bind(py),))
-                                    .unwrap()
-                                    .extract()
-                                    .unwrap()
-                            });
+                for module in modules.read().await.iter() {
+                    let ret: HashMap<String, f64> = Python::attach(|py| {
+                        let module = module.bind(py);
+                        trace!("running module");
+                        module
+                            .getattr("run")
+                            .unwrap()
+                            .call1((nparr.bind(py),))
+                            .unwrap()
+                            .extract()
+                            .unwrap()
+                    });
 
-                            for (k, v) in ret {
-                                let (k, v) = (k.clone(), v.clone());
-                                trace!("{k}: {v}");
-                                let topic_name = format!("/chalkydri/subsystems/{k}");
+                    for (k, v) in ret {
+                        let (k, v) = (k.clone(), v.clone());
+                        trace!("{k}: {v}");
+                        let topic_name = format!("/chalkydri/subsystems/{k}");
 
+                        let mut topic = Nt
+                            .topic(topic_name.clone())
+                            .publish::<f64>(Properties::default())
+                            .await
+                            .unwrap();
+                        topic.set(v).await.unwrap();
+                    }
+                }
+            })
+            .await;
+        }
 
-                                let mut topic = Nt
-                                    .topic(topic_name.clone())
-                                    .publish::<f64>(Properties::default())
-                                    .await
-                                    .unwrap();
-                                topic.set(v).await.unwrap();
-                            }
-                        }
-                }).await;
-            }
-
-
-
-            Ok::<Self::Output, Self::Error>(())
+        Ok::<Self::Output, Self::Error>(())
     }
 }
 

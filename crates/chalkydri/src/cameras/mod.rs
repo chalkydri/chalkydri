@@ -54,7 +54,10 @@ pub struct CamManager {
     pub new_dev_rx: Arc<Mutex<mpsc::Receiver<config::Camera>>>,
 }
 impl CamManager {
-    pub async fn new(nt: &NTClientHandle, restart_tx: mpsc::Sender<()>) -> (Self, impl Future<Output = ()>) {
+    pub async fn new(
+        nt: &NTClientHandle,
+        restart_tx: mpsc::Sender<()>,
+    ) -> (Self, impl Future<Output = ()>) {
         let v4l2_prov = Arc::new(Mutex::new(V4l2Provider::init()));
 
         let pipelines = Arc::new(RwLock::new(HashMap::new()));

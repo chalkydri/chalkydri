@@ -1,11 +1,11 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use field_layout::{AprilTagFieldLayout, Field};
+use nalgebra as na;
 use nt_client::r#struct::{Pose3d, Quaternion as NtQuaternion, Rotation3d, Translation3d};
 use sophus_autodiff::{linalg::VecF64, prelude::*};
-use sophus_lie::{prelude::*, HasAverage, Isometry3F64, Quaternion, QuaternionF64, Rotation3F64};
+use sophus_lie::{HasAverage, Isometry3F64, Quaternion, QuaternionF64, Rotation3F64, prelude::*};
 use tokio::sync::{Mutex, RwLock, mpsc};
-use nalgebra as na;
 
 use crate::{Cfg, Nt, error::Error};
 
@@ -72,7 +72,9 @@ impl PoseEstimator {
                 let cam_relto_y = cam_relto_pos.y;
                 let cam_relto_z = -cam_relto_pos.z;
 
-                let cam_angle = tag_field_pos.rotation.rotation_to(&cam_est_rel_pos.rotation);
+                let cam_angle = tag_field_pos
+                    .rotation
+                    .rotation_to(&cam_est_rel_pos.rotation);
 
                 let cam_fcs_abs = na::Isometry3::from_parts(
                     na::Translation3::new(
@@ -156,21 +158,28 @@ impl PoseEstimator {
                 //sophus_lie::iterative_average(parent_from_body_transforms, max_iteration_count)
                 let pose = poses.first().unwrap();
                 let rot = pose.rotation.clone();
-                let quat = na::UnitQuaternion::from_rotation_matrix(&rot.to_rotation_matrix()).to_owned();
+                let quat =
+                    na::UnitQuaternion::from_rotation_matrix(&rot.to_rotation_matrix()).to_owned();
                 //let pose = na::Isometry3::average(&poses).unwrap();
 
-                robot_pose.set(Pose3d { translation: Translation3d {
-                    x: pose.translation.x,
-                    y: pose.translation.y,
-                    z: pose.translation.z,
-                }, rotation: Rotation3d {
-                    quaternion: NtQuaternion {
-                        w: quat.coords.w,
-                        x: quat.coords.x,
-                        y: quat.coords.y,
-                        z: quat.coords.z,
-                    },
-                } }).await.unwrap();
+                robot_pose
+                    .set(Pose3d {
+                        translation: Translation3d {
+                            x: pose.translation.x,
+                            y: pose.translation.y,
+                            z: pose.translation.z,
+                        },
+                        rotation: Rotation3d {
+                            quaternion: NtQuaternion {
+                                w: quat.coords.w,
+                                x: quat.coords.x,
+                                y: quat.coords.y,
+                                z: quat.coords.z,
+                            },
+                        },
+                    })
+                    .await
+                    .unwrap();
 
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
