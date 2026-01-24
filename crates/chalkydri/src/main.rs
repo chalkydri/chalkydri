@@ -23,6 +23,9 @@ extern crate tracing;
 extern crate serde;
 extern crate tokio;
 
+#[cfg(feature = "tokio-console")]
+extern crate console_subscriber;
+
 // Web server and OpenAPI documentation generator
 #[cfg(feature = "web")]
 extern crate actix_web;
@@ -156,9 +159,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     // Set up logging
-    let filter = EnvFilter::from_default_env();
-    let layer = tracing_subscriber::fmt::layer().with_filter(filter);
-    tracing_subscriber::registry().with(layer).init();
+    #[cfg(not(feature = "tokio-console"))]
+    {
+        let filter = EnvFilter::from_default_env();
+        let layer = tracing_subscriber::fmt::layer().with_filter(filter);
+        tracing_subscriber::registry().with(layer).init();
+    }
+
+    #[cfg(feature = "tokio-console")]
+    console_subscriber::init();
 
     info!("starting up...");
 

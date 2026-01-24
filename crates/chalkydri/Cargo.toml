@@ -17,6 +17,7 @@ capriltags = ["dep:apriltag"]
 
 rerun = ["dep:re_sdk", "dep:re_types", "dep:re_ws_comms"]
 rerun_web_viewer = ["rerun", "dep:re_web_viewer_server", "re_sdk/web_viewer", "re_ws_comms/server"]
+tokio-console = ["dep:console-subscriber"]
 
 [dependencies]
 env_logger = "0.11.2"
@@ -77,6 +78,7 @@ kornia-imgproc = { git = "https://github.com/kornia/kornia-rs", tag = "v0.1.9" }
 kornia-icp = { git = "https://github.com/kornia/kornia-rs", tag = "v0.1.9" }
 #kornia-linalg = { git = "https://github.com/kornia/kornia-rs", tag = "v0.1.9" }
 kornia-3d = { git = "https://github.com/kornia/kornia-rs", tag = "v0.1.9" }
+console-subscriber = { version = "0.4.1", optional = true }
 
 [build-dependencies]
 bindgen = { version = "*", default-features = false, features = ["runtime"] }

@@ -45,7 +45,6 @@ impl Subsystem for PythonSubsys {
             >,
         >,
     ) -> Result<Self::Output, Self::Error> {
-        let tt = TaskTracker::new();
         let mut topics = Arc::new(RwLock::new(HashMap::<String, Publisher<f64>>::new()));
         let mut modules = Arc::new(RwLock::new(Vec::new()));
 
@@ -57,7 +56,8 @@ impl Subsystem for PythonSubsys {
             {
                 for subsys in camera.subsystems.custom {
                     // Read custom subsystems from the configuration
-                    let subsystems = futures_executor::block_on(Cfg.read())
+                    let subsystems = Cfg.read()
+                        .await
                         .custom_subsystems
                         .clone();
                     if let Some(subsys) = subsystems.get(&subsys) {
@@ -85,7 +85,6 @@ impl Subsystem for PythonSubsys {
             let rx = rx.clone();
 
             trace!("a");
-            let tt = tt.clone();
 
             let cam_config = cam_config.clone();
             let modules = modules.clone();
@@ -106,7 +105,7 @@ impl Subsystem for PythonSubsys {
                         for module in modules.read().await.iter() {
                             let ret: HashMap<String, f64> = Python::attach(|py| {
                                 let module = module.bind(py);
-                                println!("running {module}");
+                                trace!("running module");
                                  module
                                     .getattr("run")
                                     .unwrap()
@@ -130,8 +129,6 @@ impl Subsystem for PythonSubsys {
                                 topic.set(v).await.unwrap();
                             }
                         }
-
-                        tokio::task::yield_now().await;
                 }).await;
             }
 

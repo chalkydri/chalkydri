@@ -100,18 +100,23 @@ impl CamManager {
             match event {
                 ProviderEvent::Connected(id, dev) => {
                     let id = V4l2Provider::get_id(&dev);
-                    println!("idfk: {id}");
+                    debug!(cam_id = id, "camera connected");
 
                     if let Some(cameras) = Cfg.read().await.cameras.clone() {
                         for cam in cameras {
                             if id == cam.id {
                                 let pipeline = CamPipeline::new(dev.clone(), cam.clone()).await;
+
                                 debug!("linking preprocs");
                                 pipeline.link_preprocs(cam).await;
+
                                 debug!("starting pipeline");
                                 pipeline.start().await;
+
+                                debug!("started pipeline");
+
                                 let _ = pipelines.write().await.insert(id.clone(), pipeline);
-                                println!("existing cam: {id}");
+
                                 continue 'outer;
                             }
                         }
@@ -175,7 +180,7 @@ impl CamManager {
         let mut cameras = cfgg.cameras.clone();
 
         if let Some(ref mut cams) = cameras {
-            for mut cam in cams {
+            for cam in cams {
                 trace!("locking pipelines");
                 cam.online = self.pipelines.read().await.contains_key(&cam.id);
             }

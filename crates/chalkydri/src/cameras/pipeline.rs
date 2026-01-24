@@ -123,9 +123,9 @@ impl CamPipeline {
 
     /// Link subsystem preprocessors
     pub(crate) async fn link_preprocs(&self, cam_config: config::Camera) {
-        if cam_config.subsystems.mjpeg.is_some() {
+        //if cam_config.subsystems.mjpeg.is_some() {
             self.mjpeg_preproc.link(self.tee.clone());
-        }
+        //}
             self.subsys.link(&self.tee);
             //self.subsys.start(self.cam_config.clone(), &self.pipeline, &self.tee).await;
         //}

@@ -141,6 +141,7 @@ impl Stream for MjpegProc {
         loop {
             match self.rx.has_changed() {
                 Ok(true) => {
+                    trace!("changed!");
                     let bytes =
                         if let Some(frame) = self.get_mut().rx.borrow_and_update().as_deref() {
                         trace!("got mjpeg frame");

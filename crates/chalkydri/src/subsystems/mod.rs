@@ -87,7 +87,9 @@ pub async fn frame_proc_loop<P: Preprocessor, F: AsyncFnMut(P::Frame) + Sync + S
             match rx.changed().await {
                 Ok(()) => match rx.borrow_and_update().clone() {
                     Some(frame) => {
-                        func(Arc::into_inner(frame).unwrap()).await;
+                        if let Some(frame) = Arc::into_inner(frame) {
+                            func(frame).await;
+                        }
                     }
                     None => {
                         warn!("waiting on first frame...");
@@ -98,6 +100,7 @@ pub async fn frame_proc_loop<P: Preprocessor, F: AsyncFnMut(P::Frame) + Sync + S
                     break 'inner;
                 }
             }
+            tokio::task::yield_now().await;
         }
         tokio::task::yield_now().await;
     }

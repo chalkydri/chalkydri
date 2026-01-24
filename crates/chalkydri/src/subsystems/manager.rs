@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::thread::Thread;
 
 use gstreamer::{Element, Pipeline};
 use tokio::task::JoinSet;
@@ -26,7 +27,8 @@ use crate::{
 pub struct SubsysManager {
     pub pose_est: PoseEstimator,
 
-    set: Arc<Mutex<TaskTracker>>,
+    set: Arc<Mutex<Vec<Thread>>>,
+    tt: TaskTracker,
 
     #[cfg(feature = "capriltags")]
     capriltags: CApriltagsDetector,
@@ -59,7 +61,8 @@ impl SubsysManager {
         Ok(Self {
             pose_est,
 
-            set: Arc::new(Mutex::new(TaskTracker::new())),
+            set: Arc::new(Mutex::new(Vec::new())),
+            tt: TaskTracker::new(),
 
             #[cfg(feature = "capriltags")]
             capriltags,
@@ -82,28 +85,24 @@ impl SubsysManager {
         //#[cfg(feature = "capriltags")]
         //{
         //    let cam_config = cam_config.clone();
-        //    self.set.spawn(async move {
-        //        use tokio::task::LocalSet;
-
-        //        let local = LocalSet::new();
-        //        local.run_until(async move{
-        //            tokio::task::spawn_local(async move {
-        //            manager.capriltags_preproc.setup_sampler(None).unwrap();
-        //            manager
+        //    manager.capriltags_preproc.setup_sampler(None).unwrap();
+        //    std::thread::spawn(move || {
+        //        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        //        rt.block_on(async move {
+        //            manager_
         //                .capriltags
         //                .process(Nt.handle(), cam_config, manager_.capriltags_preproc.rx())
         //                .await
         //                .unwrap();
-        //        }).await;
-        //        }).await;
-        //    }).await;
+        //        });
+        //    });
         //}
 
         #[cfg(feature = "python")]
         {
             let cam_config = cam_config.clone();
             manager.python_preproc.setup_sampler(None).unwrap();
-            std::thread::spawn(move || {
+            let thread = std::thread::spawn(move || {
                 let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
                 rt.block_on(async move {
                             manager_
@@ -113,6 +112,8 @@ impl SubsysManager {
                                 .unwrap();
                 });
             });
+
+            set.lock().unwrap().push(thread.thread().to_owned());
         }
     }
 
