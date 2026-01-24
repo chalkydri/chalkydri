@@ -1,12 +1,17 @@
+use std::sync::mpsc::{self, Sender};
+use std::time::Duration;
 use std::{marker::PhantomData, ops::ControlFlow};
 use std::sync::Arc;
 
+use cu_gstreamer::CuGstBuffer;
+use cu29::prelude::*;
 use gstreamer::{
-    Caps, Device, Element, ElementFactory, FlowSuccess, Pipeline, State, Structure, prelude::*,
+    Caps, DebugGraphDetails, Device, Element, ElementFactory, FlowSuccess, Pipeline, Sample, State, Structure, prelude::*
 };
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use tokio::sync::watch;
 
+use crate::cameras::providers::{CamProvider, CamProviderBundle, CamProviderBundleId, V4l2Provider};
 use crate::{cameras::preproc::PreprocWrap, subsystems::SubsysManager};
 use chalkydri_core::prelude::*;
 
@@ -17,41 +22,103 @@ use super::mjpeg::MjpegProc;
 /// Each camera gets its own GStreamer pipeline.
 pub struct CamPipeline {
     dev: Device,
-    cam_config: config::Camera,
+    cam_config: crate::config::Camera,
     pipeline: Pipeline,
     //calibrator: Calibrator,
     input: Element,
     filter: Element,
     jpegdec: Element,
     videoflip: Element,
-    tee: Element,
+    appsink: AppSink,
+    sample_queue: Arc<mpsc::Receiver<Sample>>,
 
-    subsys: Arc<Mutex<SubsysManager>>,
-
-    pub mjpeg_preproc: PreprocWrap<MjpegProc>,
+    //pub mjpeg_preproc: PreprocWrap<MjpegProc>,
 }
 impl CamPipeline {
     /// Create a new camera pipeline from a [Device] and camera config
-    pub async fn new(dev: Device, cam_config: config::Camera) -> Self {
+    pub fn new(dev: Device, cam_config: crate::config::Camera) -> Self {
         let pipeline = Pipeline::new();
 
         let input = dev.create_element(Some("camera")).unwrap();
-        input.set_state(State::Ready).unwrap();
+        //input.set_state(State::Ready).unwrap();
 
         let settings = cam_config.settings.clone().unwrap_or_default();
         let is_mjpeg = settings.format == Some(String::new());
 
-        let filter = ElementFactory::make("capsfilter")
-            .name("capsfilter")
+        let prefilter = ElementFactory::make("capsfilter")
+            .name("precapsfilter")
+            //.property(
+            //    "caps",
+            //    &Caps::builder(if is_mjpeg {
+            //        "image/jpeg"
+            //    } else {
+            //        "video/x-raw"
+            //    })
+            //    .field("width", settings.width as i32)
+            //    .field("height", settings.height as i32)
+            //    //.field(
+            //    //    "framerate",
+            //    //    &Fraction::new(
+            //    //        settings.frame_rate.num as i32,
+            //    //        settings.frame_rate.den as i32,
+            //    //    ),
+            //    //)
+            //    .build(),
+            //)
             .property(
                 "caps",
-                &Caps::builder(if is_mjpeg {
-                    "image/jpeg"
-                } else {
+                &Caps::builder(
                     "video/x-raw"
-                })
-                .field("width", settings.width as i32)
-                .field("height", settings.height as i32)
+                )
+                //.field("width", settings.width as i32)
+                .field("width", 1280)
+                //.field("height", settings.height as i32)
+                .field("height", 720)
+                //.field("format", "DMA_DRM")
+                //.field(
+                //    "framerate",
+                //    &Fraction::new(
+                //        settings.frame_rate.num as i32,
+                //        settings.frame_rate.den as i32,
+                //    ),
+                //)
+                .build(),
+            )
+            .build()
+            .unwrap();
+
+        let videoconvert = ElementFactory::make("videoconvert").name("videoconvert").build().unwrap();
+
+        let filter = ElementFactory::make("capsfilter")
+            .name("capsfilter")
+            //.property(
+            //    "caps",
+            //    &Caps::builder(if is_mjpeg {
+            //        "image/jpeg"
+            //    } else {
+            //        "video/x-raw"
+            //    })
+            //    .field("width", settings.width as i32)
+            //    .field("height", settings.height as i32)
+            //    //.field(
+            //    //    "framerate",
+            //    //    &Fraction::new(
+            //    //        settings.frame_rate.num as i32,
+            //    //        settings.frame_rate.den as i32,
+            //    //    ),
+            //    //)
+            //    .build(),
+            //)
+            .property(
+                "caps",
+                &Caps::builder(
+                    "video/x-raw"
+                )
+                //.field("width", settings.width as i32)
+                .field("width", 1280)
+                //.field("height", settings.height as i32)
+                .field("height", 720)
+                .field("format", "GRAY8")
                 //.field(
                 //    "framerate",
                 //    &Fraction::new(
@@ -80,44 +147,37 @@ impl CamPipeline {
             .build()
             .unwrap();
 
-        // This element splits the stream off into multiple branches of the
-        // pipeline:
-        //  - MJPEG stream
-        //  - Calibration
-        //  - Subsystems
-        let tee = ElementFactory::make("tee").build().unwrap();
+        let appsink = ElementFactory::make("appsink").build().unwrap();
+        //let appsink = AppSink::builder().async_(true).build().unwrap();
 
         pipeline
-            .add_many([&input, &filter, &jpegdec, &videoflip, &tee])
+            .add_many([&input, &prefilter, &videoconvert, &filter, &jpegdec, &videoflip, &appsink])
             .unwrap();
 
         // If we're getting an MJPEG stream from the cam, it needs to first be decoded
-        if is_mjpeg {
-            Element::link_many([&input, &filter, &jpegdec, &videoflip, &tee]).unwrap();
-        } else {
-            Element::link_many([&input, &filter, &videoflip, &tee]).unwrap();
-        }
+        // if is_mjpeg {
+        //     Element::link_many([&input, &jpegdec, &videoflip, &appsink]).unwrap();
+        // } else {
+            Element::link_many([&input, &prefilter, &videoconvert, &filter, &videoflip, &appsink]).unwrap();
+        //}
 
-        let mjpeg_preproc = PreprocWrap::<MjpegProc>::new(&pipeline);
-        mjpeg_preproc
-            .setup_sampler(Some(mjpeg_preproc.inner().tx.clone()))
-            .await
-            .unwrap();
+        //let mjpeg_preproc = PreprocWrap::<MjpegProc>::new(&pipeline);
+        //mjpeg_preproc
+        //    .setup_sampler(Some(mjpeg_preproc.inner().tx.clone()))
+        //    .unwrap();
 
-        let subsys = Arc::new(Mutex::new(
-            SubsysManager::new(&pipeline, cam_config.clone(), &tee)
-                .await
-                .unwrap(),
-        ));
 
-        let subsys_ = subsys.clone();
-        let tee_ = tee.clone();
-        let pipeline_ = pipeline.clone();
-        let cam_config_ = cam_config.clone();
-        tokio::spawn(async move {
-            subsys_.lock().start(cam_config_, &pipeline_, &tee_).await;
-            //subsys_.lock().run().await;
-        });
+        let (tx, rx) = mpsc::sync_channel(64);
+        let sample_queue = Arc::new(rx);
+        let appsink = appsink.clone().dynamic_cast::<AppSink>().unwrap();
+        appsink.set_callbacks(AppSinkCallbacks::builder().new_sample(move |appsink: &AppSink| {
+            println!("got sampleeeeeee");
+            let sample = appsink.pull_sample().unwrap();
+            tx.send(sample.clone()).unwrap();
+            Ok(FlowSuccess::Ok)
+        }).build());
+        appsink.set_sync(true);
+        appsink.set_enable_last_sample(false);
 
         Self {
             dev,
@@ -128,43 +188,18 @@ impl CamPipeline {
             filter,
             jpegdec,
             videoflip,
-            tee,
+            appsink,
+            sample_queue,
 
-            mjpeg_preproc,
-            subsys,
+            //mjpeg_preproc,
         }
-    }
-
-    /// Link subsystem preprocessors
-    pub(crate) async fn link_preprocs(&self, cam_config: config::Camera) {
-        //if cam_config.subsystems.mjpeg.is_some() {
-        self.mjpeg_preproc.link(self.tee.clone());
-        //}
-        self.subsys.lock().link(&self.tee);
-        //self.subsys.start(self.cam_config.clone(), &self.pipeline, &self.tee).await;
-        //}
-    }
-
-    /// Unlink subsystem preprocessors
-    pub(crate) async fn unlink_preprocs(&self, cam_config: config::Camera) {
-        //if cam_config.subsystems.mjpeg.is_some() {
-        //self.subsys.stop().await;
-        self.subsys.lock().unlink(&self.tee);
-        self.mjpeg_preproc.unlink(self.tee.clone());
-        //}
     }
 
     /// Start the pipeline
     #[instrument(skip(self), fields(cam = self.cam_config.id))]
-    pub async fn start(&self) {
+    pub fn start_pipeline(&self) {
         trace!("starting pipeline");
         self.pipeline.set_state(State::Playing).unwrap();
-
-        trace!("starting subsystems");
-        self.subsys
-            .lock()
-            .start(self.cam_config.clone(), &self.pipeline, &self.tee)
-            .await;
     }
 
     /// Pause the pipeline
@@ -176,10 +211,7 @@ impl CamPipeline {
 
     /// Update the pipeline
     #[instrument(skip(self), fields(cam = self.cam_config.id))]
-    pub async fn update(&self, cam_config: config::Camera) {
-        trace!("stopping subsystems");
-        self.subsys.lock().stop().await;
-
+    pub async fn update(&self, cam_config: crate::config::Camera) {
         trace!("pausing pipeline");
         self.pause();
 
@@ -237,6 +269,91 @@ impl CamPipeline {
         }
 
         trace!("strating");
-        self.start().await;
+        self.start_pipeline();
+    }
+}
+
+pub struct Resources { pub v4l2: Owned<V4l2Provider> }
+impl<'r> ResourceBindings<'r> for Resources {
+    type Binding = CamProviderBundleId;
+    fn from_bindings(mgr: &'r mut ResourceManager, map: Option<&ResourceBindingMap<Self::Binding>>) -> CuResult<Self> {
+        let key = map.expect("v4l2 binding").get(Self::Binding::V4L2).expect("v4l2").typed();
+        Ok(Self { v4l2: mgr.take(key)? })
+    }
+}
+
+impl Freezable for CamPipeline {}
+impl CuSrcTask for CamPipeline {
+    type Resources<'r> = Resources;
+    type Output<'m> = output_msg!(CuGstBuffer);
+
+    fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized
+    {
+        let cam_provider = resources.v4l2.0;
+
+        let rc = _config.unwrap();
+        let cfgg = crate::config::Camera {
+            id: rc.get("id").unwrap(),
+            name: rc.get("name").unwrap(),
+            //calib: rc.get("calib").unwrap(),
+            //settings: rc.get("settings"),
+            //possible_settings: rc.get("possible_settings"),
+            auto_exposure: rc.get("auto_exposure").unwrap_or(true),
+            manual_exposure: rc.get("manual_exposure"),
+            ..Default::default()
+        };
+        cam_provider.start();
+        std::thread::sleep(Duration::from_secs(2));
+        let dev = cam_provider.get_by_id(cfgg.id.clone()).unwrap();
+        
+        let pipeline = Self::new(dev, cfgg.clone());
+
+        Ok(pipeline)
+    }
+
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        self.start_pipeline();
+
+        Ok(())
+    }
+
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        self.pause();
+
+        Ok(())
+    }
+
+    fn process<'o>(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
+        //match self
+        //    .appsink
+        //    .try_pull_sample(Some(gstreamer::ClockTime::from_useconds(
+        //        20,
+        //    ))) 
+        //{
+        //    Some(sample) => {
+        //        let buf = sample.buffer().unwrap();
+        //        dbg!(sample.caps().unwrap());
+        //if let Some(sample) = self.sample.lock().take() {
+        //    let buf = sample.buffer().unwrap();
+        //    new_msg.set_payload(CuGstBuffer(buf.to_owned()));
+        //}
+
+        if let Some(sample) = self.sample_queue.try_recv().ok() {
+            let buf = sample.buffer().unwrap();
+            new_msg.set_payload(CuGstBuffer(buf.to_owned()));
+            println!("wooooo");
+        }
+
+        Ok(())
+        //        println!("wooooo");
+        //        Ok(())
+        //    }
+        //    None => {
+        //        println!("crap");
+        //        Ok(())
+        //    }
+        //}
     }
 }

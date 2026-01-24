@@ -35,7 +35,7 @@ pub struct SubsysRunner<P: SubsysPreprocessor<Frame = Vec<u8>>, S: Subsystem<Pre
 impl<P: SubsysPreprocessor<Frame = Vec<u8>>, S: Subsystem<Preproc = P>> SubsysRunner<P, S> {
     pub async fn init(
         pipeline: Pipeline,
-        cam_config: config::Camera,
+        cam_config: crate::config::Camera,
         src: Element,
         tt: TaskTracker,
     ) -> Self {
@@ -52,7 +52,7 @@ impl<P: SubsysPreprocessor<Frame = Vec<u8>>, S: Subsystem<Preproc = P>> SubsysRu
         }
     }
 
-    pub async fn start(&self, cam_config: config::Camera, src: Element, tt: TaskTracker) {
+    pub async fn start(&self, cam_config: crate::config::Camera, src: Element, tt: TaskTracker) {
         self.preproc.as_ref().link(src);
         let mut preproc_rx = self.preproc.rx();
         let rx = self.rx.clone();

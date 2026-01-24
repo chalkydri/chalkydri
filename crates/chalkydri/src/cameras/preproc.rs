@@ -49,7 +49,7 @@ impl<P: SubsysPreprocessor<Frame = Vec<u8>>> PreprocWrap<P> {
     }
 
     /// Set up the sampler
-    pub async fn setup_sampler(
+    pub fn setup_sampler(
         &self,
         tx: Option<watch::Sender<Option<Arc<P::Frame>>>>,
     ) -> Result<Option<()>, Error> {

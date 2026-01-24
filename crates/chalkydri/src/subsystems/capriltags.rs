@@ -15,6 +15,8 @@ use std::sync::Arc;
 use apriltag::{Detector, Family, Image, TagParams};
 use camera_intrinsic_model::{GenericModel, OpenCVModel5};
 use chalkydri_core::subsystems::SubsysProcessor;
+use cu29::cutask::{CuSinkTask, CuTask};
+use cu29::input_msg;
 use gstreamer::ElementFactory;
 use gstreamer::prelude::GstBinExtManual;
 use gstreamer::{Buffer, Caps, Element};
@@ -26,18 +28,11 @@ use re_types::{
     archetypes::{Boxes2D, Points2D},
     components::{PinholeProjection, PoseRotationQuat, Position2D, ViewCoordinates},
 };
-use sophus_autodiff::linalg::{MatF64, VecF64};
-use sophus_lie::{Isometry3F64, Rotation3F64};
 use std::time::Instant;
 use tokio::sync::{Mutex, watch};
 
-use crate::cameras::preproc::Preprocessor;
-use crate::error::Error;
-use crate::pose::PoseEstimator;
-use crate::{Cfg, Nt};
 use crate::{
     config, subsystems::Subsystem, subsystems::calibration::CalibratedModel,
-    subsystems::frame_proc_loop,
 };
 
 const TAG_SIZE: f64 = 0.1651;
@@ -47,14 +42,9 @@ const TAG_SIZE: f64 = 0.1651;
 pub struct CApriltagsDetector {
     det: Arc<Mutex<apriltag::Detector>>,
 }
-impl Subsystem for CApriltagsDetector {
-    const NAME: &'static str = "capriltags";
-
-    type Config = config::CAprilTagsSubsys;
-    type Output = ();
-    type Preproc = CapriltagsPreproc;
-    type Proc = Self;
-    type Error = Box<dyn std::error::Error + Send>;
+impl CuTask for ApriltagsDetector {
+    type Input<'m> = input_msg!();
+    type Resources<'r> = ();
 
     async fn init(nt: &nt_client::ClientHandle, cam_config: config::Camera) -> Result<Self, <Self::Proc as chalkydri_core::subsystems::SubsysProcessor>::Error> {
         let det = Detector::builder()

@@ -1,0 +1,44 @@
+(
+  resources: [
+    (id: "cam_provider", provider: "crate::cameras::providers::CamProviderBundle"),
+  ],
+  tasks: [
+    (
+      id: "camera",
+      type: "CamPipeline",
+      config: {
+        "id": "CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+        "name": "Test",
+        "width": "1280",
+        "height": "720",
+      },
+      resources: { "v4l2": "cam_provider.v4l2" },
+      logging: (enabled: false),
+    ),
+    (
+      id: "gst_to_cu",
+      type: "crate::cameras::GstToCuImage",
+      config: {
+        "width": 1280,
+        "height": 720,
+        "fourcc": "GREY",
+      },
+      logging: (enabled: false),
+    ),
+    (
+      id: "apriltags",
+      type: "chalkydri_apriltags::AprilTags",
+      //config: {
+      //},
+    ),
+    (
+      id: "apriltagproc",
+      type: "chalkydri_apriltags::ApriltagsProcessor",
+    ),
+  ],
+  cnx: [
+    (src: "camera", dst: "gst_to_cu", msg: "cu_gstreamer::CuGstBuffer"),
+    (src: "gst_to_cu", dst: "apriltags", msg: "cu_sensor_payloads::CuImage<Vec<u8>>"),
+    (src: "apriltags", dst: "apriltagproc", msg: "chalkydri_apriltags::AprilTagDetections"),
+  ],
+)

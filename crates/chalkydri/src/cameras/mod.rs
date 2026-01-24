@@ -6,9 +6,12 @@
 pub(crate) mod mjpeg;
 pub(crate) mod pipeline;
 pub(crate) mod preproc;
-mod providers;
+pub(crate) mod gst_to_cu;
+pub(crate) mod providers;
 mod publisher;
+//mod format_selection;
 
+pub use gst_to_cu::GstToCuImage;
 use gstreamer::{
     Bin, Bus, BusSyncReply, Caps, Device, DeviceProvider, DeviceProviderFactory, Element,
     ElementFactory, FlowError, FlowSuccess, Fraction, Message, MessageView, PadDirection, Pipeline,
@@ -78,10 +81,10 @@ impl CamManager {
     }
 
     pub async fn start_dev_providers(&self) {
-        self.v4l2_prov
-            .lock()
-            .await
-            .register_handler(self.dev_msg_tx.clone());
+        //self.v4l2_prov
+        //    .lock()
+        //    .await
+        //    .register_handler(self.dev_msg_tx.clone());
         self.v4l2_prov.lock().await.start();
     }
     pub async fn stop_dev_providers(&self) {
@@ -104,13 +107,10 @@ impl CamManager {
                     if let Some(cameras) = Cfg.read().cameras.clone() {
                         for cam in cameras {
                             if id == cam.id {
-                                let pipeline = CamPipeline::new(dev.clone(), cam.clone()).await;
-
-                                debug!("linking preprocs");
-                                pipeline.link_preprocs(cam).await;
+                                let pipeline = CamPipeline::new(dev.clone(), cam.clone());
 
                                 debug!("starting pipeline");
-                                pipeline.start().await;
+                                pipeline.start_pipeline();
 
                                 debug!("started pipeline");
 

@@ -88,33 +88,33 @@ struct ApiData {
 
 /// Run the API server
 pub async fn run_api(cam_man: CamManager) {
-    HttpServer::new(move || {
-        let api_data = ApiData {
-            cam_man: cam_man.clone(),
-            sys_info: Arc::new(Mutex::new(System::new())),
-        };
-        App::new()
-            .app_data(Data::new(api_data))
-            .service(index)
-            .service(stream)
-            .service(info)
-            .service(configuration)
-            .service(configure)
-            .service(save_configuration)
-            .service(calibration_intrinsics)
-            .service(calibration_status)
-            .service(calibration_step)
-            .service(restart)
-            .service(sys_reboot)
-            .service(sys_shutdown)
-            .service(openapi_json)
-            .service(dist)
-    })
-    .bind(("0.0.0.0", 6942))
-    .unwrap()
-    .run()
-    .await
-    .unwrap();
+    //HttpServer::new(move || {
+    //    let api_data = ApiData {
+    //        cam_man: cam_man.clone(),
+    //        sys_info: Arc::new(Mutex::new(System::new())),
+    //    };
+    //    App::new()
+    //        .app_data(Data::new(api_data))
+    //        .service(index)
+    //        .service(stream)
+    //        .service(info)
+    //        .service(configuration)
+    //        .service(configure)
+    //        .service(save_configuration)
+    //        .service(calibration_intrinsics)
+    //        .service(calibration_status)
+    //        .service(calibration_step)
+    //        .service(restart)
+    //        .service(sys_reboot)
+    //        .service(sys_shutdown)
+    //        .service(openapi_json)
+    //        .service(dist)
+    //})
+    //.bind(("0.0.0.0", 6942))
+    //.unwrap()
+    //.run()
+    //.await
+    //.unwrap();
 }
 
 #[derive(Serialize, ToSchema)]
@@ -172,10 +172,10 @@ pub(super) async fn info(data: web::Data<ApiData>) -> impl Responder {
 pub(super) async fn configuration(data: web::Data<ApiData>) -> impl Responder {
     let cam_man = &data.cam_man;
 
-    trace!("refreshing devices");
+    tracing::trace!("refreshing devices");
     cam_man.refresh_devices().await;
 
-    trace!("loading config");
+    tracing::trace!("loading config");
     let cfgg = Cfg.read().clone();
 
     //for cam in cam_man.devices() {
@@ -392,32 +392,33 @@ pub(super) async fn sys_info() -> impl Responder {
 /// Get an MJPEG camera stream for the given camera
 #[get("/stream/{cam_name}")]
 pub(super) async fn stream(path: web::Path<String>, data: web::Data<ApiData>) -> impl Responder {
-    let cam_name = path.clone();
+    //let cam_name = path.clone();
 
-    println!("{cam_name}");
+    //println!("{cam_name}");
 
-    error!("getting mjpeg stream");
-    let mjpeg_stream = data
-        .cam_man
-        .pipelines
-        .read()
-        .await
-        .get(&cam_name)
-        .unwrap()
-        .mjpeg_preproc
-        .inner()
-        .clone();
-    drop(data);
-    error!("dropped data");
+    //tracing::error!("getting mjpeg stream");
+    //let mjpeg_stream = data
+    //    .cam_man
+    //    .pipelines
+    //    .read()
+    //    .await
+    //    .get(&cam_name)
+    //    .unwrap()
+    //    .mjpeg_preproc
+    //    .inner()
+    //    .clone();
+    //drop(data);
+    //tracing::error!("dropped data");
 
-    HttpResponse::Ok()
-        .append_header(header::CacheControl(vec![CacheDirective::NoCache]))
-        .append_header((header::PRAGMA, "no-cache"))
-        .append_header((header::EXPIRES, 0))
-        .append_header((header::CONNECTION, "close"))
-        .append_header((
-            header::CONTENT_TYPE,
-            "multipart/x-mixed-replace; boundary=frame",
-        ))
-        .streaming(mjpeg_stream.clone())
+    //HttpResponse::Ok()
+    //    .append_header(header::CacheControl(vec![CacheDirective::NoCache]))
+    //    .append_header((header::PRAGMA, "no-cache"))
+    //    .append_header((header::EXPIRES, 0))
+    //    .append_header((header::CONNECTION, "close"))
+    //    .append_header((
+    //        header::CONTENT_TYPE,
+    //        "multipart/x-mixed-replace; boundary=frame",
+    //    ))
+    //    .streaming(mjpeg_stream.clone())
+    web::Json(())
 }

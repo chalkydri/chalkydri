@@ -75,7 +75,7 @@ impl Calibrator {
             while frame_feat.is_none() {
                 if self.rx.has_changed().is_ok() && self.rx.has_changed().unwrap() {
                     let val = self.rx.borrow_and_update().clone();
-                    debug!("got frame");
+                    tracing::debug!("got frame");
                     //valve.set_property("drop", true);
                     let img = DynamicImage::ImageRgb8(
                         RgbImage::from_vec(
@@ -135,7 +135,7 @@ impl Calibrator {
         self.frame_feats.clear();
 
         if calib_res.is_none() {
-            error!("failed to calibrate camera");
+            tracing::error!("failed to calibrate camera");
             None
         } else {
             Some(calib_res.unwrap().0)

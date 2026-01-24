@@ -4,6 +4,7 @@ members = [
   "build",
   "crates/chalkydri_core",
   "crates/chalkydri",
+  "crates/apriltags",
   #"crates/chalkydri-apriltags",
   #"crates/chalkydri-slam",
   #"crates/chalkydri-tfledge",
@@ -11,7 +12,8 @@ members = [
   #"crates/chalkydrilibj",
   #"crates/minint",
   "crates/subsystems/capriltags",
-  "crates/subsystems/python", "crates/chalkydri_config",
+  "crates/subsystems/python",
+  "crates/chalkydri_config",
 ]
 default-members = [
   "crates/chalkydri_core",
@@ -29,6 +31,12 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter", "tracing-lo
 nt_client = { git = "https://github.com/DatAsianBoi123/nt_client.git", version = "0.4.0", features = ["struct"] }
 parking_lot = { version = "0.12.4", features = ["arc_lock", "nightly", "owning_ref", "send_guard"] }
 futures-core = "0.3.31"
+
+cu29 = { version = "0.12", features = ["textlogs"] }
+cu29-helpers = "0.12"
+cu-sensor-payloads = { version = "0.12", features = ["kornia"] }
+cu29-export = "0.12.0"
+cu-gstreamer = { version = "0.12.0", features = ["gst"] }
 
 tokio = "1"
 serde = { version = "1", features = ["derive"] }

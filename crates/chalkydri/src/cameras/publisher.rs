@@ -71,7 +71,7 @@ impl CamPublisher {
 
             self.cams.get_mut(&cam_config.name).unwrap()
         };
-        debug!("publishing camera {}", cam_config.name);
+        tracing::debug!("publishing camera {}", cam_config.name);
 
         let hostname = rustix::system::uname()
             .nodename()

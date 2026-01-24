@@ -34,12 +34,12 @@ pub struct SubsysManager {
 }
 impl SubsysManager {
     /// Initialize the [`subsystem`](Subsystem) manager
-    pub async fn new(
+    pub fn new(
         pipeline: &Pipeline,
         cam_config: config::Camera,
         cam: &Element,
     ) -> Result<Self, Error> {
-        let span = span!(Level::INFO, "subsys_manager");
+        let span = tracing::span!(Level::INFO, "subsys_manager");
         let _enter = span.enter();
 
         //#[cfg(feature = "capriltags")]

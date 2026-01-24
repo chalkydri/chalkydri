@@ -18,7 +18,7 @@
 )]
 
 // These deps are needed no matter what
-#[macro_use]
+//#[macro_use]
 extern crate tracing;
 #[macro_use]
 extern crate serde;
@@ -47,7 +47,7 @@ extern crate tfledge;
 
 #[cfg(feature = "web")]
 mod api;
-mod cameras;
+pub mod cameras;
 //mod pose;
 mod subsystems;
 mod utils;
@@ -55,7 +55,8 @@ mod utils;
 #[cfg(feature = "web")]
 use api::run_api;
 use cameras::CamManager;
-use chalkydri_core::prelude::*;
+use chalkydri_core::{config::{Cfg, Config}, prelude::{Nt, config}};
+use cu29::prelude::*;
 use mimalloc::MiMalloc;
 #[cfg(feature = "rerun")]
 use re_sdk::{MemoryLimit, RecordingStream};
@@ -63,9 +64,10 @@ use re_sdk::{MemoryLimit, RecordingStream};
 use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
-use std::{error::Error, path::Path};
+use std::{error::Error, path::{Path, PathBuf}, str::FromStr};
 use tokio::sync::mpsc;
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
+use crate::cameras::pipeline::CamPipeline;
 
 // mimalloc is an excellent general purpose allocator
 #[global_allocator]
@@ -86,6 +88,11 @@ static Rerun: Lazy<RecordingStream> = Lazy::new(|| {
         .unwrap()
         .into()
 });
+
+use cu29_helpers::basic_copper_setup;
+
+#[copper_runtime(config = "copperconfig.ron")]
+struct App {}
 
 #[tokio::main(worker_threads = 16)]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -113,7 +120,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "tokio-console")]
     console_subscriber::init();
 
-    info!("starting up...");
+    tracing::info!("starting up...");
 
     // Try a few different paths for the config file, exiting early if we find one that exists
     let mut path = Path::new("/boot/chalkydri.toml");
@@ -123,7 +130,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             path = Path::new("./chalkydri.toml");
         }
     }
-    trace!("loading config from '{path:?}'");
+    tracing::trace!("loading config from '{path:?}'");
 
     // If all else fails, we'll just use a default configuration
     (*Cfg.write()) = Config::load(path).unwrap_or_default();
@@ -135,28 +142,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize GStreamer
     match gstreamer::init() {
         Ok(()) => {
-            debug!("initialized gstreamer");
+            tracing::debug!("initialized gstreamer");
         }
         Err(e) => {
             panic!("gstreamer failed to initialize: {e:?}");
         }
     }
 
-    // Create the shutdown channel
-    let (tx, mut rx) = mpsc::channel::<()>(1);
-    // Spawn the camera manager
-    let (cam_man, runner) = CamManager::new(Nt.handle(), tx).await;
-    cam_man.start_dev_providers().await;
-    // Spawn the web server
-    let api = tokio::spawn(run_api(cam_man.clone()));
+    let pathbuf = PathBuf::from_str("testytest.copper".into()).unwrap();
+    let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
 
-    // Poll the API server future until the end of time, ctrl+c, or a message on the shutdown channel
-    tokio::select!(
-        _ = api => {},
-        _ = tokio::signal::ctrl_c() => {},
-        _ = runner => {},
-        _ = rx.recv() => {},
-    );
+    let clock = copper_ctx.clock;
+
+    let mut app = App::new(clock.clone(), copper_ctx.unified_logger.clone(), None).expect("failed to create runtime");
+
+    app.run().unwrap();
+
+    //// Create the shutdown channel
+    //let (tx, mut rx) = mpsc::channel::<()>(1);
+    //// Spawn the camera manager
+    //let (cam_man, runner) = CamManager::new(Nt.handle(), tx).await;
+    //cam_man.start_dev_providers().await;
+    //// Spawn the web server
+    //let api = tokio::spawn(run_api(cam_man.clone()));
+
+    //// Poll the API server future until the end of time, ctrl+c, or a message on the shutdown channel
+    //tokio::select!(
+    //    _ = api => {},
+    //    _ = tokio::signal::ctrl_c() => {},
+    //    _ = runner => {},
+    //    _ = rx.recv() => {},
+    //);
 
     Ok(())
 }
