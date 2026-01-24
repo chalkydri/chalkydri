@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use gstreamer::{Element, Pipeline};
 use tokio::task::JoinSet;
+use tokio_util::task::TaskTracker;
 use tracing::Level;
 
 #[cfg(feature = "python")]
@@ -19,7 +20,7 @@ use crate::{Nt, cameras::CamManager, config, error::Error, pose::PoseEstimator};
 pub struct SubsysManager {
     pub pose_est: PoseEstimator,
 
-    set: Arc<Mutex<JoinSet<()>>>,
+    set: TaskTracker,
     
     #[cfg(feature = "capriltags")]
     capriltags: CApriltagsDetector,
@@ -52,7 +53,7 @@ impl SubsysManager {
         Ok(Self {
             pose_est,
 
-            set: Arc::new(Mutex::new(JoinSet::new())),
+            set: TaskTracker::new(),
 
             #[cfg(feature = "capriltags")]
             capriltags,
@@ -72,7 +73,8 @@ impl SubsysManager {
         let manager_ = manager.clone();
 
         #[cfg(feature = "capriltags")]
-        self.set.lock().unwrap().spawn(async move {
+        self.set.spawn(async move {
+            println!("a");
             manager.capriltags_preproc.setup_sampler(None).unwrap();
             manager
                 .capriltags

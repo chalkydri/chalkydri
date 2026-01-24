@@ -109,7 +109,7 @@ impl CamManager {
                                 debug!("linking preprocs");
                                 pipeline.link_preprocs(cam);
                                 debug!("starting pipeline");
-                                pipeline.start();
+                                pipeline.start().await;
                                 let _ = pipelines.write().await.insert(id.clone(), pipeline);
                                 println!("existing cam: {id}");
                                 continue 'outer;

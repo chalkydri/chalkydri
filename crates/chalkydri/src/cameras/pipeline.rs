@@ -16,6 +16,7 @@ use super::mjpeg::MjpegProc;
 /// Each camera gets its own GStreamer pipeline.
 pub struct CamPipeline {
     dev: Device,
+    cam_config: config::Camera,
     pipeline: Pipeline,
 
     input: Element,
@@ -104,6 +105,7 @@ impl CamPipeline {
 
         Self {
             dev,
+            cam_config,
             pipeline,
 
             input,
@@ -118,22 +120,25 @@ impl CamPipeline {
     }
 
     /// Link subsystem preprocessors
-    pub(crate) fn link_preprocs(&self, cam_config: config::Camera) {
+    pub(crate) async fn link_preprocs(&self, cam_config: config::Camera) {
         //if cam_config.subsystems.mjpeg.is_some() {
             self.mjpeg_preproc.link(self.tee.clone());
+            self.subsys.start(self.cam_config.clone(), &self.pipeline, &self.tee).await;
         //}
     }
 
     /// Unlink subsystem preprocessors
-    pub(crate) fn unlink_preprocs(&self, cam_config: config::Camera) {
+    pub(crate) async fn unlink_preprocs(&self, cam_config: config::Camera) {
         //if cam_config.subsystems.mjpeg.is_some() {
-            self.mjpeg_preproc.unlink(self.tee.clone());
+        //self.subsys.stop().await;
+        self.mjpeg_preproc.unlink(self.tee.clone());
         //}
     }
 
     /// Start the pipeline
-    pub fn start(&self) {
+    pub async fn start(&self) {
         self.pipeline.set_state(State::Playing).unwrap();
+        self.subsys.start(self.cam_config.clone(), &self.pipeline, &self.tee).await;
     }
 
     /// Pause the pipeline
@@ -198,7 +203,7 @@ impl CamPipeline {
             }
         }
 
-        self.start();
+        self.start().await;
     }
 }
 

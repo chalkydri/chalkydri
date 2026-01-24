@@ -69,6 +69,7 @@ sophus_autodiff = { version = "0.15.0", features = ["simd"] }
 sophus_lie = { version = "0.15.0", features = ["simd"] }
 quanta = "0.12.5"
 nt_client = { git = "https://github.com/DatAsianBoi123/nt_client.git", version = "0.4.0", features = ["struct"] }
+tokio-util = { version = "0.7.16", features = ["rt"] }
 
 [build-dependencies]
 bindgen = { version = "*", default-features = false, features = ["runtime"] }
