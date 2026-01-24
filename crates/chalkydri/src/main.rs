@@ -14,7 +14,6 @@
 extern crate tracing;
 #[macro_use]
 extern crate serde;
-extern crate minint;
 extern crate tokio;
 
 // Web server and OpenAPI documentation generator
@@ -50,7 +49,7 @@ use api::run_api;
 use cameras::CamManager;
 use config::Config;
 use mimalloc::MiMalloc;
-use minint::NtConn;
+use nt_client::{NTAddr, NewClientOptions};
 use once_cell::sync::Lazy;
 #[cfg(feature = "rerun")]
 use re_sdk::{MemoryLimit, RecordingStream};
@@ -101,25 +100,14 @@ static Rerun: Lazy<RecordingStream> = Lazy::new(|| {
 });
 
 #[allow(non_upper_case_globals)]
-static Nt: Lazy<NtConn> = Lazy::new(|| {
+static Nt: Lazy<nt_client::Client> = Lazy::new(|| {
     futures_executor::block_on(async {
         // Come up with an IP address for the roboRIO based on the team number or specified IP
-        let roborio_ip = {
-            let Config {
-                ntables_ip,
-                team_number,
-                ..
-            } = &*Cfg.read().await;
-
-            ntables_ip
-                .clone()
-                .map(|s| {
-                    s.parse::<Ipv4Addr>()
-                        .expect("failed to parse ip address")
-                        .octets()
-                })
-                .unwrap_or_else(|| gen_team_ip(*team_number).expect("failed to generate team ip"))
-        };
+        let Config {
+            ntables_ip,
+            team_number,
+            ..
+        } = &*Cfg.read().await;
 
         // Get the device's name or generate one if not set
         let dev_name = if let Some(dev_name) = (*Cfg.read().await).device_name.clone() {
@@ -134,18 +122,13 @@ static Nt: Lazy<NtConn> = Lazy::new(|| {
             dev_name
         };
 
-        let nt: NtConn;
+        let nt = nt_client::Client::new(NewClientOptions {
+            addr: NTAddr::TeamNumber(*team_number),
+            name: dev_name,
+            ..Default::default()
+        });
 
-        match NtConn::new(Ipv4Addr::from(roborio_ip).to_string(), dev_name.clone()).await {
-            Ok(conn) => {
-                nt = conn;
-            }
-            Err(err) => {
-                panic!("Error connecting to NT server: {err:?}");
-            }
-        }
-
-        info!("Connected to NT server at {roborio_ip:?} successfully!");
+        //info!("Connected to NT server at {roborio_ip:?} successfully!");
 
         nt
     })
@@ -190,7 +173,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create the shutdown channel
     let (tx, mut rx) = mpsc::channel::<()>(1);
     // Spawn the camera manager
-    let (cam_man, runner) = CamManager::new(Nt.clone(), tx).await;
+    let (cam_man, runner) = CamManager::new(Nt.handle(), tx).await;
     cam_man.start_dev_providers().await;
     // Spawn the web server
     let api = tokio::spawn(run_api(cam_man.clone()));

@@ -1,6 +1,6 @@
 use std::{fmt::Debug, marker::PhantomData, sync::Arc};
 
-use minint::NtConn;
+use nt_client::ClientHandle as NTClientHandle;
 use tokio::sync::watch;
 
 use crate::{cameras::pipeline::Preprocessor, config};
@@ -41,7 +41,7 @@ pub trait Subsystem: Sized {
     /// Process a frame
     async fn process(
         &self,
-        nt: NtConn,
+        nt: &NTClientHandle,
         cam_config: config::Camera,
         rx: watch::Receiver<Option<Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>>,
     ) -> Result<Self::Output, Self::Error>;
@@ -67,7 +67,7 @@ impl<P: Preprocessor> Subsystem for NoopSubsys<P> {
     }
     async fn process(
         &self,
-        _nt: NtConn,
+        _nt: &NTClientHandle,
         _cam_config: config::Camera,
         _rx: watch::Receiver<Option<Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>>,
     ) -> Result<Self::Output, Self::Error> {

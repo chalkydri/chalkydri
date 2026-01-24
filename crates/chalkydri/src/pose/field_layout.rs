@@ -19,8 +19,8 @@ impl AprilTagFieldLayout {
     pub async fn load(
         &self,
         pose_est: &mut PoseEstimator,
-    ) -> Result<HashMap<usize, Isometry3F64>, Error> {
-        let mut tags: HashMap<usize, Isometry3F64> = HashMap::new();
+    ) -> Result<HashMap<usize, na::Isometry3<f64>>, Error> {
+        let mut tags: HashMap<usize, na::Isometry3<f64>> = HashMap::new();
         for LayoutTag {
             id,
             pose:
@@ -31,17 +31,15 @@ impl AprilTagFieldLayout {
         } in self.tags.clone()
         {
             // Turn the field layout values into Rust datatypes
-            let translation = VecF64::<3>::new(translation.x, translation.y, translation.z);
-            let rotation = na::UnitQuaternion::from_quaternion(na::Quaternion::new(
+            let translation = na::Translation3::new(translation.x, translation.y, translation.z);
+            let rotation = na::Quaternion::new(
                 quaternion.x,
                 quaternion.y,
                 quaternion.z,
                 quaternion.w,
-            ))
-            .to_rotation_matrix();
-            let rotation = Rotation3F64::try_from_mat(rotation.matrix()).unwrap();
-
-            let isometry = Isometry3F64::from_translation_and_rotation(translation, rotation);
+            );
+            let rotation = na::UnitQuaternion::from_quaternion(rotation);
+            let isometry = na::Isometry3::from_parts(translation, rotation);
 
             tags.insert(id as usize, isometry);
         }

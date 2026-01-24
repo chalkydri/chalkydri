@@ -1,9 +1,11 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use field_layout::{AprilTagFieldLayout, Field};
+use nt_client::r#struct::{Pose3d, Quaternion as NtQuaternion, Rotation3d, Translation3d};
 use sophus_autodiff::{linalg::VecF64, prelude::*};
-use sophus_lie::{HasAverage, Isometry3F64, Rotation3F64, prelude::*};
+use sophus_lie::{prelude::*, HasAverage, Isometry3F64, Quaternion, QuaternionF64, Rotation3F64};
 use tokio::sync::{Mutex, RwLock, mpsc};
+use nalgebra as na;
 
 use crate::{Cfg, Nt, error::Error};
 
@@ -16,9 +18,9 @@ pub struct PoseEstimator {
     //reg: Arc<Mutex<Registry>>,
     //tx: mpsc::Sender<Transform>,
     layout: Arc<RwLock<Option<AprilTagFieldLayout>>>,
-    tag_mappings: Arc<RwLock<Option<HashMap<usize, Isometry3F64>>>>,
-    poses_rx: Arc<Mutex<mpsc::UnboundedReceiver<Isometry3F64>>>,
-    poses_tx: mpsc::UnboundedSender<Isometry3F64>,
+    tag_mappings: Arc<RwLock<Option<HashMap<usize, na::Isometry3<f64>>>>>,
+    poses_rx: Arc<Mutex<mpsc::UnboundedReceiver<na::Isometry3<f64>>>>,
+    poses_tx: mpsc::UnboundedSender<na::Isometry3<f64>>,
 }
 impl PoseEstimator {
     pub async fn new() -> Result<Self, Error> {
@@ -58,28 +60,25 @@ impl PoseEstimator {
     /// Add a transform to the transform registry
     pub async fn add_transform_from_tag(
         &self,
-        tag_est_pos: Isometry3F64,
+        tag_est_pos: na::Isometry3<f64>,
         tag_id: usize,
     ) -> Result<(), Error> {
         if let Some(tag_mappings) = self.tag_mappings.read().await.clone() {
             if let Some(tag_field_pos) = tag_mappings.get(&tag_id) {
                 let cam_est_rel_pos = tag_est_pos.inverse();
-                let cam_relto_pos = cam_est_rel_pos.translation() / 2.0;
+                let cam_relto_pos = cam_est_rel_pos.translation;
 
                 let cam_relto_x = -cam_relto_pos.x;
                 let cam_relto_y = cam_relto_pos.y;
                 let cam_relto_z = -cam_relto_pos.z;
 
-                let cam_angle = Rotation3F64::try_from_mat(
-                    tag_field_pos.rotation().matrix() - cam_est_rel_pos.rotation().matrix(),
-                )
-                .unwrap();
+                let cam_angle = tag_field_pos.rotation.rotation_to(&cam_est_rel_pos.rotation);
 
-                let cam_fcs_abs = Isometry3F64::from_translation_and_rotation(
-                    VecF64::<3>::new(
-                        cam_relto_x + tag_field_pos.translation().x,
-                        cam_relto_y + tag_field_pos.translation().y,
-                        cam_relto_z + tag_field_pos.translation().z,
+                let cam_fcs_abs = na::Isometry3::from_parts(
+                    na::Translation3::new(
+                        cam_relto_x + tag_field_pos.translation.x,
+                        cam_relto_y + tag_field_pos.translation.y,
+                        cam_relto_z + tag_field_pos.translation.z,
                     ),
                     cam_angle,
                 );
@@ -120,18 +119,12 @@ impl PoseEstimator {
     pub async fn nt_loop(&self) {
         let est = self.clone();
         tokio::spawn(async move {
-            let mut t = Nt
-                .publish::<Vec<f64>>(format!(
-                    "/chalkydri/robot_pose/{}/translation",
+            let mut robot_pose = Nt
+                .topic(format!(
+                    "/chalkydri/robot_pose/{}",
                     Cfg.read().await.device_name.clone().unwrap()
                 ))
-                .await
-                .unwrap();
-            let mut r = Nt
-                .publish::<Vec<f64>>(format!(
-                    "/chalkydri/robot_pose/{}/rotation",
-                    Cfg.read().await.device_name.clone().unwrap()
-                ))
+                .publish::<Pose3d>(Default::default())
                 .await
                 .unwrap();
             loop {
@@ -160,15 +153,24 @@ impl PoseEstimator {
                 while let Some(pose) = est.poses_rx.lock().await.recv().await {
                     poses.push(pose);
                 }
-                let pose = Isometry3F64::average(&poses).unwrap();
-                t.set(vec![
-                    pose.translation().x,
-                    pose.translation().y,
-                    pose.translation().z,
-                ])
-                .await;
-                let rot = pose.rotation().matrix().as_slice().to_vec();
-                r.set(rot).await;
+                //sophus_lie::iterative_average(parent_from_body_transforms, max_iteration_count)
+                let pose = poses.first().unwrap();
+                let rot = pose.rotation.clone();
+                let quat = na::UnitQuaternion::from_rotation_matrix(&rot.to_rotation_matrix()).to_owned();
+                //let pose = na::Isometry3::average(&poses).unwrap();
+
+                robot_pose.set(Pose3d { translation: Translation3d {
+                    x: pose.translation.x,
+                    y: pose.translation.y,
+                    z: pose.translation.z,
+                }, rotation: Rotation3d {
+                    quaternion: NtQuaternion {
+                        w: quat.coords.w,
+                        x: quat.coords.x,
+                        y: quat.coords.y,
+                        z: quat.coords.z,
+                    },
+                } }).await.unwrap();
 
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }

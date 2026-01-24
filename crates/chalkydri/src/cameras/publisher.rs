@@ -1,22 +1,22 @@
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
-use minint::{NtSubscription, NtTopic};
+use nt_client::{data::Properties, publish::Publisher, subscribe::Subscriber, NewClientOptions};
 
 use crate::{Nt, config};
 
-struct Cam<'p> {
-    source: NtTopic<'p, String>,
-    streams: NtTopic<'p, Vec<String>>,
-    description: NtTopic<'p, String>,
-    connected: NtTopic<'p, bool>,
-    mode: NtSubscription<'p>,
-    modes: NtTopic<'p, Vec<String>>,
+struct Cam {
+    source: Publisher<String>,
+    streams: Publisher<Vec<String>>,
+    description: Publisher<String>,
+    connected: Publisher<bool>,
+    mode: Subscriber,
+    modes: Publisher<Vec<String>>,
 }
 
-pub struct CamPublisher<'p> {
-    cams: HashMap<String, Cam<'p>>,
+pub struct CamPublisher {
+    cams: HashMap<String, Cam>,
 }
-impl CamPublisher<'_> {
+impl CamPublisher {
     pub fn new() -> Self {
         Self {
             cams: HashMap::new(),
@@ -28,27 +28,33 @@ impl CamPublisher<'_> {
             cam
         } else {
             let source = Nt
-                .publish::<String>(&format!("/CameraPublisher/{}/source", cam_config.id))
+                .topic(format!("/CameraPublisher/{}/source", cam_config.id))
+                .publish::<String>(Default::default())
                 .await
                 .unwrap();
             let streams = Nt
-                .publish::<Vec<String>>(&format!("/CameraPublisher/{}/streams", cam_config.id))
+                .topic(format!("/CameraPublisher/{}/streams", cam_config.id))
+                .publish::<Vec<String>>(Default::default())
                 .await
                 .unwrap();
             let description = Nt
-                .publish::<String>(&format!("/CameraPublisher/{}/description", cam_config.id))
+                .topic(format!("/CameraPublisher/{}/description", cam_config.id))
+                .publish::<String>(Default::default())
                 .await
                 .unwrap();
             let connected = Nt
-                .publish::<bool>(&format!("/CameraPublisher/{}/connected", cam_config.id))
+                .topic(format!("/CameraPublisher/{}/connected", cam_config.id))
+                .publish::<bool>(Default::default())
                 .await
                 .unwrap();
             let mode = Nt
-                .subscribe(&format!("/CameraPublisher/{}/mode", cam_config.id))
+                .topic(format!("/CameraPublisher/{}/mode", cam_config.id))
+                .subscribe(Default::default())
                 .await
                 .unwrap();
             let modes = Nt
-                .publish::<Vec<String>>(&format!("/CameraPublisher/{}/modes", cam_config.id))
+                .topic(format!("/CameraPublisher/{}/modes", cam_config.id))
+                .publish::<Vec<String>>(Default::default())
                 .await
                 .unwrap();
 

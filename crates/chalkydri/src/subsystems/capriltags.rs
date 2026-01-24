@@ -17,8 +17,7 @@ use camera_intrinsic_model::{GenericModel, OpenCVModel5};
 use gstreamer::ElementFactory;
 use gstreamer::prelude::GstBinExtManual;
 use gstreamer::{Buffer, Caps, Element};
-use minint::NtConn;
-use nalgebra as na;
+use nalgebra::{self as na, MatrixView3, MatrixView3x1};
 #[cfg(feature = "rerun")]
 use re_sdk::external::re_types_core;
 #[cfg(feature = "rerun")]
@@ -65,20 +64,22 @@ impl Subsystem for CApriltagsDetector {
     }
     async fn process(
         &self,
-        nt: NtConn,
+        nt: &nt_client::ClientHandle,
         cam_config: config::Camera,
-        rx: watch::Receiver<Option<Arc<Vec<u8>>>>,
+        rx: watch::Receiver<Option<Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>>,
     ) -> Result<Self::Output, Self::Error> {
         let model = CalibratedModel::new(cam_config.calib.unwrap());
         let cam_name = cam_config.name.clone();
 
         // Publish NT topics we'll use
-        let mut delay = Nt
-            .publish::<f64>(&format!("/chalkydri/cameras/{cam_name}/delay"))
+        let mut delay = nt
+            .topic(format!("/chalkydri/cameras/{cam_name}/delay"))
+            .publish::<f64>(Default::default())
             .await
             .unwrap();
-        let mut tag_detected = Nt
-            .publish::<bool>(&format!("/chalkydri/cameras/{cam_name}/tag_detected"))
+        let mut tag_detected = nt
+            .topic(format!("/chalkydri/cameras/{cam_name}/tag_detected"))
+            .publish::<bool>(Default::default())
             .await
             .unwrap();
 
@@ -118,34 +119,19 @@ impl Subsystem for CApriltagsDetector {
                             tagsize: TAG_SIZE,
                         }) {
                             // Extract the camera's translation and rotation matrices from the [Pose]
-                            let cam_translation = pose.translation().data().to_vec();
-                            let cam_rotation = pose.rotation().data().to_vec();
+                            let cam_translation = pose.translation().data();
+                            let cam_rotation = pose.rotation().data();
 
                             // Convert the camera's translation and rotation matrices into proper Rust datatypes
-                            let translation = VecF64::<3>::new(
-                                cam_translation[0],
-                                cam_translation[1],
-                                cam_translation[2],
-                            );
-                            let cam_rotation = Rotation3F64::try_from_mat(MatF64::<3, 3>::new(
-                                cam_rotation[0],
-                                cam_rotation[1],
-                                cam_rotation[2],
-                                cam_rotation[3],
-                                cam_rotation[4],
-                                cam_rotation[5],
-                                cam_rotation[6],
-                                cam_rotation[7],
-                                cam_rotation[8],
-                            ))
-                            .unwrap();
+                            let translation: na::Translation3<f64> = MatrixView3x1::from_slice(cam_translation).into_owned().into();
+                            let cam_rotation = na::UnitQuaternion::from_matrix(&MatrixView3::from_slice(cam_rotation).transpose());
 
                             debug!(
                                 "detected tag id {}: tl={cam_translation:?} ro={cam_rotation:?}",
                                 det.id()
                             );
 
-                            let tag_est_pos = Isometry3F64::from_translation_and_rotation(
+                            let tag_est_pos = na::Isometry3::from_parts(
                                 translation,
                                 cam_rotation,
                             );

@@ -588,18 +588,20 @@ impl NtConn {
     /// This method is used internally to process incoming data values for subscribed topics.
     ///
     /// Returns `(uid, timestamp, data)`
-    fn read_bin_frame(buf: Vec<u8>) -> Result<(i64, u64, Data)> {
+    fn read_bin_frame(buf: Vec<u8>) -> Result<(i32, u64, Data)> {
         let mut bytes = Bytes::new(&buf);
         dbg!(bytes);
         let len = rmp::decode::read_array_len(&mut bytes)?;
 
         if len == 4 {
-            dbg!(rmp::decode::read_marker(&mut bytes).unwrap());
-            let uid = rmp::decode::read_int(&mut bytes).unwrap();
-            let ts = rmp::decode::read_u64(&mut bytes)?;
-            let data_type = rmp::decode::read_u8(&mut bytes)?;
-            let data = Data::from(&mut bytes, data_type)
-                .map_err(|_| NtError::MessagePackError("Failed to parse data value".to_string()))?;
+            let uid = rmp::decode::read_i32(&mut bytes).unwrap();
+            let ts = rmp::decode::read_u64(&mut bytes).unwrap();
+            let data_type = rmp::decode::read_u64(&mut bytes).unwrap();
+            let data = Data::from(&mut bytes, data_type as u8)
+                .map_err(|e| {
+                    dbg!(e);
+                    NtError::MessagePackError("Failed to parse data value".to_string())
+                })?;
 
             Ok((uid, ts, data))
         } else {

@@ -15,7 +15,7 @@ use gstreamer::{
 };
 
 use gstreamer_app::{AppSink, AppSinkCallbacks};
-use minint::NtConn;
+use nt_client::ClientHandle as NTClientHandle;
 use pipeline::CamPipeline;
 use providers::{CamProvider, ProviderEvent, V4l2Provider};
 use publisher::CamPublisher;
@@ -54,7 +54,7 @@ pub struct CamManager {
     pub new_dev_rx: Arc<Mutex<mpsc::Receiver<config::Camera>>>,
 }
 impl CamManager {
-    pub async fn new(nt: NtConn, restart_tx: mpsc::Sender<()>) -> (Self, impl Future<Output = ()>) {
+    pub async fn new(nt: &NTClientHandle, restart_tx: mpsc::Sender<()>) -> (Self, impl Future<Output = ()>) {
         let v4l2_prov = Arc::new(Mutex::new(V4l2Provider::init()));
 
         let pipelines = Arc::new(RwLock::new(HashMap::new()));

@@ -76,7 +76,7 @@ impl SubsysManager {
             manager.capriltags_preproc.setup_sampler(None).unwrap();
             manager
                 .capriltags
-                .process(Nt.clone(), cam_config, manager_.capriltags_preproc.rx())
+                .process(Nt.handle(), cam_config, manager_.capriltags_preproc.rx())
                 .await
                 .unwrap();
         });

@@ -18,6 +18,7 @@ def main():
         topics = inst.getTable("/chalkydri").getTopics()
         if len(topics) > 0:
             print(topics)
+        time.sleep(0.5)
 
 
 if __name__ == '__main__':
