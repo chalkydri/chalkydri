@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use apriltag::{Detector, Family, Image, TagParams};
 use camera_intrinsic_model::{GenericModel, OpenCVModel5};
+use chalkydri_core::subsystems::SubsysProcessor;
 use gstreamer::ElementFactory;
 use gstreamer::prelude::GstBinExtManual;
 use gstreamer::{Buffer, Caps, Element};
@@ -52,9 +53,10 @@ impl Subsystem for CApriltagsDetector {
     type Config = config::CAprilTagsSubsys;
     type Output = ();
     type Preproc = CapriltagsPreproc;
+    type Proc = Self;
     type Error = Box<dyn std::error::Error + Send>;
 
-    async fn init() -> Result<Self, Self::Error> {
+    async fn init(nt: &nt_client::ClientHandle, cam_config: config::Camera) -> Result<Self, <Self::Proc as chalkydri_core::subsystems::SubsysProcessor>::Error> {
         let det = Detector::builder()
             .add_family_bits(Family::tag_36h11(), 3)
             .build()
@@ -64,12 +66,23 @@ impl Subsystem for CApriltagsDetector {
             det: Arc::new(Mutex::new(det)),
         })
     }
+}
+impl SubsysProcessor for CApriltagsDetector {
+    type Subsys = Self;
+    type Output = ();
+    type Error = Box<dyn std::error::Error + Send>;
+
+    fn stop(&mut self) {
+        
+    }
+
     async fn process(
-        &self,
-        nt: &nt_client::ClientHandle,
-        cam_config: config::Camera,
-        rx: watch::Receiver<Option<Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>>,
-    ) -> Result<Self::Output, Self::Error> {
+            &self,
+            subsys: Self::Subsys,
+            nt: &nt_client::ClientHandle,
+            cam_config: config::Camera,
+            frame: Arc<Vec<u8>>,
+        ) -> Result<Self::Output, Self::Error> {
         let model = CalibratedModel::new(cam_config.calib.unwrap());
         let cam_name = cam_config.name.clone();
 

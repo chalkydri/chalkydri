@@ -42,8 +42,8 @@ extern crate chalkydri_apriltags;
 #[cfg(feature = "ml")]
 extern crate tfledge;
 
-extern crate sophus_lie;
-extern crate sophus_autodiff;
+//extern crate sophus_lie;
+//extern crate sophus_autodiff;
 
 #[cfg(feature = "web")]
 mod api;
