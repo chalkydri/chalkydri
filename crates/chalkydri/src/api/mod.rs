@@ -96,7 +96,7 @@ pub async fn run_api(cam_man: CamManager) {
         App::new()
             .app_data(Data::new(api_data))
             .service(index)
-            //.service(stream)
+            .service(stream)
             .service(info)
             .service(configuration)
             .service(configure)
@@ -123,6 +123,8 @@ pub struct Info {
     pub cpu_usage: u8,
     pub mem_usage: u8,
     pub new_cams: Vec<config::Camera>,
+    pub enabled_capriltags: bool,
+    pub enabled_python: bool,
 }
 
 /// Get Chalkydri's version and system information
@@ -155,6 +157,8 @@ pub(super) async fn info(data: web::Data<ApiData>) -> impl Responder {
         cpu_usage,
         mem_usage,
         new_cams,
+        enabled_capriltags: cfg!(feature = "capriltags"),
+        enabled_python: cfg!(feature = "python"),
     })
 }
 

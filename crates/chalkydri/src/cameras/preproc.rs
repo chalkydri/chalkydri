@@ -9,13 +9,13 @@ use chalkydri_core::prelude::*;
 
 /// Wrapper around [Preprocessor] implementations that handles the [AppSink] junk
 #[derive(Clone)]
-pub struct PreprocWrap<P: Preprocessor<Frame = Vec<u8>>> {
+pub struct PreprocWrap<P: SubsysPreprocessor<Frame = Vec<u8>>> {
     inner: P,
     appsink: Element,
     tx: watch::Sender<Option<Arc<P::Frame>>>,
     rx: watch::Receiver<Option<Arc<P::Frame>>>,
 }
-impl<P: Preprocessor<Frame = Vec<u8>>> PreprocWrap<P> {
+impl<P: SubsysPreprocessor<Frame = Vec<u8>>> PreprocWrap<P> {
     /// Create a new wrapped preprocessor
     pub fn new(pipeline: &Pipeline) -> Self {
         let inner = P::init(pipeline);

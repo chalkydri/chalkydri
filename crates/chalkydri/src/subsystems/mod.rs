@@ -25,14 +25,14 @@ pub use chalkydri_subsys_python as python;
 pub use manager::SubsysManager;
 
 #[derive(Clone)]
-pub struct SubsysRunner<P: Preprocessor<Frame = Vec<u8>>, S: Subsystem<Preproc = P>> {
+pub struct SubsysRunner<P: SubsysPreprocessor<Frame = Vec<u8>>, S: Subsystem<Preproc = P>> {
     tx: mpsc::Sender<SubsystemCtrl>,
     rx: Arc<Mutex<mpsc::Receiver<SubsystemCtrl>>>,
     preproc: Arc<PreprocWrap<P>>,
     jh: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
     _marker: PhantomData<S>,
 }
-impl<P: Preprocessor<Frame = Vec<u8>>, S: Subsystem<Preproc = P>> SubsysRunner<P, S> {
+impl<P: SubsysPreprocessor<Frame = Vec<u8>>, S: Subsystem<Preproc = P>> SubsysRunner<P, S> {
     pub async fn init(
         pipeline: Pipeline,
         cam_config: config::Camera,
@@ -77,13 +77,13 @@ impl<P: Preprocessor<Frame = Vec<u8>>, S: Subsystem<Preproc = P>> SubsysRunner<P
                                 .into_mapped_buffer_readable()
                                 .unwrap()
                                 .to_vec();
-                            subsys
-                                .process(Nt.handle(), cam_config.clone(), buf.into())
-                                .await
-                                .unwrap();
+                            // subsys
+                            //     .process(Nt.handle(), cam_config.clone(), buf.into())
+                            //     .await
+                            //     .unwrap();
                         }
                         _ = kill_rx.recv() => {
-                            subsys.stop();
+                            //subsys.stop();
                             break 'preproc_loop;
                         }
                     };

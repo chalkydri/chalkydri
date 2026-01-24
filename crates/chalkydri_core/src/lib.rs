@@ -4,6 +4,8 @@
 //! This crate contains common data structures, traits, and utilities that can be reused.
 //!
 
+#![feature(coroutines, coroutine_trait)]
+
 #![allow(
     // This is only used in Chalkydri code
     async_fn_in_trait,
@@ -56,7 +58,7 @@ pub mod prelude {
     #[cfg(feature = "ntables")]
     pub use super::ntables::Nt;
     #[cfg(feature = "preprocs")]
-    pub use super::preprocs::{self, Preprocessor};
+    pub use super::preprocs::{self, SubsysPreprocessor};
     #[cfg(feature = "subsystems")]
     pub use super::subsystems::{self, Subsystem};
 }

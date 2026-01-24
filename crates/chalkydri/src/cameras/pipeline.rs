@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::ControlFlow};
 use std::sync::Arc;
 
 use gstreamer::{
@@ -160,8 +160,6 @@ impl CamPipeline {
         trace!("starting pipeline");
         self.pipeline.set_state(State::Playing).unwrap();
 
-        self.pipeline.
-
         trace!("starting subsystems");
         self.subsys
             .lock()
@@ -208,7 +206,7 @@ impl CamPipeline {
             trace!("marking pads for reconfiguration");
             self.pipeline.foreach_sink_pad(|_elem, pad| {
                 pad.mark_reconfigure();
-                true
+                ControlFlow::Continue(())
             });
 
             let camera = self.pipeline.by_name("camera").unwrap();

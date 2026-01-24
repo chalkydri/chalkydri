@@ -22,7 +22,7 @@ pub struct MjpegProc {
     pub(crate) tx: watch::Sender<Option<Arc<Vec<u8>>>>,
     rx: watch::Receiver<Option<Arc<Vec<u8>>>>,
 }
-impl Preprocessor for MjpegProc {
+impl SubsysPreprocessor for MjpegProc {
     type Subsys = NoopSubsys<Self>;
     type Frame = Vec<u8>;
 

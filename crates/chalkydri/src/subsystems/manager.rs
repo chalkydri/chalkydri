@@ -4,7 +4,6 @@ use std::thread::Thread;
 
 use chalkydri_core::subsystems::SubsystemCtrl;
 use gstreamer::Task;
-#[cfg(feature = "python")]
 use gstreamer::{Element, Pipeline};
 use tokio::sync::mpsc;
 use tokio_util::task::TaskTracker;

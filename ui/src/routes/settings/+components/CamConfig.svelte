@@ -178,6 +178,7 @@
 			{#if camera.subsystems}
 				<Card padding="lg" class="mt-2 col-span-2">
 					<P size="lg">Subsystems</P>
+          {#if config && config.enable_capriltags}
 					<Card padding="xs" class="mt-2">
 						<Toggle color="blue" bind:disabled bind:checked={enable_capriltags}
 							>C AprilTags</Toggle
@@ -188,11 +189,13 @@
 							{/if}
 						{/if}
 					</Card>
+          {/if}
 					<!--<Card padding="xs" class="mt-2">
 						<Toggle color="blue" bind:disabled bind:checked={camera.subsystems.ml.enabled}
 							>Machine Learning</Toggle
 						>
 					</Card>-->
+          {#if config && config.enable_python}
 					<Card padding="xs" class="mt-2">
 						<P>Custom subsystems</P>
 						{#if config}
@@ -206,6 +209,7 @@
 							{/if}
 						{/if}
 					</Card>
+          {/if}
 				</Card>
 			{/if}
 		</Layout>

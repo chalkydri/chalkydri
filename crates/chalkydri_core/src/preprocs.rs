@@ -11,7 +11,7 @@ use crate::error::Error;
 use crate::subsystems::Subsystem;
 
 /// A set of Gstreamer elements used to preprocess the stream for a [Subsystem]
-pub trait Preprocessor {
+pub trait SubsysPreprocessor {
     type Subsys: Subsystem;
     type Frame: Clone + Send + Sync + 'static;
 
@@ -33,7 +33,7 @@ impl<S: Subsystem> NoopPreproc<S> {
         Self(PhantomData)
     }
 }
-impl<S: Subsystem> Preprocessor for NoopPreproc<S> {
+impl<S: Subsystem> SubsysPreprocessor for NoopPreproc<S> {
     type Subsys = S;
     type Frame = ();
 
@@ -46,7 +46,7 @@ impl<S: Subsystem> Preprocessor for NoopPreproc<S> {
 
 /// Run frame processing loop
 #[deprecated]
-pub async fn frame_proc_loop<P: Preprocessor, F: AsyncFnMut(P::Frame) + Sync + Send + 'static>(
+pub async fn frame_proc_loop<P: SubsysPreprocessor, F: AsyncFnMut(P::Frame) + Sync + Send + 'static>(
     mut rx: watch::Receiver<Option<Arc<P::Frame>>>,
     mut func: F,
 ) {

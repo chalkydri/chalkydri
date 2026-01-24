@@ -6,6 +6,8 @@
 //! This code runs on the vision coprocessor(s) and does all the heavy lifting.
 //!
 
+#![feature(coroutines, coroutine_trait)]
+
 #![allow(unreachable_code)]
 #![deny(
     unused_must_use,
@@ -39,6 +41,9 @@ extern crate chalkydri_apriltags;
 
 #[cfg(feature = "ml")]
 extern crate tfledge;
+
+extern crate sophus_lie;
+extern crate sophus_autodiff;
 
 #[cfg(feature = "web")]
 mod api;

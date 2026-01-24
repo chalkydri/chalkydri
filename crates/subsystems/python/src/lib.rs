@@ -9,7 +9,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use chalkydri_core::preprocs::Preprocessor;
+use chalkydri_core::{preprocs::SubsysPreprocessor, subsystems::SubsysProcessor};
 use chalkydri_core::subsystems::Subsystem;
 use chalkydri_core::{
     gstreamer::{self, Caps, Element, ElementFactory, prelude::GstBinExtManual},
@@ -30,20 +30,19 @@ use pyo3::prelude::*;
 #[derive(Clone)]
 pub struct PythonSubsys {
     topics: Arc<RwLock<HashMap<String, GenericPublisher>>>,
-    modules: Arc<RwLock<Vec<Py<PyModule>>>>,
+    modules: Arc<RwLock<Vec<Box<Py<PyModule>>>>>,
 }
 impl Subsystem for PythonSubsys {
     const NAME: &'static str = "python";
 
-    type Error = PyErr;
     type Config = Vec<config::CustomSubsystem>;
     type Preproc = PythonPreproc;
-    type Output = ();
+    type Proc = Self;
 
     async fn init(
         nt: &nt_client::ClientHandle,
         cam_config: config::Camera,
-    ) -> Result<Self, Self::Error> {
+    ) -> Result<Self, <Self::Proc as SubsysProcessor>::Error> {
         let mut topics = Arc::new(RwLock::new(HashMap::new()));
         let mut modules = Arc::new(RwLock::new(Vec::new()));
 
@@ -69,19 +68,25 @@ impl Subsystem for PythonSubsys {
                 });
 
                 // Save It for Later :)
-                modules.write().await.push(module);
+                modules.write().await.push(Box::new(module));
             }
         }
 
-        Ok::<Self, Self::Error>(PythonSubsys { topics, modules })
+        Ok::<Self, <Self::Proc as SubsysProcessor>::Error>(PythonSubsys { topics, modules })
     }
+}
+impl SubsysProcessor for PythonSubsys {
+    type Subsys = Self;
+    type Output = ();
+    type Error = PyErr;
 
     #[instrument(skip_all, fields(cam_id = cam_config.id))]
     async fn process(
         &self,
-        nt: &chalkydri_core::nt_client::ClientHandle,
+        subsys: Self::Subsys,
+        nt: &nt_client::ClientHandle,
         cam_config: config::Camera,
-        frame: Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>,
+        frame: Arc<Vec<u8>>,
     ) -> Result<Self::Output, Self::Error> {
         trace!("a");
 
@@ -136,7 +141,7 @@ pub struct PythonPreproc {
     videoconvertscale: Arc<Element>,
     filter: Arc<Element>,
 }
-impl Preprocessor for PythonPreproc {
+impl SubsysPreprocessor for PythonPreproc {
     type Frame = Vec<u8>;
     type Subsys = PythonSubsys;
 
