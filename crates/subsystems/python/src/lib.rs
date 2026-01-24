@@ -8,13 +8,16 @@ use std::{
     task::{Context, Poll},
 };
 
-use chalkydri_core::{nt_client::{data::Properties, publish::Publisher}, preprocs::frame_proc_loop};
 use chalkydri_core::prelude::*;
 use chalkydri_core::preprocs::Preprocessor;
 use chalkydri_core::subsystems::Subsystem;
 use chalkydri_core::{
     gstreamer::{self, Caps, Element, ElementFactory, prelude::GstBinExtManual},
     tokio::sync::RwLock,
+};
+use chalkydri_core::{
+    nt_client::{data::Properties, publish::Publisher},
+    preprocs::frame_proc_loop,
 };
 use numpy::ndarray;
 //use tokio_util::task::TaskTracker;
@@ -49,31 +52,31 @@ impl Subsystem for PythonSubsys {
         let mut topics = Arc::new(RwLock::new(HashMap::<String, Publisher<f64>>::new()));
         let mut modules = Arc::new(RwLock::new(Vec::new()));
 
-            for subsys in cam_config.clone().subsystems.custom {
-                // Read custom subsystems from the configuration
-                let subsystems = Cfg.read().custom_subsystems.clone();
-                if let Some(subsys) = subsystems.get(&subsys) {
-                    // Add a null terminator to the end of all of these things
-                    let code = [subsys.code.as_bytes(), &[0u8]].concat();
-                    let file_name = [b"custom_code.py".as_slice(), &[0u8]].concat();
-                    let module_name = [b"custom_code".as_slice(), &[0u8]].concat();
+        for subsys in cam_config.clone().subsystems.custom {
+            // Read custom subsystems from the configuration
+            let subsystems = Cfg.read().custom_subsystems.clone();
+            if let Some(subsys) = subsystems.get(&subsys) {
+                // Add a null terminator to the end of all of these things
+                let code = [subsys.code.as_bytes(), &[0u8]].concat();
+                let file_name = [b"custom_code.py".as_slice(), &[0u8]].concat();
+                let module_name = [b"custom_code".as_slice(), &[0u8]].concat();
 
-                    // Convert them all to CStrs
-                    let code = CStr::from_bytes_with_nul(&code).unwrap();
-                    let file_name = CStr::from_bytes_with_nul(&file_name).unwrap();
-                    let module_name = CStr::from_bytes_with_nul(&module_name).unwrap();
+                // Convert them all to CStrs
+                let code = CStr::from_bytes_with_nul(&code).unwrap();
+                let file_name = CStr::from_bytes_with_nul(&file_name).unwrap();
+                let module_name = CStr::from_bytes_with_nul(&module_name).unwrap();
 
-                    // Load the code in
-                    let module = Python::attach(|py| -> Py<PyModule> {
-                        PyModule::from_code(py, code, file_name, module_name)
-                            .unwrap()
-                            .into()
-                    });
+                // Load the code in
+                let module = Python::attach(|py| -> Py<PyModule> {
+                    PyModule::from_code(py, code, file_name, module_name)
+                        .unwrap()
+                        .into()
+                });
 
-                    // Save It for Later :)
-                    modules.write().await.push(module);
-                }
+                // Save It for Later :)
+                modules.write().await.push(module);
             }
+        }
 
         let rx = rx.clone();
 

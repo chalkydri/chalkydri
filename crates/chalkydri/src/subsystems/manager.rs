@@ -8,17 +8,15 @@ use tokio::task::JoinSet;
 use tokio_util::task::TaskTracker;
 use tracing::Level;
 
+use crate::cameras::{mjpeg::MjpegProc, preproc::Preprocessor};
+use crate::{Nt, cameras::CamManager, config};
+#[cfg(feature = "capriltags")]
+use crate::{cameras::preproc::PreprocWrap, subsystems::capriltags::CapriltagsPreproc};
 use chalkydri_core::prelude::*;
 #[cfg(feature = "capriltags")]
 use chalkydri_subsys_capriltags::{self as capriltags, CApriltagsDetector};
 #[cfg(feature = "python")]
-use chalkydri_subsys_python::{PythonSubsys, PythonPreproc};
-use crate::{Nt, cameras::CamManager, config};
-#[cfg(feature = "capriltags")]
-use crate::{cameras::preproc::PreprocWrap, subsystems::capriltags::CapriltagsPreproc};
-use crate::{
-    cameras::{mjpeg::MjpegProc, preproc::Preprocessor},
-};
+use chalkydri_subsys_python::{PythonPreproc, PythonSubsys};
 
 /// The subsystem manager
 ///

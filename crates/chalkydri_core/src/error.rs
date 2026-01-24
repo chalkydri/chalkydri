@@ -21,6 +21,5 @@ pub enum Error {
 
     #[snafu(display("Invalid AprilTag: {id}"))]
     InvalidTag { id: String },
-
     //#[snafu(display(""))]
 }

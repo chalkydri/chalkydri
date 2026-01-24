@@ -15,5 +15,3 @@ mod manager;
 pub use chalkydri_subsys_python as python;
 
 pub use manager::SubsysManager;
-
-

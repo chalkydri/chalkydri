@@ -84,8 +84,6 @@ static Rerun: Lazy<RecordingStream> = Lazy::new(|| {
         .into()
 });
 
-
-
 #[tokio::main(worker_threads = 16)]
 async fn main() -> Result<(), Box<dyn Error>> {
     println!(

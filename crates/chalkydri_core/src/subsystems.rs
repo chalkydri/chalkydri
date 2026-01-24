@@ -43,8 +43,7 @@ pub trait Subsystem: Sized {
     /// Do anything that may be required to shut down the subsystem
     ///
     /// The implementor's [Drop] implementation will be called as well.
-    fn stop(&mut self) {
-    }
+    fn stop(&mut self) {}
 }
 
 /// A subsystem that does nothing

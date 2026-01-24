@@ -1,17 +1,16 @@
 use super::Error;
 
-use parking_lot::{const_rwlock, RwLock};
-use serde::{Serialize, Deserialize};
+use parking_lot::{RwLock, const_rwlock};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs::File,
     io::{Read, Write},
-    path::Path, sync::LazyLock,
+    path::Path,
+    sync::LazyLock,
 };
 
-pub static Cfg: LazyLock<RwLock<Config>> = LazyLock::new(|| {
-    const_rwlock(Config::default())
-});
+pub static Cfg: LazyLock<RwLock<Config>> = LazyLock::new(|| const_rwlock(Config::default()));
 
 macro_rules! def_cfg {
     ($(
@@ -135,7 +134,6 @@ impl Default for Config {
 
             field_layout: None,
             //field_layouts: None,
-
             custom_subsystems: HashMap::new(),
         }
     }
