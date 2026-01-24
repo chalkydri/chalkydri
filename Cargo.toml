@@ -5,7 +5,7 @@ members = [
 	"crates/chalkydri",
   #"crates/chalkydri-apriltags", 
 	"crates/chalkydri-slam",
-  "crates/chalkydri-tfledge",
+  "crates/chalkydri-tfledge", "crates/chalkydri_core",
   "crates/chalkydrilib",
   "crates/chalkydrilibj",
   "crates/minint",

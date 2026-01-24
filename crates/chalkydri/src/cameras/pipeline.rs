@@ -110,6 +110,11 @@ impl CamPipeline {
 
         let subsys = SubsysManager::new(&pipeline).await.unwrap();
 
+        let subsys_ = subsys.clone();
+        tokio::spawn(async move {
+            subsys_.run().await;
+        });
+
         Self {
             dev,
             cam_config,

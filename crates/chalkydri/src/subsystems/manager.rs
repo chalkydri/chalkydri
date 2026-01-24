@@ -48,10 +48,10 @@ impl SubsysManager {
 
         let pose_est = PoseEstimator::new().await?;
 
-        #[cfg(feature = "capriltags")]
-        let capriltags = CApriltagsDetector::init().await.unwrap();
-        #[cfg(feature = "capriltags")]
-        let capriltags_preproc = Arc::new(PreprocWrap::new(pipeline));
+        //#[cfg(feature = "capriltags")]
+        //let capriltags = CApriltagsDetector::init().await.unwrap();
+        //#[cfg(feature = "capriltags")]
+        //let capriltags_preproc = Arc::new(PreprocWrap::new(pipeline));
 
         #[cfg(feature = "python")]
         let python = PythonSubsys::init().await.unwrap();
@@ -132,5 +132,9 @@ impl SubsysManager {
         //self.capriltags_preproc.unlink(src.clone());
         #[cfg(feature = "python")]
         self.python_preproc.unlink(src.clone());
+    }
+
+    pub async fn run(&self) {
+        self.tt.wait().await;
     }
 }
