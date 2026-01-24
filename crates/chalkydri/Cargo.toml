@@ -35,7 +35,7 @@ actix-web = { version = "4.5.1", optional = true }
 #minint = { version = "*", path = "../minint" }
 utoipa = { version = "5.2.0", optional = true, features = ["actix_extras"] }
 serde_json.workspace = true
-re_web_viewer_server = { version = "0.25.1", optional = true }
+re_web_viewer_server = { version = "0.28.2", optional = true }
 re_ws_comms = { version = "0.22.0", optional = true }
 mimalloc = { version = "0.1.43", features = ["override"] }
 camera-intrinsic-calibration = { git = "https://github.com/chalkydri/camera-intrinsic-calibration-rs.git", branch = "main" }
