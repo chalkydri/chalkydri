@@ -96,6 +96,7 @@ pub async fn run_api(cam_man: CamManager) {
         App::new()
             .app_data(Data::new(api_data))
             .service(index)
+            .service(stream)
             .service(info)
             .service(configuration)
             .service(configure)
@@ -107,7 +108,6 @@ pub async fn run_api(cam_man: CamManager) {
             .service(sys_reboot)
             .service(sys_shutdown)
             .service(openapi_json)
-            .service(stream)
             .service(dist)
     })
     .bind(("0.0.0.0", 6942))
@@ -385,13 +385,13 @@ pub(super) async fn sys_info() -> impl Responder {
 
 /// Get an MJPEG camera stream for the given camera
 #[get("/stream/{cam_name}")]
-pub(super) async fn stream(path: web::Path<String>, data: web::Data<CamManager>) -> impl Responder {
+pub(super) async fn stream(path: web::Path<String>, data: web::Data<ApiData>) -> impl Responder {
     let cam_name = path.clone();
 
     println!("{cam_name}");
 
     error!("getting mjpeg stream");
-    let mjpeg_stream = data.pipelines.read().await.get(&cam_name).unwrap().mjpeg_preproc.inner().clone();
+    let mjpeg_stream = data.cam_man.pipelines.read().await.get(&cam_name).unwrap().mjpeg_preproc.inner().clone();
         drop(data);
         error!("dropped data");
 

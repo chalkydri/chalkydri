@@ -11,6 +11,9 @@ use crate::{config, error::Error, subsystems::{SubsysManager, Subsystem}, Cfg};
 
 use super::mjpeg::MjpegProc;
 
+/// A camera pipeline
+///
+/// Each camera gets its own GStreamer pipeline.
 pub struct CamPipeline {
     dev: Device,
     pipeline: Pipeline,
@@ -26,6 +29,7 @@ pub struct CamPipeline {
     pub mjpeg_preproc: PreprocWrap<MjpegProc>,
 }
 impl CamPipeline {
+    /// Create a new camera pipeline from a [Device] and camera config
     pub async fn new(dev: Device, cam_config: config::Camera) -> Self {
         let pipeline = Pipeline::new();
 
@@ -112,24 +116,32 @@ impl CamPipeline {
             subsys,
         }
     }
+
+    /// Link subsystem preprocessors
     pub(crate) fn link_preprocs(&self, cam_config: config::Camera) {
         //if cam_config.subsystems.mjpeg.is_some() {
             self.mjpeg_preproc.link(self.tee.clone());
         //}
     }
+
+    /// Unlink subsystem preprocessors
     pub(crate) fn unlink_preprocs(&self, cam_config: config::Camera) {
         //if cam_config.subsystems.mjpeg.is_some() {
             self.mjpeg_preproc.unlink(self.tee.clone());
         //}
     }
 
+    /// Start the pipeline
     pub fn start(&self) {
         self.pipeline.set_state(State::Playing).unwrap();
     }
+
+    /// Pause the pipeline
     pub fn pause(&self) {
         self.pipeline.set_state(State::Paused).unwrap();
     }
 
+    /// Update the pipeline
     pub async fn update(&self, cam_config: config::Camera) {
         self.pause();
 
@@ -237,11 +249,11 @@ pub struct PreprocWrap<P: Preprocessor> {
     rx: watch::Receiver<Option<Arc<P::Frame>>>,
 }
 impl<P: Preprocessor> PreprocWrap<P> {
+    /// Create a new wrapped preprocessor
     pub fn new(pipeline: &Pipeline) -> Self {
         let inner = <P as Preprocessor>::new(pipeline);
 
         let appsink = ElementFactory::make("appsink")
-            .name("mjpeg_appsink")
             .build()
             .unwrap();
 
@@ -253,14 +265,20 @@ impl<P: Preprocessor> PreprocWrap<P> {
 
         Self { inner, appsink, tx, rx }
     }
+
+    /// Link the preprocessor
     pub fn link(&self, src: Element) {
         let appsink = self.appsink.clone();
         self.inner.link(src, appsink);
     }
+
+    /// Unlink the preprocessor
     pub fn unlink(&self, src: Element) {
         let appsink = self.appsink.clone();
         self.inner.unlink(src, appsink);
     }
+
+    /// Set up the sampler
     pub fn setup_sampler(
         &self,
         tx: Option<watch::Sender<Option<Arc<P::Frame>>>>,
@@ -286,9 +304,13 @@ impl<P: Preprocessor> PreprocWrap<P> {
 
         Ok(None)
     }
+
+    /// Get the inner preprocessor
     pub fn inner(&self) -> &P {
         &self.inner
     }
+
+    /// Get the preprocessed frame buffer
     pub fn rx(&self) -> watch::Receiver<Option<Arc<P::Frame>>> {
         self.rx.clone()
     }

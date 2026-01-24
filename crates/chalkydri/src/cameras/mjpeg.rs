@@ -15,7 +15,7 @@ use super::pipeline::Preprocessor;
 
 // /// Wrapper over frame buffer receiver
 
-/// Preprocessor for 
+/// Preprocessor for driver station MJPEG stream
 #[derive(Clone)]
 pub struct MjpegProc {
     videorate: Arc<Element>,
@@ -67,6 +67,7 @@ impl Preprocessor for MjpegProc {
             rx,
         }
     }
+
     fn link(&self, src: Element, sink: Element) {
         Element::link_many([
             &src,
@@ -77,6 +78,7 @@ impl Preprocessor for MjpegProc {
         ])
         .unwrap();
     }
+
     fn unlink(&self, src: Element, sink: Element) {
         Element::unlink_many([
             &src,
@@ -86,6 +88,7 @@ impl Preprocessor for MjpegProc {
             &sink,
         ]);
     }
+
     #[tracing::instrument]
     fn sampler(
         appsink: &AppSink,

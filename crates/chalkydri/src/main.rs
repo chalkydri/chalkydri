@@ -62,7 +62,7 @@ use std::{error::Error, net::Ipv4Addr, path::Path, sync::Arc};
 use tokio::sync::{RwLock, mpsc};
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
-// mimalloc is a very good general purpose allocator
+// mimalloc is an excellent general purpose allocator
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
