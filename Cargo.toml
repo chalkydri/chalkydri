@@ -2,19 +2,39 @@
 resolver = "3"
 members = [
   "build",
+  "crates/chalkydri_core",
 	"crates/chalkydri",
   #"crates/chalkydri-apriltags", 
-	"crates/chalkydri-slam",
-  "crates/chalkydri-tfledge", "crates/chalkydri_core",
-  "crates/chalkydrilib",
-  "crates/chalkydrilibj",
-  "crates/minint",
+	#"crates/chalkydri-slam",
+  #"crates/chalkydri-tfledge",
+  #"crates/chalkydrilib",
+  #"crates/chalkydrilibj",
+  #"crates/minint",
+  "crates/subsystems/capriltags",
+  "crates/subsystems/python",
 ]
-default-members = ["crates/chalkydri"]
+default-members = [
+  "crates/chalkydri_core",
+  "crates/chalkydri",
+]
+
+[workspace.package]
+license = "AGPL-3.0"
+version = "0.1.0"
+edition = "2024"
 
 [workspace.dependencies]
-tracing = { version = "0.1.41", features = ["log"] }
+tracing = { version = "0.1.41", features = ["log", "async-await"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "tracing-log"] }
+nt_client = { git = "https://github.com/DatAsianBoi123/nt_client.git", version = "0.4.0", features = ["struct"] }
+once_cell = "1.20.2"
+
+gstreamer = { version = "0.23.4", features = ["v1_22"] }
+gstreamer-app = { version = "0.23.4", features = ["v1_22"] }
+
+chalkydri_core = { version = "0.1.0", path = "crates/chalkydri_core" }
+chalkydri_subsys_capriltags = { version = "0.1.0", path = "crates/subsystems/capriltags" }
+chalkydri_subsys_python = { version = "0.1.0", path = "crates/subsystems/python" }
 
 # Compile dependencies with optimization level 3 even when in debug mode
 # This can reduce the time required to build when actively developing and testing.

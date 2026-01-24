@@ -1,23 +1,23 @@
 use std::sync::{Arc, Mutex};
 use std::thread::Thread;
 
+#[cfg(feature = "python")]
+use chalkydri_core::preprocs::PreprocWrap;
 use gstreamer::{Element, Pipeline};
 use tokio::task::JoinSet;
 use tokio_util::task::TaskTracker;
 use tracing::Level;
 
+use chalkydri_core::prelude::*;
 #[cfg(feature = "capriltags")]
-use super::capriltags::{self, CApriltagsDetector};
+use chalkydri_subsys_capriltags::{self as capriltags, CApriltagsDetector};
 #[cfg(feature = "python")]
-use super::python::PythonSubsys;
-#[cfg(feature = "python")]
-use crate::subsystems::python::PythonPreproc;
-use crate::{Nt, cameras::CamManager, config, error::Error, pose::PoseEstimator};
+use chalkydri_subsys_python::{PythonSubsys, PythonPreproc};
+use crate::{Nt, cameras::CamManager, config};
 #[cfg(feature = "capriltags")]
 use crate::{cameras::preproc::PreprocWrap, subsystems::capriltags::CapriltagsPreproc};
 use crate::{
     cameras::{mjpeg::MjpegProc, preproc::Preprocessor},
-    subsystems::Subsystem,
 };
 
 /// The subsystem manager
@@ -25,8 +25,6 @@ use crate::{
 ///
 #[derive(Clone)]
 pub struct SubsysManager {
-    pub pose_est: PoseEstimator,
-
     set: Arc<Mutex<Vec<Thread>>>,
     tt: TaskTracker,
 
@@ -46,8 +44,6 @@ impl SubsysManager {
         let span = span!(Level::INFO, "subsys_manager");
         let _enter = span.enter();
 
-        let pose_est = PoseEstimator::new().await?;
-
         //#[cfg(feature = "capriltags")]
         //let capriltags = CApriltagsDetector::init().await.unwrap();
         //#[cfg(feature = "capriltags")]
@@ -59,8 +55,6 @@ impl SubsysManager {
         let python_preproc = Arc::new(PreprocWrap::new(pipeline));
 
         Ok(Self {
-            pose_est,
-
             set: Arc::new(Mutex::new(Vec::new())),
             tt: TaskTracker::new(),
 

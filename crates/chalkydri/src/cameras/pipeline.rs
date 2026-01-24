@@ -7,13 +7,8 @@ use gstreamer::{
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use tokio::sync::watch;
 
-use crate::{
-    Cfg,
-    cameras::preproc::PreprocWrap,
-    config,
-    error::Error,
-    subsystems::{SubsysManager, Subsystem},
-};
+use chalkydri_core::{prelude::*, preprocs::PreprocWrap};
+use crate::subsystems::SubsysManager;
 
 use super::mjpeg::MjpegProc;
 

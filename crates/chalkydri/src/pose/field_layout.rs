@@ -4,7 +4,7 @@ use nalgebra as na;
 use sophus_autodiff::linalg::VecF64;
 use sophus_lie::{Isometry3F64, Rotation3F64};
 
-use crate::error::Error;
+use chalkydri_core::prelude::*;
 
 use super::PoseEstimator;
 

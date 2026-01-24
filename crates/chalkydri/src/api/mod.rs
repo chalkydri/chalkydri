@@ -172,7 +172,7 @@ pub(super) async fn configuration(data: web::Data<ApiData>) -> impl Responder {
     cam_man.refresh_devices().await;
 
     trace!("loading config");
-    let cfgg = Cfg.read().await.clone();
+    let cfgg = Cfg.read().clone();
 
     //for cam in cam_man.devices() {
     //    if let Some(cameras) = &mut cfgg.cameras {
@@ -203,17 +203,17 @@ pub(super) async fn configure(
 ) -> impl Responder {
     let cam_man = &data.cam_man;
 
-    *Cfg.write().await = cfgg;
+    *Cfg.write() = cfgg;
     cam_man.refresh_devices().await;
 
-    let cfgg = Cfg.read().await.clone();
+    let cfgg = Cfg.read().clone();
     if let Some(cams) = cfgg.cameras {
         for cam in cams {
             cam_man.update_pipeline(cam.id.clone()).await;
         }
     }
 
-    web::Json(Cfg.read().await.clone())
+    web::Json(Cfg.read().clone())
 }
 
 /// Write the configuration to disk
@@ -224,7 +224,7 @@ pub(super) async fn configure(
 )]
 #[put("/api/configuration")]
 pub(super) async fn save_configuration(web::Json(cfgg): web::Json<Config>) -> impl Responder {
-    let old_config = Cfg.read().await.clone();
+    let old_config = Cfg.read().clone();
 
     if cfgg.device_name != old_config.device_name {
         rustix::system::sethostname(cfgg.device_name.clone().unwrap().as_bytes()).unwrap();

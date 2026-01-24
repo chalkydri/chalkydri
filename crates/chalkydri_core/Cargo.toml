@@ -1,0 +1,32 @@
+[package]
+name = "chalkydri_core"
+license.workspace = true
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[features]
+default = ["config", "subsystems", "preprocs"]
+
+config = ["__toml", "__json"]
+ntables = ["dep:nt_client"]
+subsystems = ["ntables"]
+preprocs = ["dep:gstreamer", "dep:gstreamer-app"]
+
+__serde = ["dep:serde"]
+__toml = ["__serde", "dep:toml"]
+__json = ["__serde", "dep:serde_json"]
+__openapi = ["dep:utoipa"]
+
+[dependencies]
+tokio = "1"
+nt_client = { workspace = true, optional = true }
+toml = { version = "0.8.12", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+utoipa = { version = "5.2.0", optional = true }
+gstreamer = { workspace = true, optional = true }
+gstreamer-app = { workspace = true, optional = true }
+snafu = "0.8.9"
+tracing.workspace = true
+parking_lot = { version = "0.12.4", features = ["arc_lock", "nightly", "owning_ref", "send_guard"] }

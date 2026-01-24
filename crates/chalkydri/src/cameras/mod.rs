@@ -31,12 +31,7 @@ use tracing::Level;
 
 #[cfg(feature = "rerun")]
 use crate::Rerun;
-use crate::{
-    Cfg,
-    config::{self, CameraSettings, CfgFraction},
-    error::Error,
-    subsystems::Subsystem,
-};
+use chalkydri_core::prelude::*;
 
 #[derive(Clone)]
 pub struct CameraCtx {
@@ -105,7 +100,7 @@ impl CamManager {
                     let id = V4l2Provider::get_id(&dev);
                     debug!(cam_id = id, "camera connected");
 
-                    if let Some(cameras) = Cfg.read().await.cameras.clone() {
+                    if let Some(cameras) = Cfg.read().cameras.clone() {
                         for cam in cameras {
                             if id == cam.id {
                                 let pipeline = CamPipeline::new(dev.clone(), cam.clone()).await;
@@ -138,7 +133,7 @@ impl CamManager {
                                     let height = cap.get::<i32>("height").ok().map(|v| v as u32);
                                     let frame_rate =
                                         cap.get::<Fraction>("framerate").ok().map(|v| {
-                                            CfgFraction {
+                                            config::CfgFraction {
                                                 num: v.numer() as u32,
                                                 den: v.denom() as u32,
                                             }
@@ -147,7 +142,7 @@ impl CamManager {
                                         //panic!("Either width or height doesn't exist. Need to look into that...");
                                         None
                                     } else {
-                                        Some(CameraSettings {
+                                        Some(config::CameraSettings {
                                             width: width.unwrap(),
                                             height: height.unwrap(),
                                             frame_rate,
@@ -178,7 +173,7 @@ impl CamManager {
 
     pub async fn refresh_devices(&self) {
         trace!("locking refresh devices");
-        let mut cfgg = Cfg.write().await;
+        let mut cfgg = Cfg.write();
 
         let mut cameras = cfgg.cameras.clone();
 
@@ -193,7 +188,7 @@ impl CamManager {
     }
 
     pub async fn update_pipeline(&self, cam_id: String) {
-        let cfgg = Cfg.read().await.clone();
+        let cfgg = Cfg.read().clone();
         let cam_config = cfgg
             .cameras
             .unwrap()

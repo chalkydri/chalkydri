@@ -7,7 +7,7 @@ use sophus_autodiff::{linalg::VecF64, prelude::*};
 use sophus_lie::{HasAverage, Isometry3F64, Quaternion, QuaternionF64, Rotation3F64, prelude::*};
 use tokio::sync::{Mutex, RwLock, mpsc};
 
-use crate::{Cfg, Nt, error::Error};
+use chalkydri_core::prelude::*;
 
 pub(crate) mod field_layout;
 
@@ -40,8 +40,12 @@ impl PoseEstimator {
 
     /// (Re)load the field layout
     pub async fn load_layout(&self) -> Result<(), Error> {
-        if let Some(layouts) = &Cfg.read().await.field_layouts {
-            if let Some(layout_name) = &Cfg.read().await.field_layout {
+        let Config {
+            field_layout,
+            ..
+        } = &*Cfg.read();
+        if let Some(layouts) = (*Cfg.read()).clone().field_layouts.clone() {
+            if let Some(layout_name) = &(*Cfg.read()).field_layout {
                 if let Some(layout) = layouts.get(layout_name) {
                     *self.layout.write().await = Some(layout.clone());
 

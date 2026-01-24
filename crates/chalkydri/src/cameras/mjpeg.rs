@@ -9,7 +9,7 @@ use gstreamer::{
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use tokio::sync::watch;
 
-use crate::{cameras::preproc::Preprocessor, error::Error, subsystems::NoopSubsys};
+use chalkydri_core::{prelude::*, subsystems::NoopSubsys};
 
 // /// Wrapper over frame buffer receiver
 
@@ -26,7 +26,7 @@ impl Preprocessor for MjpegProc {
     type Subsys = NoopSubsys<Self>;
     type Frame = Vec<u8>;
 
-    fn new(pipeline: &Pipeline) -> Self {
+    fn init(pipeline: &Pipeline) -> Self {
         let videorate = ElementFactory::make("videorate")
             .property("max-rate", 20)
             .property("drop-only", true)

@@ -1,6 +1,10 @@
+# Make it compile under Alpine
 [target.x86_64-unknown-linux-musl]
 linker = "clang"
 rustflags = ["-C", "target-feature=-crt-static", "-C", "target-cpu=native", "--cfg", "tokio_unstable"]
 
 [env]
-PYO3_PYTHON = "/usr/bin/python3"
+# Keep PyO3 from constantly rebuilding itself.
+# They claim it's a rustup bug, but not so sure about that.
+# <https://github.com/PyO3/pyo3/issues/1708>
+#PYO3_PYTHON = "./.venv/bin/python3"

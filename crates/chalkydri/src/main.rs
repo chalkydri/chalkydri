@@ -6,7 +6,6 @@
 //! This code runs on the vision coprocessor(s) and does all the heavy lifting.
 //!
 
-#![feature(duration_millis_float)]
 #![allow(unreachable_code)]
 #![deny(
     unused_must_use,
@@ -38,28 +37,21 @@ extern crate apriltag;
 #[cfg(feature = "apriltags")]
 extern crate chalkydri_apriltags;
 
-#[cfg(feature = "python")]
-extern crate pyo3;
-
 #[cfg(feature = "ml")]
 extern crate tfledge;
 
 #[cfg(feature = "web")]
 mod api;
 mod cameras;
-mod config;
-mod error;
-mod pose;
+//mod pose;
 mod subsystems;
 mod utils;
 
 #[cfg(feature = "web")]
 use api::run_api;
 use cameras::CamManager;
-use config::Config;
+use chalkydri_core::prelude::*;
 use mimalloc::MiMalloc;
-use nt_client::{NTAddr, NewClientOptions};
-use once_cell::sync::Lazy;
 #[cfg(feature = "rerun")]
 use re_sdk::{MemoryLimit, RecordingStream};
 #[cfg(feature = "rerun_web_viewer")]
@@ -75,22 +67,6 @@ use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::Subscribe
 static GLOBAL: MiMalloc = MiMalloc;
 
 use utils::gen_team_ip;
-
-/// Chalkydri's loaded, active configuration
-#[allow(non_upper_case_globals)]
-static Cfg: Lazy<Arc<RwLock<Config>>> = Lazy::new(|| {
-    // Try a few different paths for the config file, exiting early if we find one that exists
-    let mut path = Path::new("/boot/chalkydri.toml");
-    if !path.exists() {
-        path = Path::new("/etc/chalkydri.toml");
-        if !path.exists() {
-            path = Path::new("./chalkydri.toml");
-        }
-    }
-
-    // If all else fails, we'll just use a default configuration
-    Arc::new(RwLock::new(Config::load(path).unwrap_or_default()))
-});
 
 #[cfg(feature = "rerun")]
 #[allow(non_upper_case_globals)]
@@ -108,40 +84,7 @@ static Rerun: Lazy<RecordingStream> = Lazy::new(|| {
         .into()
 });
 
-#[allow(non_upper_case_globals)]
-static Nt: Lazy<nt_client::Client> = Lazy::new(|| {
-    futures_executor::block_on(async {
-        // Come up with an IP address for the roboRIO based on the team number or specified IP
-        let Config {
-            ntables_ip,
-            team_number,
-            ..
-        } = &*Cfg.read().await;
 
-        // Get the device's name or generate one if not set
-        let dev_name = if let Some(dev_name) = (*Cfg.read().await).device_name.clone() {
-            dev_name
-        } else {
-            warn!("device name not set! generating one...");
-
-            // Generate & save it
-            let dev_name = String::from("chalkydri");
-            (*Cfg.write().await).device_name = Some(dev_name.clone());
-
-            dev_name
-        };
-
-        let nt = nt_client::Client::new(NewClientOptions {
-            addr: NTAddr::TeamNumber(*team_number),
-            name: dev_name,
-            ..Default::default()
-        });
-
-        //info!("Connected to NT server at {roborio_ip:?} successfully!");
-
-        nt
-    })
-});
 
 #[tokio::main(worker_threads = 16)]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -170,6 +113,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     console_subscriber::init();
 
     info!("starting up...");
+
+    // Try a few different paths for the config file, exiting early if we find one that exists
+    let mut path = Path::new("/boot/chalkydri.toml");
+    if !path.exists() {
+        path = Path::new("/etc/chalkydri.toml");
+        if !path.exists() {
+            path = Path::new("./chalkydri.toml");
+        }
+    }
+    trace!("loading config from '{path:?}'");
+
+    // If all else fails, we'll just use a default configuration
+    (*Cfg.write()) = Config::load(path).unwrap_or_default();
 
     // Disable BS kernel modules
     let _ = rustix::system::delete_module(c"rpivid_hevc", 0);

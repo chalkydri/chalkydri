@@ -1,10 +1,17 @@
-use crate::{error::Error, pose::field_layout::AprilTagFieldLayout};
+use super::Error;
+
+use parking_lot::{const_rwlock, RwLock};
+use serde::{Serialize, Deserialize};
 use std::{
     collections::HashMap,
     fs::File,
     io::{Read, Write},
-    path::Path,
+    path::Path, sync::LazyLock,
 };
+
+pub static Cfg: LazyLock<RwLock<Config>> = LazyLock::new(|| {
+    const_rwlock(Config::default())
+});
 
 macro_rules! def_cfg {
     ($(
@@ -17,7 +24,7 @@ macro_rules! def_cfg {
     )*) => {
        $(
            #[derive(Deserialize, Serialize, Debug, Clone)]
-           #[cfg_attr(feature = "web", derive(utopia::ToSchema))]
+           #[cfg_attr(feature = "__openapi", derive(utoipa::ToSchema))]
            pub struct $struct_ident {
                $(
                 $(#[$attr $( ($tt) )?])?
@@ -37,7 +44,7 @@ def_cfg! {
         device_name: Option<String>,
 
         field_layout: Option<String>,
-        field_layouts: Option<HashMap<String, AprilTagFieldLayout>>,
+        //field_layouts: Option<HashMap<String, AprilTagFieldLayout>>,
 
         custom_subsystems: HashMap<String, CustomSubsystem>,
     }
@@ -127,7 +134,7 @@ impl Default for Config {
             device_name: None,
 
             field_layout: None,
-            field_layouts: None,
+            //field_layouts: None,
 
             custom_subsystems: HashMap::new(),
         }
@@ -182,7 +189,7 @@ impl Default for CameraSettings {
 }
 
 #[derive(Deserialize, Serialize, Clone)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
+#[cfg_attr(feature = "__openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum CameraKind {
     PiCam,
@@ -190,7 +197,7 @@ pub enum CameraKind {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
+#[cfg_attr(feature = "__openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum VideoOrientation {
     None = 0,
