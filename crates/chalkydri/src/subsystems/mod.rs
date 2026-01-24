@@ -3,7 +3,7 @@ use std::{fmt::Debug, marker::PhantomData, sync::Arc};
 use nt_client::ClientHandle as NTClientHandle;
 use tokio::sync::watch;
 
-use crate::{cameras::pipeline::Preprocessor, config};
+use crate::{cameras::preproc::Preprocessor, config};
 
 pub mod calibration;
 #[cfg(feature = "apriltags")]
@@ -81,12 +81,13 @@ pub async fn frame_proc_loop<P: Preprocessor, F: AsyncFnMut(P::Frame) + Sync + S
     mut rx: watch::Receiver<Option<Arc<P::Frame>>>,
     mut func: F,
 ) {
+    let handle = tokio::runtime::Handle::current();
     loop {
         'inner: loop {
             match rx.changed().await {
                 Ok(()) => match rx.borrow_and_update().clone() {
                     Some(frame) => {
-                        futures_executor::block_on(async { func(Arc::into_inner(frame).unwrap()).await });
+                        func(Arc::into_inner(frame).unwrap()).await;
                     }
                     None => {
                         warn!("waiting on first frame...");

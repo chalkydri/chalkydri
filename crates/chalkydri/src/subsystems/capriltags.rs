@@ -30,7 +30,7 @@ use sophus_lie::{Isometry3F64, Rotation3F64};
 use std::time::Instant;
 use tokio::sync::{Mutex, watch};
 
-use crate::cameras::pipeline::Preprocessor;
+use crate::cameras::preproc::Preprocessor;
 use crate::error::Error;
 use crate::pose::PoseEstimator;
 use crate::{Cfg, Nt};
@@ -149,23 +149,17 @@ impl Subsystem for CApriltagsDetector {
                     }
 
                     if !dets.is_empty() {
-                        futures_executor::block_on(async {
-                            tag_detected.set(true).await;
+                        tag_detected.set(true).await.unwrap();
 
-                            delay.set(proc_st_time.elapsed().as_millis_f64()).await;
-                        });
+                        delay.set(proc_st_time.elapsed().as_millis_f64()).await.unwrap();
                     } else {
-                        futures_executor::block_on(async {
-                            tag_detected.set(false).await;
-                        });
+                        tag_detected.set(false).await.unwrap();
 
                         debug!("no tag detected");
                     }
                 }
                 Err(err) => {
-                    futures_executor::block_on(async {
-                        tag_detected.set(false).await;
-                    });
+                    tag_detected.set(false).await.unwrap();
                     error!("failed to convert image to C apriltags type: {err:?}");
                 }
             }
@@ -214,10 +208,10 @@ impl Preprocessor for CapriltagsPreproc {
     }
 
     fn link(&self, src: Element, sink: Element) {
-        Element::link_many([&src, &self.videoconvertscale, &self.filter, &sink]);
+        let _ = Element::link_many([&src, &self.videoconvertscale, &self.filter, &sink]);
     }
     fn unlink(&self, src: Element, sink: Element) {
-        Element::unlink_many([&src, &self.videoconvertscale, &self.filter, &sink]);
+        let _ = Element::unlink_many([&src, &self.videoconvertscale, &self.filter, &sink]);
     }
 
     fn sampler(

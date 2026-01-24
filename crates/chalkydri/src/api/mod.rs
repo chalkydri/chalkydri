@@ -168,8 +168,10 @@ pub(super) async fn info(data: web::Data<ApiData>) -> impl Responder {
 pub(super) async fn configuration(data: web::Data<ApiData>) -> impl Responder {
     let cam_man = &data.cam_man;
 
+    trace!("refreshing devices");
     cam_man.refresh_devices().await;
 
+    trace!("loading config");
     let cfgg = Cfg.read().await.clone();
 
     //for cam in cam_man.devices() {

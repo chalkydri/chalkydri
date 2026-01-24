@@ -24,6 +24,7 @@
 	import { onMount } from 'svelte';
 	import { derived, type Writable, writable } from 'svelte/store';
 	import Calibration from '../../+components/Calibration.svelte';
+	import ChalkydriInput from '../../+components/ChalkydriInput.svelte';
 
 	let {
 		disabled = $bindable(false),
@@ -107,29 +108,28 @@
 
 		<Layout gap={3}>
 			{#if camera.possible_settings}
-				<div>
-					<Label for="res_fps" class="mt-2 mb-1">Resolution / Frame Rate</Label>
-					<Select
-						id="res_fps"
-						items={camera.possible_settings.map((val) => {
-							if (!val.frame_rate) {
-								return {
-									name: `${val.width}x${val.height} @?fps (${val.format})`,
-									value: JSON.stringify(val)
-								};
-							} else {
-								return {
-									name: `${val.width}x${val.height} @${val.frame_rate.num / val.frame_rate.den}fps (${val.format})`,
-									value: JSON.stringify(val)
-								};
-							}
-						})}
-						value={JSON.stringify(camera.settings)}
-						on:input={(e) => {
-							camera.settings = JSON.parse(e.target.value);
-						}}
-					/>
-				</div>
+				<ChalkydriInput id="res_fps" label="Resolution / Frame Rate">
+				  <Select
+				  	id="res_fps"
+				  	items={camera.possible_settings.map((val) => {
+				  		if (!val.frame_rate) {
+				  			return {
+				  				name: `${val.width}x${val.height} @?fps (${val.format})`,
+				  				value: JSON.stringify(val)
+				  			};
+				  		} else {
+				  			return {
+				  				name: `${val.width}x${val.height} @${val.frame_rate.num / val.frame_rate.den}fps (${val.format})`,
+				  				value: JSON.stringify(val)
+				  			};
+				  		}
+				  	})}
+				  	value={JSON.stringify(camera.settings)}
+				  	on:input={(e) => {
+				  		camera.settings = JSON.parse(e.target.value);
+				  	}}
+				  />
+        </ChalkydriInput>
 			{/if}
 
 			<div>
@@ -137,23 +137,23 @@
 				<Toggle bind:checked={camera.auto_exposure} />
 
 				{#if !camera.auto_exposure}
-					<Label class="mt-4 mb-2" for="manual_exposure">Exposure time</Label>
-					<div class="flex flex-row gap-4 items-center">
-						<Range
-							id="manual_exposure"
-							title="Exposure time"
-							min="1"
-							max="1000"
-							step="1"
-							bind:value={camera.manual_exposure}
-						/>
-						<Input type="number" bind:value={camera.manual_exposure} />
-					</div>
+					<ChalkydriInput id="manual_exposure" label="Exposure time">
+					  <div class="flex flex-row gap-4 items-center">
+					  	<Range
+					  		id="manual_exposure"
+					  		title="Exposure time"
+					  		min="1"
+					  		max="1000"
+					  		step="1"
+					  		bind:value={camera.manual_exposure}
+					  	/>
+					  	<Input type="number" bind:value={camera.manual_exposure} />
+					  </div>
+          </ChalkydriInput>
 				{/if}
 			</div>
 
-			<div>
-				<Label for="orientation" class="mt-2 mb-1">Orientation</Label>
+			<ChalkydriInput id="orientation" label="Orientation">
 				<Select
 					id="orientation"
 					items={[
@@ -164,7 +164,7 @@
 					]}
 					bind:value={camera.orientation}
 				/>
-			</div>
+			</ChalkydriInput>
 
 			<div>
 				<Button

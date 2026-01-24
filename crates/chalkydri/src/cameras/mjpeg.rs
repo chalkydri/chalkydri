@@ -9,9 +9,7 @@ use gstreamer::{
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use tokio::sync::watch;
 
-use crate::{error::Error, subsystems::NoopSubsys};
-
-use super::pipeline::Preprocessor;
+use crate::{cameras::preproc::Preprocessor, error::Error, subsystems::NoopSubsys};
 
 // /// Wrapper over frame buffer receiver
 
@@ -28,7 +26,6 @@ impl Preprocessor for MjpegProc {
     type Subsys = NoopSubsys<Self>;
     type Frame = Vec<u8>;
 
-    #[tracing::instrument]
     fn new(pipeline: &Pipeline) -> Self {
         let videorate = ElementFactory::make("videorate")
             .property("max-rate", 20)
@@ -68,6 +65,7 @@ impl Preprocessor for MjpegProc {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn link(&self, src: Element, sink: Element) {
         debug!("linking mjpeg preproc");
         Element::link_many([
@@ -80,6 +78,7 @@ impl Preprocessor for MjpegProc {
         .unwrap();
     }
 
+    #[tracing::instrument(skip_all)]
     fn unlink(&self, src: Element, sink: Element) {
         debug!("unlinking mjpeg preproc");
         Element::unlink_many([
@@ -91,7 +90,7 @@ impl Preprocessor for MjpegProc {
         ]);
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     fn sampler(
         appsink: &AppSink,
         tx: watch::Sender<Option<Arc<Self::Frame>>>,
@@ -100,9 +99,9 @@ impl Preprocessor for MjpegProc {
             .pull_sample()
             .map_err(|_| Error::FailedToPullSample)
             .unwrap();
+
         match sample.buffer() {
             Some(buf) => {
-                trace!("encoding mjpeg frame");
                 let jpeg = turbojpeg::compress(
                     turbojpeg::Image {
                         width: 640,
@@ -120,7 +119,7 @@ impl Preprocessor for MjpegProc {
                     turbojpeg::Subsamp::None,
                 )
                 .unwrap();
-                debug!("finished encoding mjpeg frame");
+
                 while let Err(err) = tx.send(Some(Arc::new(jpeg.to_vec().into()))) {
                     error!("error sending frame: {err:?}");
                 }
@@ -142,10 +141,9 @@ impl Stream for MjpegProc {
         loop {
             match self.rx.has_changed() {
                 Ok(true) => {
-                    info!("working!!!");
-
                     let bytes =
                         if let Some(frame) = self.get_mut().rx.borrow_and_update().as_deref() {
+                        trace!("got mjpeg frame");
                             [
                                 b"--frame\r\nContent-Length: ",
                                 frame.len().to_string().as_bytes(),

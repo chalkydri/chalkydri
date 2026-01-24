@@ -27,7 +27,7 @@ use kornia_image::ImageSize;
 use model::model_from_json;
 use tokio::{sync::watch, time::Instant};
 
-use crate::cameras::pipeline::Preprocessor;
+use crate::cameras::preproc::Preprocessor;
 
 pub struct CalibratedModel {
     model: GenericModel<f64>,

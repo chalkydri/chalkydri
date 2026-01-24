@@ -597,11 +597,10 @@ impl NtConn {
             let uid = rmp::decode::read_i32(&mut bytes).unwrap();
             let ts = rmp::decode::read_u64(&mut bytes).unwrap();
             let data_type = rmp::decode::read_u64(&mut bytes).unwrap();
-            let data = Data::from(&mut bytes, data_type as u8)
-                .map_err(|e| {
-                    dbg!(e);
-                    NtError::MessagePackError("Failed to parse data value".to_string())
-                })?;
+            let data = Data::from(&mut bytes, data_type as u8).map_err(|e| {
+                dbg!(e);
+                NtError::MessagePackError("Failed to parse data value".to_string())
+            })?;
 
             Ok((uid, ts, data))
         } else {

@@ -5,23 +5,29 @@ use tokio::task::JoinSet;
 use tokio_util::task::TaskTracker;
 use tracing::Level;
 
-#[cfg(feature = "python")]
-use crate::subsystems::python::PythonPreproc;
-#[cfg(feature = "capriltags")]
-use crate::{cameras::pipeline::PreprocWrap, subsystems::capriltags::CapriltagsPreproc};
-use crate::{cameras::{mjpeg::MjpegProc, pipeline::Preprocessor}, subsystems::Subsystem};
 #[cfg(feature = "capriltags")]
 use super::capriltags::{self, CApriltagsDetector};
 #[cfg(feature = "python")]
 use super::python::PythonSubsys;
-use crate::{Nt, cameras::CamManager, config, error::Error, pose::PoseEstimator};
+#[cfg(feature = "python")]
+use crate::subsystems::python::PythonPreproc;
+#[cfg(feature = "capriltags")]
+use crate::{cameras::preproc::PreprocWrap, subsystems::capriltags::CapriltagsPreproc};
+use crate::{cameras::CamManager, config, error::Error, pose::PoseEstimator, Nt};
+use crate::{
+    cameras::{mjpeg::MjpegProc, preproc::Preprocessor},
+    subsystems::Subsystem,
+};
 
+/// The subsystem manager
+///
+///
 #[derive(Clone)]
 pub struct SubsysManager {
     pub pose_est: PoseEstimator,
 
-    set: TaskTracker,
-    
+    set: Arc<Mutex<TaskTracker>>,
+
     #[cfg(feature = "capriltags")]
     capriltags: CApriltagsDetector,
     #[cfg(feature = "capriltags")]
@@ -53,7 +59,7 @@ impl SubsysManager {
         Ok(Self {
             pose_est,
 
-            set: TaskTracker::new(),
+            set: Arc::new(Mutex::new(TaskTracker::new())),
 
             #[cfg(feature = "capriltags")]
             capriltags,
@@ -71,16 +77,56 @@ impl SubsysManager {
     pub async fn start(&self, cam_config: config::Camera, pipeline: &Pipeline, cam: &Element) {
         let manager = self.clone();
         let manager_ = manager.clone();
+        let set = self.set.clone();
 
         //#[cfg(feature = "capriltags")]
-        //self.set.spawn(async move {
-        //    println!("a");
-        //    manager.capriltags_preproc.setup_sampler(None).unwrap();
-        //    manager
-        //        .capriltags
-        //        .process(Nt.handle(), cam_config, manager_.capriltags_preproc.rx())
-        //        .await
-        //        .unwrap();
-        //});
+        //{
+        //    let cam_config = cam_config.clone();
+        //    self.set.spawn(async move {
+        //        use tokio::task::LocalSet;
+
+        //        let local = LocalSet::new();
+        //        local.run_until(async move{
+        //            tokio::task::spawn_local(async move {
+        //            manager.capriltags_preproc.setup_sampler(None).unwrap();
+        //            manager
+        //                .capriltags
+        //                .process(Nt.handle(), cam_config, manager_.capriltags_preproc.rx())
+        //                .await
+        //                .unwrap();
+        //        }).await;
+        //        }).await;
+        //    }).await;
+        //}
+
+        #[cfg(feature = "python")]
+        {
+            let cam_config = cam_config.clone();
+            manager.python_preproc.setup_sampler(None).unwrap();
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+                rt.block_on(async move {
+                            manager_
+                                .python
+                                .process(Nt.handle(), cam_config, manager_.python_preproc.rx())
+                                .await
+                                .unwrap();
+                });
+            });
+        }
+    }
+
+    pub fn link(&self, src: &Element) {
+        //#[cfg(feature = "capriltags")]
+        //self.capriltags_preproc.link(src.clone());
+        #[cfg(feature = "python")]
+        self.python_preproc.link(src.clone());
+    }
+
+    pub fn unlink(&self, src: &Element) {
+        //#[cfg(feature = "capriltags")]
+        //self.capriltags_preproc.unlink(src.clone());
+        #[cfg(feature = "python")]
+        self.python_preproc.unlink(src.clone());
     }
 }

@@ -5,6 +5,7 @@
 
 pub(crate) mod mjpeg;
 pub(crate) mod pipeline;
+pub(crate) mod preproc;
 mod providers;
 mod publisher;
 
@@ -168,12 +169,14 @@ impl CamManager {
     }
 
     pub async fn refresh_devices(&self) {
+        trace!("locking refresh devices");
         let mut cfgg = Cfg.write().await;
 
         let mut cameras = cfgg.cameras.clone();
 
         if let Some(ref mut cams) = cameras {
             for mut cam in cams {
+                trace!("locking pipelines");
                 cam.online = self.pipelines.read().await.contains_key(&cam.id);
             }
         }

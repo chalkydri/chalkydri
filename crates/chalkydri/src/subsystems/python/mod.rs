@@ -1,15 +1,20 @@
 mod api;
 
-use std::{collections::HashMap, ffi::CStr, sync::Arc};
-
-use gstreamer::{Caps, Element, ElementFactory, prelude::GstBinExtManual};
-use minint::NtTopic;
-use numpy::ndarray;
-use tokio::sync::RwLock;
-
-use crate::{
-    Cfg, Nt, cameras::pipeline::Preprocessor, config, error::Error, subsystems::Subsystem,
+use std::{
+    collections::HashMap,
+    ffi::CStr,
+    pin::{pin, Pin},
+    sync::Arc,
+    task::{Context, Poll},
 };
+
+use gstreamer::{prelude::GstBinExtManual, Caps, Element, ElementFactory};
+use nt_client::{data::Properties, publish::Publisher};
+use numpy::ndarray;
+use tokio::sync::{Mutex, RwLock};
+use tokio_util::task::TaskTracker;
+
+use crate::{cameras::preproc::Preprocessor, config, error::Error, subsystems::Subsystem, Cfg, Nt};
 
 use pyo3::prelude::*;
 
@@ -20,7 +25,7 @@ pub struct PythonSubsys;
 impl Subsystem for PythonSubsys {
     const NAME: &'static str = "python";
 
-    type Error = Error;
+    type Error = PyErr;
     type Config = Vec<config::CustomSubsystem>;
     type Preproc = PythonPreproc;
     type Output = ();
@@ -29,20 +34,23 @@ impl Subsystem for PythonSubsys {
         Ok::<Self, Self::Error>(PythonSubsys)
     }
 
+    #[tracing::instrument(skip_all, fields(cam_id = cam_config.id))]
     async fn process(
         &self,
-        nt: minint::NtConn,
+        nt: &nt_client::ClientHandle,
         cam_config: config::Camera,
         rx: tokio::sync::watch::Receiver<
-            Option<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>,
+            Option<
+                Arc<<<Self as Subsystem>::Preproc as crate::cameras::preproc::Preprocessor>::Frame>,
+            >,
         >,
     ) -> Result<Self::Output, Self::Error> {
-        let handle = tokio::runtime::Handle::current();
+        let tt = TaskTracker::new();
+        let mut topics = Arc::new(RwLock::new(HashMap::<String, Publisher<f64>>::new()));
+        let mut modules = Arc::new(RwLock::new(Vec::new()));
 
-        Python::with_gil(|py| -> PyResult<()> {
-            let mut modules = Vec::new();
-
-            for camera in futures_executor::block_on(Cfg.read())
+            for camera in Cfg.read()
+                .await
                 .cameras
                 .clone()
                 .unwrap()
@@ -64,70 +72,72 @@ impl Subsystem for PythonSubsys {
                         let module_name = CStr::from_bytes_with_nul(&module_name).unwrap();
 
                         // Load the code in
-                        let module = PyModule::from_code(py, code, file_name, module_name).unwrap();
-                        // Unbind the module from Python's GIL
-                        let module = module.unbind();
+                        let module = Python::attach(|py| -> Py<PyModule> {
+                            PyModule::from_code(py, code, file_name, module_name).unwrap().into()
+                        });
 
                         // Save It for Later :)
-                        modules.push(module);
+                        modules.write().await.push(module);
                     }
                 }
             }
 
-            py.allow_threads(move || {
-                let handle_ = handle.clone();
-                handle.spawn(async move {
-                    let topics = Arc::new(RwLock::new(HashMap::<String, NtTopic<f64>>::new()));
-                    frame_proc_loop::<Self::Preproc, _>(rx, async move |buf| {
-                        if let Some(settings) = &cam_config.settings {
-                            let py_ret = Python::with_gil(|py| -> PyResult<()> {
-                                let nparr = numpy::PyArray::from_array(py, &buf);
+            let rx = rx.clone();
 
-                                for module in &modules {
-                                    let ret: HashMap<String, f64> = module
-                                        .getattr(py, "run")?
-                                        .call1(py, (nparr.clone(),))?
-                                        .extract(py)?;
+            trace!("a");
+            let tt = tt.clone();
 
-                                    for (k, v) in ret {
-                                        let (k, v) = (k.clone(), v.clone());
-                                        let topics = topics.clone();
-                                        handle_.spawn(async move {
-                                            let topic_name = format!("/chalkydri/subsystems/{k}");
+            let cam_config = cam_config.clone();
+            let modules = modules.clone();
+            if let Some(settings) = cam_config.settings {
+                let settings = settings.clone();
+                frame_proc_loop::<Self::Preproc, _>(rx.clone(), async move |buf| {
+                    let modules = modules.clone();
+                        let arr = ndarray::Array::from_shape_vec(
+                            //(settings.height as usize, settings.width as usize, 3usize),
+                            (1280, 720, 3),
+                            buf,
+                        )
+                        .expect("something is really braken");
+                        let nparr = Python::attach(|py| {
+                            numpy::PyArray::from_array(py, &arr).unbind()
+                        });
 
-                                            let mut topics = topics.write().await;
-
-                                            if let Some(topic) = topics.get_mut(&k) {
-                                                topic.set(v).await.unwrap();
-                                            } else {
-                                                let mut topic = Nt
-                                                    .publish::<f64>(topic_name.clone())
-                                                    .await
-                                                    .unwrap();
-                                                topic.set(v).await.unwrap();
-                                                topics.insert(topic_name, topic);
-                                            }
-                                        });
-                                    }
-                                }
-
-                                Ok(())
+                        for module in modules.read().await.iter() {
+                            let ret: HashMap<String, f64> = Python::attach(|py| {
+                                let module = module.bind(py);
+                                println!("running {module}");
+                                 module
+                                    .getattr("run")
+                                    .unwrap()
+                                    .call1((nparr.bind(py),))
+                                    .unwrap()
+                                    .extract()
+                                    .unwrap()
                             });
 
-                            if let Err(err) = py_ret {
-                                error!("{err}");
+                            for (k, v) in ret {
+                                let (k, v) = (k.clone(), v.clone());
+                                trace!("{k}: {v}");
+                                let topic_name = format!("/chalkydri/subsystems/{k}");
+
+
+                                let mut topic = Nt
+                                    .topic(topic_name.clone())
+                                    .publish::<f64>(Properties::default())
+                                    .await
+                                    .unwrap();
+                                topic.set(v).await.unwrap();
                             }
                         }
-                    })
-                    .await;
-                });
-            });
 
-            Ok(())
-        })
-        .unwrap();
+                        tokio::task::yield_now().await;
+                }).await;
+            }
 
-        Ok::<Self::Output, Self::Error>(())
+
+
+            Ok::<Self::Output, Self::Error>(())
     }
 }
 
@@ -136,7 +146,7 @@ pub struct PythonPreproc {
     filter: Arc<Element>,
 }
 impl Preprocessor for PythonPreproc {
-    type Frame = ndarray::Array3<u8>;
+    type Frame = Vec<u8>;
     type Subsys = PythonSubsys;
 
     fn new(pipeline: &gstreamer::Pipeline) -> Self {
@@ -178,15 +188,25 @@ impl Preprocessor for PythonPreproc {
             .unwrap()
             .to_vec();
 
-        let arr = ndarray::Array::from_shape_vec(
-            //(settings.height as usize, settings.width as usize, 3usize),
-            (1280, 720, 3),
-            buf,
-        )
-        .expect("something is really braken");
-
-        tx.send(Arc::new(Some(arr))).unwrap();
+        tx.send(Some(Arc::new(buf))).unwrap();
 
         Ok(Some(()))
+    }
+}
+
+struct AllowThreads<F>(F);
+
+impl<F> std::future::Future for AllowThreads<F>
+where
+    F: Future + Unpin + Send,
+    F::Output: Send,
+{
+    type Output = F::Output;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let waker = cx.waker();
+        Python::attach(|py| {
+            py.detach(|| std::pin::pin!(&mut self.0).poll(&mut Context::from_waker(waker)))
+        })
     }
 }
