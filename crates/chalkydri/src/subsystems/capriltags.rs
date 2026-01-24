@@ -30,12 +30,11 @@ use sophus_lie::{Isometry3F64, Rotation3F64};
 use std::time::Instant;
 use tokio::sync::{Mutex, watch};
 
-use crate::calibration::CalibratedModel;
 use crate::cameras::pipeline::Preprocessor;
 use crate::error::Error;
 use crate::pose::PoseEstimator;
 use crate::{Cfg, Nt};
-use crate::{subsystems::Subsystem, config, subsystems::frame_proc_loop};
+use crate::{subsystems::Subsystem, config, subsystems::frame_proc_loop, subsystems::calibration::CalibratedModel};
 
 const TAG_SIZE: f64 = 0.1651;
 

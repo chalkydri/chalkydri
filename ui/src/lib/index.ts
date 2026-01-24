@@ -4,7 +4,7 @@ import { writable, type Writable } from 'svelte/store';
 import { onMount } from 'svelte';
 
 const config: Writable<Config> = writable();
-//onMount(async () => {
+
 async function loadConfig() {
 	try {
 		let loaded_config = (await configuration()).data;
@@ -14,14 +14,12 @@ async function loadConfig() {
 	} catch (e) {}
 }
 loadConfig();
-//});
 
 const connected: Writable<boolean> = writable();
 const sys_info: Writable<Info | null> = writable();
 
 connected.set(false);
 
-//onMount(() => {
 setInterval(async function () {
 	await info().then(
 		(res) => {
@@ -36,6 +34,5 @@ setInterval(async function () {
 		}
 	);
 }, 500);
-//});
 
 export { config, connected, sys_info };

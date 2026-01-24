@@ -242,11 +242,11 @@ pub(super) async fn save_configuration(web::Json(cfgg): web::Json<Config>) -> im
 #[get("/api/calibrate/{cam_name}/intrinsics")]
 pub(super) async fn calibration_intrinsics(
     path: web::Path<String>,
-    data: web::Data<CamManager>,
+    data: web::Data<ApiData>,
 ) -> impl Responder {
     let cam_name = path.to_string();
 
-    //let cam_man = data.get_ref();
+    let cam_man = data.get_ref().cam_man.clone();
     //let calibrated_model = cam_man
     //    .calibrators()
     //    .await
@@ -284,8 +284,8 @@ struct CalibrationStatus {
     ),
 )]
 #[get("/api/calibrate/status")]
-pub(super) async fn calibration_status(data: web::Data<CamManager>) -> impl Responder {
-    let cam_man = data.get_ref();
+pub(super) async fn calibration_status(data: web::Data<ApiData>) -> impl Responder {
+    let cam_man = &data.get_ref().cam_man;
 
     web::Json(CalibrationStatus {
         width: 1280,
@@ -304,17 +304,17 @@ pub(super) async fn calibration_status(data: web::Data<CamManager>) -> impl Resp
 #[get("/api/calibrate/{cam_name}/step")]
 pub(super) async fn calibration_step(
     path: web::Path<String>,
-    data: web::Data<CamManager>,
+    data: web::Data<ApiData>,
 ) -> impl Responder {
     let cam_name = path.to_string();
 
-    let cam_man = data.get_ref();
-    let current_step = 0; //cam_man.calib_step(cam_name).await;
+    let cam_man = data.get_ref().cam_man.clone();
+//    let current_step = cam_man.calib_step(cam_name).await;
 
     web::Json(CalibrationStatus {
         width: 1280,
         height: 720,
-        current_step,
+        current_step: 0,
         total_steps: 200,
     })
 }
@@ -326,7 +326,7 @@ pub(super) async fn calibration_step(
     )
 )]
 #[post("/api/restart")]
-pub(super) async fn restart(data: web::Data<CamManager>) -> impl Responder {
+pub(super) async fn restart(data: web::Data<ApiData>) -> impl Responder {
     //data.restart().await;
 
     HttpResponse::Ok().await.unwrap()

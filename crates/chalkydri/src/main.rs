@@ -8,6 +8,13 @@
 
 #![feature(duration_millis_float)]
 #![allow(unreachable_code)]
+#![deny(
+    unused_must_use,
+    clippy::infinite_iter,
+    clippy::infinite_loop,
+    clippy::unconditional_recursion,
+    clippy::while_immutable_condition,
+)]
 
 // These deps are needed no matter what
 #[macro_use]
@@ -36,7 +43,6 @@ extern crate tfledge;
 
 #[cfg(feature = "web")]
 mod api;
-mod calibration;
 mod cameras;
 mod config;
 mod error;

@@ -18,6 +18,7 @@ pub struct CamPipeline {
     dev: Device,
     cam_config: config::Camera,
     pipeline: Pipeline,
+    //calibrator: Calibrator,
 
     input: Element,
     filter: Element,
@@ -35,6 +36,7 @@ impl CamPipeline {
         let pipeline = Pipeline::new();
 
         let input = dev.create_element(Some("camera")).unwrap();
+        input.set_state(State::Ready).unwrap();
 
         let settings = cam_config.settings.clone().unwrap_or_default();
         let is_mjpeg = settings.format == Some(String::new());
@@ -123,7 +125,7 @@ impl CamPipeline {
     pub(crate) async fn link_preprocs(&self, cam_config: config::Camera) {
         //if cam_config.subsystems.mjpeg.is_some() {
             self.mjpeg_preproc.link(self.tee.clone());
-            self.subsys.start(self.cam_config.clone(), &self.pipeline, &self.tee).await;
+            //self.subsys.start(self.cam_config.clone(), &self.pipeline, &self.tee).await;
         //}
     }
 

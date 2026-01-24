@@ -5,6 +5,7 @@ use tokio::sync::watch;
 
 use crate::{cameras::pipeline::Preprocessor, config};
 
+pub mod calibration;
 #[cfg(feature = "apriltags")]
 pub mod apriltags;
 #[cfg(feature = "capriltags")]

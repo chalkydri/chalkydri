@@ -72,15 +72,15 @@ impl SubsysManager {
         let manager = self.clone();
         let manager_ = manager.clone();
 
-        #[cfg(feature = "capriltags")]
-        self.set.spawn(async move {
-            println!("a");
-            manager.capriltags_preproc.setup_sampler(None).unwrap();
-            manager
-                .capriltags
-                .process(Nt.handle(), cam_config, manager_.capriltags_preproc.rx())
-                .await
-                .unwrap();
-        });
+        //#[cfg(feature = "capriltags")]
+        //self.set.spawn(async move {
+        //    println!("a");
+        //    manager.capriltags_preproc.setup_sampler(None).unwrap();
+        //    manager
+        //        .capriltags
+        //        .process(Nt.handle(), cam_config, manager_.capriltags_preproc.rx())
+        //        .await
+        //        .unwrap();
+        //});
     }
 }

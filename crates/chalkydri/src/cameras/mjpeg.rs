@@ -69,6 +69,7 @@ impl Preprocessor for MjpegProc {
     }
 
     fn link(&self, src: Element, sink: Element) {
+        debug!("linking mjpeg preproc");
         Element::link_many([
             &src,
             &self.videorate,
@@ -80,6 +81,7 @@ impl Preprocessor for MjpegProc {
     }
 
     fn unlink(&self, src: Element, sink: Element) {
+        debug!("unlinking mjpeg preproc");
         Element::unlink_many([
             &src,
             &self.videorate,
@@ -100,7 +102,7 @@ impl Preprocessor for MjpegProc {
             .unwrap();
         match sample.buffer() {
             Some(buf) => {
-                debug!("encoding mjpeg frame");
+                trace!("encoding mjpeg frame");
                 let jpeg = turbojpeg::compress(
                     turbojpeg::Image {
                         width: 640,

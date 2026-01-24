@@ -23,8 +23,11 @@ use gstreamer::{
     glib::{WeakRef, object::ObjectExt},
     prelude::{ElementExt, ElementExtManual},
 };
+use kornia_image::ImageSize;
 use model::model_from_json;
 use tokio::{sync::watch, time::Instant};
+
+use crate::cameras::pipeline::Preprocessor;
 
 pub struct CalibratedModel {
     model: GenericModel<f64>,
@@ -45,7 +48,8 @@ impl CalibratedModel {
 const MIN_CORNERS: usize = 24;
 
 /// A camera calibrator
-pub struct Calibrator {
+pub struct Calibrator { //<P: Preprocessor<Frame = Image<u8>>> {
+    //preproc: P,
     valve: WeakRef<Element>,
     det: TagDetector,
     board: Board,

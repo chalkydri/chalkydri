@@ -32,7 +32,6 @@ use tracing::Level;
 use crate::Rerun;
 use crate::{
     Cfg,
-    calibration::Calibrator,
     config::{self, CameraSettings, CfgFraction},
     error::Error,
     subsystems::Subsystem,
@@ -107,7 +106,7 @@ impl CamManager {
                             if id == cam.id {
                                 let pipeline = CamPipeline::new(dev.clone(), cam.clone()).await;
                                 debug!("linking preprocs");
-                                pipeline.link_preprocs(cam);
+                                pipeline.link_preprocs(cam).await;
                                 debug!("starting pipeline");
                                 pipeline.start().await;
                                 let _ = pipelines.write().await.insert(id.clone(), pipeline);
@@ -200,6 +199,77 @@ impl CamManager {
             .update(cam_config)
             .await;
     }
+
+    // /// Add [Calibrator] to pipeline
+    // pub(crate) fn add_calib(
+    //     pipeline: &Pipeline,
+    //     cam: &Element,
+    //     cam_config: config::Camera,
+    // ) -> Calibrator {
+    //     let span = span!(Level::INFO, "calib");
+    //     let _enter = span.enter();
+
+    //     let bin = Bin::builder().name("calib").build();
+
+    //     let valve = ElementFactory::make("valve")
+    //         .property("drop", false)
+    //         .build()
+    //         .unwrap();
+    //     let queue = ElementFactory::make("queue").build().unwrap();
+    //     let videoconvertscale = ElementFactory::make("videoconvertscale").build().unwrap();
+    //     let filter = ElementFactory::make("capsfilter")
+    //         .property(
+    //             "caps",
+    //             &Caps::builder("video/x-raw")
+    //                 .field("width", &1280)
+    //                 .field("height", &720)
+    //                 .field("format", "RGB")
+    //                 .build(),
+    //         )
+    //         .build()
+    //         .unwrap();
+    //     let appsink = ElementFactory::make("appsink")
+    //         .name("calib_appsink")
+    //         .build()
+    //         .unwrap();
+
+    //     bin.add_many([&valve, &queue, &videoconvertscale, &filter, &appsink])
+    //         .unwrap();
+    //     Element::link_many([&cam, &valve, &queue, &videoconvertscale, &filter, &appsink]).unwrap();
+
+    //     let appsink = appsink.dynamic_cast::<AppSink>().unwrap();
+    //     appsink.set_drop(true);
+
+    //     let (tx, rx) = watch::channel(None);
+
+    //     debug!("setting appsink callbacks...");
+    //     appsink.set_callbacks(
+    //         AppSinkCallbacks::builder()
+    //             .new_sample(move |appsink| {
+    //                 let sample = appsink.pull_sample().unwrap();
+    //                 let buf = sample.buffer().unwrap();
+    //                 while let Err(err) = tx.send(Some(buf.to_owned())) {
+    //                     error!("error sending frame: {err:?}");
+    //                 }
+
+    //                 Ok(FlowSuccess::Ok)
+    //             })
+    //             .build(),
+    //     );
+
+    //     debug!("linked subsys junk");
+
+    //     Calibrator::new(valve.downgrade(), rx)
+    // }
+
+    // pub async fn calibrators(&self) -> MutexGuard<HashMap<String, Calibrator>> {
+    //     self.calibrators.lock().await
+    // }
+
+    // /// Run a calibration step
+    // pub async fn calib_step(&self, name: String) -> usize {
+    //     self.calibrators().await.get_mut(&name).unwrap().step()
+    // }
 }
 
 /*

@@ -20,6 +20,7 @@
 	import CameraFeed from '../+components/CameraFeed.svelte';
 	import { TrashIcon } from 'lucide-svelte';
 	import Calibration from '../+components/Calibration.svelte';
+	import ChalkydriInput from '../+components/ChalkydriInput.svelte';
 
 	let cfg: Config | null = $state(null);
 	let saving = $state(false);
@@ -83,28 +84,30 @@
 	<Card padding="sm">
 		<P size="lg">General</P>
 
-		<Label for="team_num" class="mt-2 mb-1">Team number</Label>
-		<Input id="team_num" type="number" bind:value={cfg.team_number} />
+		<ChalkydriInput id="team_num" label="Team number">
+		  <Input id="team_num" type="number" bind:value={cfg.team_number} />
+    </ChalkydriInput>
 
-		<Label for="device_name" class="mt-2 mb-1">Device name</Label>
-		<Input id="device_name" bind:value={cfg.device_name} />
+		<ChalkydriInput id="device_name" label="Device name">
+		  <Input id="device_name" bind:value={cfg.device_name} />
+    </ChalkydriInput>
 	</Card>
 
 	<Card size="md" padding="sm" class="mt-2">
 		<P size="lg">Pose estimation</P>
 
 		<Layout gap={3}>
-			<div>
-				<Label for="field_layout" class="mt-2 mb-1">Field layout</Label>
+			<ChalkydriInput id="field_layout" label="Field layout">
 				{#if config && config.field_layouts}
 					<Select
 						id="field_layout"
+            value={config.field_layout}
 						items={Object.keys(config.field_layouts).map((thing) => {
 							return { name: thing, value: thing };
 						})}
 					/>
 				{/if}
-			</div>
+			</ChalkydriInput>
 
 			<Button
 				size="sm"
