@@ -29,4 +29,6 @@ gstreamer = { workspace = true, optional = true }
 gstreamer-app = { workspace = true, optional = true }
 snafu = "0.8.9"
 tracing.workspace = true
-parking_lot = { version = "0.12.4", features = ["arc_lock", "nightly", "owning_ref", "send_guard"] }
+parking_lot.workspace = true
+futures-core.workspace = true
+futures-executor = "0.3.31"

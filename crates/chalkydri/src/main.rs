@@ -58,15 +58,13 @@ use re_sdk::{MemoryLimit, RecordingStream};
 use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
-use std::{error::Error, net::Ipv4Addr, path::Path, sync::Arc};
-use tokio::sync::{RwLock, mpsc};
+use std::{error::Error, path::Path};
+use tokio::sync::mpsc;
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 // mimalloc is an excellent general purpose allocator
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
-
-use utils::gen_team_ip;
 
 #[cfg(feature = "rerun")]
 #[allow(non_upper_case_globals)]

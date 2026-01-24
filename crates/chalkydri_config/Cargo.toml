@@ -1,0 +1,13 @@
+[package]
+name = "chalkydri_config"
+license.workspace = true
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chalkydri_core.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml = "0.8.12"

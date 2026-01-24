@@ -1,44 +1,45 @@
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::thread::Thread;
 
+use chalkydri_core::subsystems::SubsystemCtrl;
+use gstreamer::Task;
 #[cfg(feature = "python")]
-use chalkydri_core::preprocs::PreprocWrap;
 use gstreamer::{Element, Pipeline};
-use tokio::task::JoinSet;
+use tokio::sync::mpsc;
 use tokio_util::task::TaskTracker;
 use tracing::Level;
 
-use crate::cameras::{mjpeg::MjpegProc, preproc::Preprocessor};
-use crate::{Nt, cameras::CamManager, config};
-#[cfg(feature = "capriltags")]
-use crate::{cameras::preproc::PreprocWrap, subsystems::capriltags::CapriltagsPreproc};
+#[cfg(feature = "python")]
+use crate::cameras::preproc::PreprocWrap;
+use crate::subsystems::SubsysRunner;
+use crate::{Nt, config};
 use chalkydri_core::prelude::*;
 #[cfg(feature = "capriltags")]
-use chalkydri_subsys_capriltags::{self as capriltags, CApriltagsDetector};
+use chalkydri_subsys_capriltags::{self as capriltags, CApriltagsDetector, CapriltagsPreproc};
 #[cfg(feature = "python")]
 use chalkydri_subsys_python::{PythonPreproc, PythonSubsys};
 
-/// The subsystem manager
-///
-///
+/// The subsystem manager orchestrates all the subsystems for a pipeline
 #[derive(Clone)]
 pub struct SubsysManager {
-    set: Arc<Mutex<Vec<Thread>>>,
+    set: Arc<Mutex<Vec<mpsc::Sender<SubsystemCtrl>>>>,
     tt: TaskTracker,
 
     #[cfg(feature = "capriltags")]
     capriltags: CApriltagsDetector,
     #[cfg(feature = "capriltags")]
     capriltags_preproc: Arc<PreprocWrap<CapriltagsPreproc>>,
-
     #[cfg(feature = "python")]
-    python: PythonSubsys,
-    #[cfg(feature = "python")]
-    python_preproc: Arc<PreprocWrap<PythonPreproc>>,
+    python: SubsysRunner<PythonPreproc, PythonSubsys>,
 }
 impl SubsysManager {
     /// Initialize the [`subsystem`](Subsystem) manager
-    pub async fn new(pipeline: &Pipeline) -> Result<Self, Error> {
+    pub async fn new(
+        pipeline: &Pipeline,
+        cam_config: config::Camera,
+        cam: &Element,
+    ) -> Result<Self, Error> {
         let span = span!(Level::INFO, "subsys_manager");
         let _enter = span.enter();
 
@@ -47,10 +48,16 @@ impl SubsysManager {
         //#[cfg(feature = "capriltags")]
         //let capriltags_preproc = Arc::new(PreprocWrap::new(pipeline));
 
+        let tt = TaskTracker::new();
+
         #[cfg(feature = "python")]
-        let python = PythonSubsys::init().await.unwrap();
-        #[cfg(feature = "python")]
-        let python_preproc = Arc::new(PreprocWrap::new(pipeline));
+        let python = SubsysRunner::<PythonPreproc, PythonSubsys>::init(
+            pipeline.clone(),
+            cam_config.clone(),
+            cam.clone(),
+            tt.clone(),
+        )
+        .await;
 
         Ok(Self {
             set: Arc::new(Mutex::new(Vec::new())),
@@ -60,16 +67,13 @@ impl SubsysManager {
             capriltags,
             #[cfg(feature = "capriltags")]
             capriltags_preproc,
-
             #[cfg(feature = "python")]
             python,
-            #[cfg(feature = "python")]
-            python_preproc,
         })
     }
 
     /// Spawn subsystems for a camera
-    pub async fn start(&self, cam_config: config::Camera, pipeline: &Pipeline, cam: &Element) {
+    pub async fn start(&mut self, cam_config: config::Camera, pipeline: &Pipeline, cam: &Element) {
         let manager = self.clone();
         let manager_ = manager.clone();
         let set = self.set.clone();
@@ -93,40 +97,42 @@ impl SubsysManager {
         #[cfg(feature = "python")]
         {
             let cam_config = cam_config.clone();
-            manager.python_preproc.setup_sampler(None).unwrap();
-            let thread = std::thread::spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .unwrap();
-                rt.block_on(async move {
-                    manager_
-                        .python
-                        .process(Nt.handle(), cam_config, manager_.python_preproc.rx())
-                        .await
-                        .unwrap();
-                });
-            });
 
-            set.lock().unwrap().push(thread.thread().to_owned());
+            trace!("initializing python subsystem");
+
+            self.python
+                .start(cam_config.clone(), cam.clone(), self.tt.clone())
+                .await;
+
+            trace!("adding python jh to join set");
+            self.set.lock().unwrap().push(self.python.tx.clone());
+        }
+    }
+
+    pub async fn stop(&mut self) {
+        trace!("sending stop msgs");
+        while let Some(tx) = self.set.lock().unwrap().pop() {
+            tx.send(SubsystemCtrl::Stop).await.unwrap();
         }
     }
 
     pub fn link(&self, src: &Element) {
         //#[cfg(feature = "capriltags")]
         //self.capriltags_preproc.link(src.clone());
-        #[cfg(feature = "python")]
-        self.python_preproc.link(src.clone());
+        //#[cfg(feature = "python")]
+        //self.python.preproc.link(src.clone());
     }
 
     pub fn unlink(&self, src: &Element) {
         //#[cfg(feature = "capriltags")]
         //self.capriltags_preproc.unlink(src.clone());
-        #[cfg(feature = "python")]
-        self.python_preproc.unlink(src.clone());
+        //#[cfg(feature = "python")]
+        //self.python.preproc.unlink(src.clone());
     }
 
     pub async fn run(&self) {
+        trace!("waiting");
         self.tt.wait().await;
+        trace!("done");
     }
 }

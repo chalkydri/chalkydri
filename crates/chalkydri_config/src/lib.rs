@@ -1,3 +1,5 @@
+use chalkydri_core::prelude::*;
+
 use parking_lot::{RwLock, const_rwlock};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -7,8 +9,6 @@ use std::{
     path::Path,
     sync::LazyLock,
 };
-
-use crate::Error;
 
 #[allow(non_upper_case_globals)]
 pub static Cfg: LazyLock<RwLock<Config>> = LazyLock::new(|| const_rwlock(Config::default()));

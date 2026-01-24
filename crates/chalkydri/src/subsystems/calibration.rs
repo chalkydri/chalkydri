@@ -2,32 +2,24 @@ use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 
 use aprilgrid::{
     TagFamily,
-    detector::{DetectorParams, TagDetector},
+    detector::TagDetector,
 };
 use camera_intrinsic_calibration::{
     board::{Board, create_default_6x6_board},
-    detected_points::{FeaturePoint, FrameFeature},
-    io::write_report,
-    types::{CalibParams, RvecTvec, ToRvecTvec},
+    detected_points::FrameFeature,
+    types::CalibParams,
     util::*,
-    visualization::*,
 };
 use camera_intrinsic_model::{
-    self as model, CameraModel, GenericModel, OpenCVModel5, model_to_json,
+    GenericModel, OpenCVModel5,
 };
-use gstreamer_app::AppSink;
-use image::{ColorType, DynamicImage, GrayImage, RgbImage};
+use image::{DynamicImage, RgbImage};
 
 use gstreamer::{
-    Buffer, Element, State,
+    Buffer, Element,
     glib::{WeakRef, object::ObjectExt},
-    prelude::{ElementExt, ElementExtManual},
 };
-use kornia_image::ImageSize;
-use model::model_from_json;
 use tokio::{sync::watch, time::Instant};
-
-use crate::cameras::preproc::Preprocessor;
 
 pub struct CalibratedModel {
     model: GenericModel<f64>,

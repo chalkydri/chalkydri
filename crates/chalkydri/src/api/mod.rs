@@ -96,7 +96,7 @@ pub async fn run_api(cam_man: CamManager) {
         App::new()
             .app_data(Data::new(api_data))
             .service(index)
-            .service(stream)
+            //.service(stream)
             .service(info)
             .service(configuration)
             .service(configure)

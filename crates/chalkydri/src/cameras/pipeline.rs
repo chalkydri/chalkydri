@@ -7,8 +7,8 @@ use gstreamer::{
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use tokio::sync::watch;
 
-use crate::subsystems::SubsysManager;
-use chalkydri_core::{prelude::*, preprocs::PreprocWrap};
+use crate::{cameras::preproc::PreprocWrap, subsystems::SubsysManager};
+use chalkydri_core::prelude::*;
 
 use super::mjpeg::MjpegProc;
 
@@ -26,7 +26,7 @@ pub struct CamPipeline {
     videoflip: Element,
     tee: Element,
 
-    subsys: SubsysManager,
+    subsys: Arc<Mutex<SubsysManager>>,
 
     pub mjpeg_preproc: PreprocWrap<MjpegProc>,
 }
@@ -101,13 +101,22 @@ impl CamPipeline {
         let mjpeg_preproc = PreprocWrap::<MjpegProc>::new(&pipeline);
         mjpeg_preproc
             .setup_sampler(Some(mjpeg_preproc.inner().tx.clone()))
+            .await
             .unwrap();
 
-        let subsys = SubsysManager::new(&pipeline).await.unwrap();
+        let subsys = Arc::new(Mutex::new(
+            SubsysManager::new(&pipeline, cam_config.clone(), &tee)
+                .await
+                .unwrap(),
+        ));
 
         let subsys_ = subsys.clone();
+        let tee_ = tee.clone();
+        let pipeline_ = pipeline.clone();
+        let cam_config_ = cam_config.clone();
         tokio::spawn(async move {
-            subsys_.run().await;
+            subsys_.lock().start(cam_config_, &pipeline_, &tee_).await;
+            //subsys_.lock().run().await;
         });
 
         Self {
@@ -131,7 +140,7 @@ impl CamPipeline {
         //if cam_config.subsystems.mjpeg.is_some() {
         self.mjpeg_preproc.link(self.tee.clone());
         //}
-        self.subsys.link(&self.tee);
+        self.subsys.lock().link(&self.tee);
         //self.subsys.start(self.cam_config.clone(), &self.pipeline, &self.tee).await;
         //}
     }
@@ -140,26 +149,40 @@ impl CamPipeline {
     pub(crate) async fn unlink_preprocs(&self, cam_config: config::Camera) {
         //if cam_config.subsystems.mjpeg.is_some() {
         //self.subsys.stop().await;
-        self.subsys.unlink(&self.tee);
+        self.subsys.lock().unlink(&self.tee);
         self.mjpeg_preproc.unlink(self.tee.clone());
         //}
     }
 
     /// Start the pipeline
+    #[instrument(skip(self), fields(cam = self.cam_config.id))]
     pub async fn start(&self) {
+        trace!("starting pipeline");
         self.pipeline.set_state(State::Playing).unwrap();
+
+        self.pipeline.
+
+        trace!("starting subsystems");
         self.subsys
+            .lock()
             .start(self.cam_config.clone(), &self.pipeline, &self.tee)
             .await;
     }
 
     /// Pause the pipeline
+    #[instrument(skip(self), fields(cam = self.cam_config.id))]
     pub fn pause(&self) {
+        trace!("pausing pipeline");
         self.pipeline.set_state(State::Paused).unwrap();
     }
 
     /// Update the pipeline
+    #[instrument(skip(self), fields(cam = self.cam_config.id))]
     pub async fn update(&self, cam_config: config::Camera) {
+        trace!("stopping subsystems");
+        self.subsys.lock().stop().await;
+
+        trace!("pausing pipeline");
         self.pause();
 
         if let Some(settings) = &cam_config.settings {
@@ -182,7 +205,7 @@ impl CamPipeline {
             //);
             capsfilter.set_property("caps", caps.to_owned());
 
-            // Reconfigure [Caps]
+            trace!("marking pads for reconfiguration");
             self.pipeline.foreach_sink_pad(|_elem, pad| {
                 pad.mark_reconfigure();
                 true
@@ -215,6 +238,7 @@ impl CamPipeline {
             }
         }
 
+        trace!("strating");
         self.start().await;
     }
 }

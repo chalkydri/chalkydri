@@ -39,6 +39,7 @@ pub struct CameraCtx {
     tee: WeakRef<Element>,
 }
 
+/// The camera manager orchestrates camera pipelines
 #[derive(Clone)]
 pub struct CamManager {
     v4l2_prov: Arc<Mutex<V4l2Provider>>,
@@ -121,7 +122,9 @@ impl CamManager {
                     }
 
                     println!("new cam: {id}");
-                    tx.send(config::Camera {
+                    let mut cams = if let Some(cams) = Cfg.read().cameras.clone() { cams } else { Vec::new() };
+                        cams.push(
+                    config::Camera {
                         id,
                         possible_settings: Some(
                             dev.caps()
@@ -142,12 +145,20 @@ impl CamManager {
                                         //panic!("Either width or height doesn't exist. Need to look into that...");
                                         None
                                     } else {
+                                        dbg!(cap.name().to_string());
                                         Some(config::CameraSettings {
                                             width: width.unwrap(),
                                             height: height.unwrap(),
                                             frame_rate,
                                             format: Some(
-                                                cap.get::<String>("format").unwrap_or_default(),
+                                                cap.get::<String>("format").unwrap_or_else(|_| {
+                                                    let fmt = if cap.name().as_str() == "image/jpeg" {
+                                                        "mjpeg"
+                                                    } else {
+                                                        ""
+                                                    };
+                                                    fmt.to_owned()
+                                                }),
                                             ),
                                         })
                                     }
@@ -155,9 +166,8 @@ impl CamManager {
                                 .collect(),
                         ),
                         ..Default::default()
-                    })
-                    .await
-                    .unwrap();
+                    });
+                    Cfg.write().cameras = Some(cams);
                 }
                 ProviderEvent::Disconnected(id, dev) => {
                     let mut pipelines = pipelines.write().await;

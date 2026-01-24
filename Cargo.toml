@@ -3,15 +3,15 @@ resolver = "3"
 members = [
   "build",
   "crates/chalkydri_core",
-	"crates/chalkydri",
-  #"crates/chalkydri-apriltags", 
-	#"crates/chalkydri-slam",
+  "crates/chalkydri",
+  #"crates/chalkydri-apriltags",
+  #"crates/chalkydri-slam",
   #"crates/chalkydri-tfledge",
   #"crates/chalkydrilib",
   #"crates/chalkydrilibj",
   #"crates/minint",
   "crates/subsystems/capriltags",
-  "crates/subsystems/python",
+  "crates/subsystems/python", "crates/chalkydri_config",
 ]
 default-members = [
   "crates/chalkydri_core",
@@ -27,7 +27,12 @@ edition = "2024"
 tracing = { version = "0.1.41", features = ["log", "async-await"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "tracing-log"] }
 nt_client = { git = "https://github.com/DatAsianBoi123/nt_client.git", version = "0.4.0", features = ["struct"] }
-once_cell = "1.20.2"
+parking_lot = { version = "0.12.4", features = ["arc_lock", "nightly", "owning_ref", "send_guard"] }
+futures-core = "0.3.31"
+
+tokio = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 gstreamer = { version = "0.23.4", features = ["v1_22"] }
 gstreamer-app = { version = "0.23.4", features = ["v1_22"] }

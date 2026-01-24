@@ -3,18 +3,19 @@ mod api;
 use std::{
     collections::HashMap,
     ffi::CStr,
+    ops::Deref,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
 
-use chalkydri_core::prelude::*;
 use chalkydri_core::preprocs::Preprocessor;
 use chalkydri_core::subsystems::Subsystem;
 use chalkydri_core::{
     gstreamer::{self, Caps, Element, ElementFactory, prelude::GstBinExtManual},
     tokio::sync::RwLock,
 };
+use chalkydri_core::{nt_client::publish::GenericPublisher, prelude::*};
 use chalkydri_core::{
     nt_client::{data::Properties, publish::Publisher},
     preprocs::frame_proc_loop,
@@ -27,7 +28,10 @@ use chalkydri_core::{Error, config};
 use pyo3::prelude::*;
 
 #[derive(Clone)]
-pub struct PythonSubsys;
+pub struct PythonSubsys {
+    topics: Arc<RwLock<HashMap<String, GenericPublisher>>>,
+    modules: Arc<RwLock<Vec<Py<PyModule>>>>,
+}
 impl Subsystem for PythonSubsys {
     const NAME: &'static str = "python";
 
@@ -36,20 +40,11 @@ impl Subsystem for PythonSubsys {
     type Preproc = PythonPreproc;
     type Output = ();
 
-    async fn init() -> Result<Self, Self::Error> {
-        Ok::<Self, Self::Error>(PythonSubsys)
-    }
-
-    #[instrument(skip_all, fields(cam_id = cam_config.id))]
-    async fn process(
-        &self,
-        nt: &chalkydri_core::nt_client::ClientHandle,
+    async fn init(
+        nt: &nt_client::ClientHandle,
         cam_config: config::Camera,
-        rx: chalkydri_core::tokio::sync::watch::Receiver<
-            Option<Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>,
-        >,
-    ) -> Result<Self::Output, Self::Error> {
-        let mut topics = Arc::new(RwLock::new(HashMap::<String, Publisher<f64>>::new()));
+    ) -> Result<Self, Self::Error> {
+        let mut topics = Arc::new(RwLock::new(HashMap::new()));
         let mut modules = Arc::new(RwLock::new(Vec::new()));
 
         for subsys in cam_config.clone().subsystems.custom {
@@ -78,58 +73,65 @@ impl Subsystem for PythonSubsys {
             }
         }
 
-        let rx = rx.clone();
+        Ok::<Self, Self::Error>(PythonSubsys { topics, modules })
+    }
 
+    #[instrument(skip_all, fields(cam_id = cam_config.id))]
+    async fn process(
+        &self,
+        nt: &chalkydri_core::nt_client::ClientHandle,
+        cam_config: config::Camera,
+        frame: Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>,
+    ) -> Result<Self::Output, Self::Error> {
         trace!("a");
 
         let cam_config = cam_config.clone();
-        let modules = modules.clone();
+        let modules = self.modules.clone();
         if let Some(settings) = cam_config.settings {
             let settings = settings.clone();
-            frame_proc_loop::<Self::Preproc, _>(rx.clone(), async move |buf| {
-                let modules = modules.clone();
-                let arr = ndarray::Array::from_shape_vec(
-                    //(settings.height as usize, settings.width as usize, 3usize),
-                    (1280, 720, 3),
-                    buf,
-                )
-                .expect("something is really braken");
-                let nparr = Python::attach(|py| numpy::PyArray::from_array(py, &arr).unbind());
+            trace!("wtf");
+            let modules = modules.clone();
+            let arr = ndarray::Array::from_shape_vec(
+                //(settings.height as usize, settings.width as usize, 3usize),
+                (1280, 720, 3),
+                Arc::try_unwrap(frame).unwrap(),
+            )
+            .expect("something is really braken");
+            let nparr = Python::attach(|py| numpy::PyArray::from_array(py, &arr).unbind());
 
-                for module in modules.read().await.iter() {
-                    let ret: HashMap<String, f64> = Python::attach(|py| {
-                        let module = module.bind(py);
-                        trace!("running module");
-                        module
-                            .getattr("run")
-                            .unwrap()
-                            .call1((nparr.bind(py),))
-                            .unwrap()
-                            .extract()
-                            .unwrap()
-                    });
+            for module in modules.read().await.iter() {
+                let ret: HashMap<String, f64> = Python::attach(|py| {
+                    let module = module.bind(py);
+                    trace!("running module");
+                    module
+                        .getattr("run")
+                        .unwrap()
+                        .call1((nparr.bind(py),))
+                        .unwrap()
+                        .extract()
+                        .unwrap()
+                });
 
-                    for (k, v) in ret {
-                        let (k, v) = (k.clone(), v.clone());
-                        trace!("{k}: {v}");
-                        let topic_name = format!("/chalkydri/subsystems/{k}");
+                for (k, v) in ret {
+                    let (k, v) = (k.clone(), v.clone());
+                    trace!("{k}: {v}");
+                    let topic_name = format!("/chalkydri/subsystems/{k}");
 
-                        let mut topic = Nt
-                            .topic(topic_name.clone())
-                            .publish::<f64>(Properties::default())
-                            .await
-                            .unwrap();
-                        topic.set(v).await.unwrap();
-                    }
+                    let mut topic = Nt
+                        .topic(topic_name.clone())
+                        .publish::<f64>(Properties::default())
+                        .await
+                        .unwrap();
+                    topic.set(v).await.unwrap();
                 }
-            })
-            .await;
+            }
         }
 
         Ok::<Self::Output, Self::Error>(())
     }
 }
 
+#[derive(Clone)]
 pub struct PythonPreproc {
     videoconvertscale: Arc<Element>,
     filter: Arc<Element>,
@@ -162,24 +164,6 @@ impl Preprocessor for PythonPreproc {
     }
     fn unlink(&self, src: Element, sink: Element) {
         Element::unlink_many([&src, &self.videoconvertscale, &self.filter, &sink]);
-    }
-    fn sampler(
-        appsink: &chalkydri_core::gstreamer_app::AppSink,
-        tx: chalkydri_core::tokio::sync::watch::Sender<Option<Arc<Self::Frame>>>,
-    ) -> Result<Option<()>, Error> {
-        let sample = appsink
-            .pull_sample()
-            .map_err(|_| Error::FailedToPullSample)?;
-        let buf = sample.buffer().unwrap();
-        let buf = buf
-            .to_owned()
-            .into_mapped_buffer_readable()
-            .unwrap()
-            .to_vec();
-
-        tx.send(Some(Arc::new(buf))).unwrap();
-
-        Ok(Some(()))
     }
 }
 

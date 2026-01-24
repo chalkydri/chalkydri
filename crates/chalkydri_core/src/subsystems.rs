@@ -5,10 +5,14 @@ use tokio::sync::watch;
 
 use crate::{config, preprocs::Preprocessor};
 
-pub enum SubsystemEvent<S: Subsystem> {
+/// Subsystem control message
+#[derive(Clone)]
+pub enum SubsystemCtrl {
+    //<S: Subsystem> {
     Start,
     Stop,
-    ConfigUpdate(S::Config),
+    //ConfigUpdate(S::Config),
+    CamUpdate(config::Camera),
 }
 
 /// A processing subsystem
@@ -23,6 +27,8 @@ pub enum SubsystemEvent<S: Subsystem> {
 /// Make sure to pay attention to and respect each subsystem's documentation and structure.
 pub trait Subsystem: Sized {
     const NAME: &'static str;
+    /// Whether the subsystem is required to stay on the same thread
+    const THREAD_LOCAL: bool = false;
 
     type Config: Debug + Send + Sync + Clone + 'static;
     type Preproc: Preprocessor;
@@ -30,14 +36,14 @@ pub trait Subsystem: Sized {
     type Error: Debug + Send + 'static;
 
     /// Initialize the subsystem
-    async fn init() -> Result<Self, Self::Error>;
+    async fn init(nt: &NTClientHandle, cam_config: config::Camera) -> Result<Self, Self::Error>;
 
     /// Process a frame
     async fn process(
         &self,
         nt: &NTClientHandle,
         cam_config: config::Camera,
-        rx: watch::Receiver<Option<Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>>,
+        frame: Arc<Vec<u8>>,
     ) -> Result<Self::Output, Self::Error>;
 
     /// Do anything that may be required to shut down the subsystem
@@ -64,14 +70,14 @@ impl<P: Preprocessor> Subsystem for NoopSubsys<P> {
     type Output = ();
     type Error = ();
 
-    async fn init() -> Result<Self, Self::Error> {
+    async fn init(_nt: &NTClientHandle, _cam_config: config::Camera) -> Result<Self, Self::Error> {
         Ok(Self::new())
     }
     async fn process(
         &self,
         _nt: &NTClientHandle,
         _cam_config: config::Camera,
-        _rx: watch::Receiver<Option<Arc<<<Self as Subsystem>::Preproc as Preprocessor>::Frame>>>,
+        _rx: Arc<Vec<u8>>,
     ) -> Result<Self::Output, Self::Error> {
         Ok(())
     }

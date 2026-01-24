@@ -1,62 +1,24 @@
-use std::marker::PhantomData;
 use std::sync::Arc;
 
-use gstreamer::{Element, ElementFactory, FlowSuccess, Pipeline, prelude::*};
-use gstreamer_app::{AppSink, AppSinkCallbacks};
+use futures_util::StreamExt;
+use gstreamer::{prelude::*, Caps, Element, ElementFactory, FlowSuccess, Pipeline};
+use gstreamer_app::{app_sink::AppSinkStream, AppSink, AppSinkCallbacks};
 use tokio::sync::watch;
 
 use chalkydri_core::prelude::*;
 
-/// A set of Gstreamer elements used to preprocess the stream for a [Subsystem]
-pub trait Preprocessor {
-    type Subsys: Subsystem;
-    type Frame: Clone + Send + Sync + 'static;
-
-    fn new(pipeline: &Pipeline) -> Self;
-    fn link(&self, src: Element, sink: Element);
-    fn unlink(&self, src: Element, sink: Element);
-    fn sampler(
-        appsink: &AppSink,
-        tx: watch::Sender<Option<Arc<Self::Frame>>>,
-    ) -> Result<Option<()>, Error>;
-}
-
-/// A no-op preprocessor for subsystems that don't require any preprocessing
-pub struct NoopPreproc<S: Subsystem>(PhantomData<S>);
-impl<S: Subsystem> NoopPreproc<S> {
-    #[inline(always)]
-    pub const fn new() -> Self {
-        Self(PhantomData)
-    }
-}
-impl<S: Subsystem> Preprocessor for NoopPreproc<S> {
-    type Subsys = S;
-    type Frame = ();
-
-    fn new(_pipeline: &Pipeline) -> Self {
-        Self::new()
-    }
-    fn link(&self, _src: Element, _dst: Element) {}
-    fn unlink(&self, _src: Element, _dst: Element) {}
-    fn sampler(
-        appsink: &AppSink,
-        tx: watch::Sender<Option<Arc<Self::Frame>>>,
-    ) -> Result<Option<()>, Error> {
-        Ok(None)
-    }
-}
-
 /// Wrapper around [Preprocessor] implementations that handles the [AppSink] junk
-pub struct PreprocWrap<P: Preprocessor> {
+#[derive(Clone)]
+pub struct PreprocWrap<P: Preprocessor<Frame = Vec<u8>>> {
     inner: P,
     appsink: Element,
     tx: watch::Sender<Option<Arc<P::Frame>>>,
     rx: watch::Receiver<Option<Arc<P::Frame>>>,
 }
-impl<P: Preprocessor> PreprocWrap<P> {
+impl<P: Preprocessor<Frame = Vec<u8>>> PreprocWrap<P> {
     /// Create a new wrapped preprocessor
     pub fn new(pipeline: &Pipeline) -> Self {
-        let inner = <P as Preprocessor>::new(pipeline);
+        let inner = P::init(pipeline);
 
         let appsink = ElementFactory::make("appsink").build().unwrap();
 
@@ -87,7 +49,7 @@ impl<P: Preprocessor> PreprocWrap<P> {
     }
 
     /// Set up the sampler
-    pub fn setup_sampler(
+    pub async fn setup_sampler(
         &self,
         tx: Option<watch::Sender<Option<Arc<P::Frame>>>>,
     ) -> Result<Option<()>, Error> {
@@ -100,11 +62,16 @@ impl<P: Preprocessor> PreprocWrap<P> {
             self.tx.clone()
         };
 
+        //let stream = std::pin::pin!(appsink.stream());
+
         appsink.set_callbacks(
             AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
                     trace!("got sample");
-                    P::sampler(appsink, tx.clone()).unwrap();
+                    let sample = appsink.pull_sample().unwrap();
+                    let buf = sample.buffer().unwrap();
+                    let buf = buf.to_owned().into_mapped_buffer_readable().unwrap().to_vec();
+                    tx.send(Some(Arc::new(buf))).unwrap();
                     Ok(FlowSuccess::Ok)
                 })
                 .build(),
@@ -119,7 +86,8 @@ impl<P: Preprocessor> PreprocWrap<P> {
     }
 
     /// Get the preprocessed frame buffer
-    pub fn rx(&self) -> watch::Receiver<Option<Arc<P::Frame>>> {
-        self.rx.clone()
+    pub fn rx(&self) -> AppSinkStream {
+        Element::dynamic_cast::<AppSink>(self.appsink.clone()).unwrap().stream()
     }
 }
+

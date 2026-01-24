@@ -7,6 +7,7 @@
 		DarkMode,
 		Indicator,
 		Label,
+		Modal,
 		Navbar,
 		NavBrand,
 		NavHamburger,
@@ -22,8 +23,11 @@
 	} from 'flowbite-svelte';
 	import { CameraIcon, Hammer, HammerIcon, HomeIcon, PaintRollerIcon, PencilRulerIcon, SettingsIcon } from 'lucide-svelte';
 	import type { Camera, Info } from '$lib/api';
+	import CamConfig from './settings/+components/CamConfig.svelte';
+	import { config, loadConfig, updateConfig } from '$lib/config';
 
 	let hide_sidebar = $state(false);
+  let new_cam_setup: Camera|null = $state(null);
 
 	let connected = $state(false);
 	connected_.subscribe((val: boolean) => {
@@ -53,7 +57,14 @@
 <Toast transition={slide} class="rounded-md dark:bg-slate-700" position="top-right">
 	<P>A new camera is available!</P>
   <P>{ cam.id }</P>
-	<Button class="mt-2" color="blue" size="sm">Set up now</Button>
+	<Button class="mt-2" color="blue" size="sm" on:click={async () => {
+    await loadConfig();
+    if (config && config.cameras) {
+      config.cameras.push(cam);
+    }
+    await updateConfig(config!);
+    new_cam_setup = cam;
+  }}>Set up now</Button>
 </Toast>
 {/each}
 

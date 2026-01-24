@@ -89,47 +89,6 @@ impl Preprocessor for MjpegProc {
             &sink,
         ]);
     }
-
-    #[tracing::instrument(skip_all)]
-    fn sampler(
-        appsink: &AppSink,
-        tx: watch::Sender<Option<Arc<Self::Frame>>>,
-    ) -> Result<Option<()>, Error> {
-        let sample = appsink
-            .pull_sample()
-            .map_err(|_| Error::FailedToPullSample)
-            .unwrap();
-
-        match sample.buffer() {
-            Some(buf) => {
-                let jpeg = turbojpeg::compress(
-                    turbojpeg::Image {
-                        width: 640,
-                        height: 480,
-                        pitch: 640 * 3,
-                        format: turbojpeg::PixelFormat::RGB,
-                        pixels: buf
-                            .to_owned()
-                            .into_mapped_buffer_readable()
-                            .unwrap()
-                            .to_vec()
-                            .as_slice(),
-                    },
-                    50,
-                    turbojpeg::Subsamp::None,
-                )
-                .unwrap();
-
-                while let Err(err) = tx.send(Some(Arc::new(jpeg.to_vec().into()))) {
-                    error!("error sending frame: {err:?}");
-                }
-            }
-            None => {
-                error!("failed to get buffer");
-            }
-        }
-        Ok(Some(()))
-    }
 }
 impl Stream for MjpegProc {
     type Item = Result<Bytes, Error>;
@@ -145,11 +104,26 @@ impl Stream for MjpegProc {
                     let bytes =
                         if let Some(frame) = self.get_mut().rx.borrow_and_update().as_deref() {
                             trace!("got mjpeg frame");
+
+                            let frame = turbojpeg::compress(
+                                turbojpeg::Image {
+                                    width: 640,
+                                    height: 480,
+                                    pitch: 640 * 3,
+                                    format: turbojpeg::PixelFormat::RGB,
+                                    pixels: frame.as_slice(),
+                                },
+                                50,
+                                turbojpeg::Subsamp::None,
+                            )
+                            .unwrap()
+                            .to_vec();
+
                             [
                                 b"--frame\r\nContent-Length: ",
                                 frame.len().to_string().as_bytes(),
                                 b"\r\nContent-Type: image/jpeg\r\n\r\n",
-                                frame,
+                                frame.as_slice(),
                             ]
                             .concat()
                         } else {
