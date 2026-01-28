@@ -51,6 +51,7 @@ pub mod cameras;
 //mod pose;
 mod subsystems;
 mod utils;
+mod resources;
 
 #[cfg(feature = "web")]
 use api::run_api;
