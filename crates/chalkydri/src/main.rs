@@ -52,6 +52,7 @@ pub mod cameras;
 mod subsystems;
 mod utils;
 mod resources;
+pub mod comm;
 
 #[cfg(feature = "web")]
 use api::run_api;
@@ -68,7 +69,7 @@ use re_ws_comms::RerunServerPort;
 use std::{error::Error, path::{Path, PathBuf}, str::FromStr};
 use tokio::sync::mpsc;
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
-use crate::cameras::pipeline::CamPipeline;
+pub use crate::{cameras::pipeline::CamPipeline, subsystems::calibration::Calibrator};
 
 // mimalloc is an excellent general purpose allocator
 #[global_allocator]

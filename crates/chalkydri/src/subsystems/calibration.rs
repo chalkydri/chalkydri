@@ -1,3 +1,5 @@
+use cu_sensor_payloads::CuImage;
+use cu29::prelude::*;
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 
 use aprilgrid::{
@@ -13,7 +15,8 @@ use camera_intrinsic_calibration::{
 use camera_intrinsic_model::{
     GenericModel, OpenCVModel5,
 };
-use image::{DynamicImage, RgbImage};
+use cu29::cutask::CuTask;
+use image::{DynamicImage, GrayImage, Luma, RgbImage};
 
 use gstreamer::{
     Buffer, Element,
@@ -41,74 +44,16 @@ const MIN_CORNERS: usize = 24;
 
 /// A camera calibrator
 pub struct Calibrator {
-    //<P: Preprocessor<Frame = Image<u8>>> {
-    //preproc: P,
-    valve: WeakRef<Element>,
     det: TagDetector,
     board: Board,
     frame_feats: Vec<FrameFeature>,
     cam_model: GenericModel<f64>,
     start: Instant,
-    rx: watch::Receiver<Option<Buffer>>,
 }
 impl Calibrator {
-    /// Initialize a new calibrator
-    pub fn new(valve: WeakRef<Element>, rx: watch::Receiver<Option<Buffer>>) -> Self {
-        Self {
-            det: TagDetector::new(&TagFamily::T36H11, None),
-            board: create_default_6x6_board(),
-            frame_feats: Vec::new(),
-            cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
-            start: Instant::now(),
-            rx,
-            valve,
-        }
-    }
-
-    /// Process a frame
-    pub fn step(&mut self) -> usize {
-        let valve = self.valve.upgrade().unwrap();
-        valve.set_property("drop", false);
-
-        if self.frame_feats.len() < 200 {
-            let mut frame_feat = None;
-            while frame_feat.is_none() {
-                if self.rx.has_changed().is_ok() && self.rx.has_changed().unwrap() {
-                    let val = self.rx.borrow_and_update().clone();
-                    tracing::debug!("got frame");
-                    //valve.set_property("drop", true);
-                    let img = DynamicImage::ImageRgb8(
-                        RgbImage::from_vec(
-                            1280,
-                            720,
-                            val.unwrap().into_mapped_buffer_readable().unwrap().to_vec(),
-                        )
-                        .unwrap(),
-                    );
-
-                    frame_feat =
-                        camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(
-                            &self.det,
-                            &img,
-                            &create_default_6x6_board(),
-                            MIN_CORNERS,
-                            self.start.elapsed().as_nanos() as i64,
-                        );
-                }
-            }
-
-            self.frame_feats.push(frame_feat.unwrap());
-        }
-
-        self.frame_feats.len()
-    }
-
     /// Calibrate
     pub fn calibrate(&mut self) -> Option<GenericModel<f64>> {
         let mut calib_res = None;
-
-        let valve = self.valve.upgrade().unwrap();
-        valve.set_property("drop", true);
 
         for i in 0..5 {
             calib_res = init_and_calibrate_one_camera(
@@ -140,5 +85,61 @@ impl Calibrator {
         } else {
             Some(calib_res.unwrap().0)
         }
+    }
+}
+impl Freezable for Calibrator {}
+impl CuSinkTask for Calibrator {
+    type Input<'m> = input_msg!(CuImage<Vec<u8>>);
+    type Resources<'r> = ();
+
+    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized
+    {
+        Ok(Self {
+            det: TagDetector::new(&TagFamily::T36H11, None),
+            board: create_default_6x6_board(),
+            frame_feats: Vec::new(),
+            cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
+            start: Instant::now(),
+        })
+    }
+
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        if self.frame_feats.len() < 200 {
+            tracing::debug!("got frame");
+            //valve.set_property("drop", true);
+            if let Some(img) = input.payload() {
+            let img = DynamicImage::ImageLuma8(
+                GrayImage::from_vec(
+                    1280,
+                    720,
+                    img.as_image_buffer::<Luma<u8>>().expect("image buffer").to_vec(),
+                )
+                .unwrap(),
+            );
+
+            if let Some(frame_feat) =
+                camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(
+                    &self.det,
+                    &img,
+                    &create_default_6x6_board(),
+                    MIN_CORNERS,
+                    self.start.elapsed().as_nanos() as i64,
+                ) {
+                self.frame_feats.push(frame_feat);
+            }
+        }
+        }
+
+        Ok(())
     }
 }
