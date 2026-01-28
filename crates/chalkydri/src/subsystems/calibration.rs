@@ -2,19 +2,14 @@ use cu_sensor_payloads::CuImage;
 use cu29::prelude::*;
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 
-use aprilgrid::{
-    TagFamily,
-    detector::TagDetector,
-};
+use aprilgrid::{TagFamily, detector::TagDetector};
 use camera_intrinsic_calibration::{
     board::{Board, create_default_6x6_board},
     detected_points::FrameFeature,
     types::CalibParams,
     util::*,
 };
-use camera_intrinsic_model::{
-    GenericModel, OpenCVModel5,
-};
+use camera_intrinsic_model::{GenericModel, OpenCVModel5};
 use cu29::cutask::CuTask;
 use image::{DynamicImage, GrayImage, Luma, RgbImage};
 
@@ -94,7 +89,7 @@ impl CuSinkTask for Calibrator {
 
     fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
         Ok(Self {
             det: TagDetector::new(&TagFamily::T36H11, None),
@@ -118,26 +113,29 @@ impl CuSinkTask for Calibrator {
             tracing::debug!("got frame");
             //valve.set_property("drop", true);
             if let Some(img) = input.payload() {
-            let img = DynamicImage::ImageLuma8(
-                GrayImage::from_vec(
-                    1280,
-                    720,
-                    img.as_image_buffer::<Luma<u8>>().expect("image buffer").to_vec(),
-                )
-                .unwrap(),
-            );
+                let img = DynamicImage::ImageLuma8(
+                    GrayImage::from_vec(
+                        1280,
+                        720,
+                        img.as_image_buffer::<Luma<u8>>()
+                            .expect("image buffer")
+                            .to_vec(),
+                    )
+                    .unwrap(),
+                );
 
-            if let Some(frame_feat) =
-                camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(
-                    &self.det,
-                    &img,
-                    &create_default_6x6_board(),
-                    MIN_CORNERS,
-                    self.start.elapsed().as_nanos() as i64,
-                ) {
-                self.frame_feats.push(frame_feat);
+                if let Some(frame_feat) =
+                    camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(
+                        &self.det,
+                        &img,
+                        &create_default_6x6_board(),
+                        MIN_CORNERS,
+                        self.start.elapsed().as_nanos() as i64,
+                    )
+                {
+                    self.frame_feats.push(frame_feat);
+                }
             }
-        }
         }
 
         Ok(())

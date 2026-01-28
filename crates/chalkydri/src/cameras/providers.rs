@@ -1,7 +1,11 @@
 use std::sync::{Arc, LazyLock};
 
 use chalkydri_core::prelude::Mutex;
-use cu29::{bundle_resources, cutask::{CuMsgPayload, CuSrcTask, Freezable}, prelude::ResourceBundle};
+use cu29::{
+    bundle_resources,
+    cutask::{CuMsgPayload, CuSrcTask, Freezable},
+    prelude::ResourceBundle,
+};
 use tokio::sync::mpsc;
 
 use gstreamer::{
@@ -16,7 +20,7 @@ pub(crate) static PROVIDER: LazyLock<V4l2Provider> = LazyLock::new(|| {
 });
 
 /// An event from a camera provider
-#[derive(Clone, Debug)]//, Default)]
+#[derive(Clone, Debug)] //, Default)]
 pub(crate) enum ProviderEvent {
     //#[default]
     //Null,
@@ -95,7 +99,12 @@ impl CamProvider for V4l2Provider {
         let rx = Mutex::new(rx);
         let cached_devs = Arc::new(Mutex::new(Vec::new()));
 
-        Self { inner, rx, tx, cached_devs }
+        Self {
+            inner,
+            rx,
+            tx,
+            cached_devs,
+        }
     }
     fn get_id(dev: &Device) -> String {
         dev.property::<Structure>("properties")
@@ -135,9 +144,9 @@ impl V4l2Provider {
                         cached_devs.lock().push(dev.clone());
                     }
                     MessageView::DeviceRemoved(msg) => {
-                        cached_devs.lock().retain(|dev| {
-                            Self::get_id(dev) != Self::get_id(&msg.device())
-                        });
+                        cached_devs
+                            .lock()
+                            .retain(|dev| Self::get_id(dev) != Self::get_id(&msg.device()));
                     }
                     _ => unimplemented!(),
                 }

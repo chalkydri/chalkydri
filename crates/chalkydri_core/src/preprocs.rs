@@ -46,7 +46,10 @@ impl<S: Subsystem> SubsysPreprocessor for NoopPreproc<S> {
 
 /// Run frame processing loop
 #[deprecated]
-pub async fn frame_proc_loop<P: SubsysPreprocessor, F: AsyncFnMut(P::Frame) + Sync + Send + 'static>(
+pub async fn frame_proc_loop<
+    P: SubsysPreprocessor,
+    F: AsyncFnMut(P::Frame) + Sync + Send + 'static,
+>(
     mut rx: watch::Receiver<Option<Arc<P::Frame>>>,
     mut func: F,
 ) {

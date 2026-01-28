@@ -12,9 +12,9 @@ extern crate cu_bincode as bincode;
 
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
+use bincode::{Decode, Encode};
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
-use bincode::{Encode, Decode};
 use cu29::prelude::*;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -197,7 +197,7 @@ impl CuTask for AprilTags {
 
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
         if let Some(config) = _config {
             let family_cfg: String = config.get("family").unwrap_or(FAMILY.to_string());
@@ -284,8 +284,7 @@ impl CuTask for AprilTags {
     }
 }
 
-pub struct ApriltagsProcessor {
-}
+pub struct ApriltagsProcessor {}
 impl Freezable for ApriltagsProcessor {}
 impl CuSinkTask for ApriltagsProcessor {
     type Input<'m> = input_msg!('m, AprilTagDetections);
@@ -293,7 +292,7 @@ impl CuSinkTask for ApriltagsProcessor {
 
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
         Ok(Self {})
     }

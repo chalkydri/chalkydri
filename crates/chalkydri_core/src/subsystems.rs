@@ -1,4 +1,9 @@
-use std::{fmt::Debug, marker::PhantomData, ops::{Coroutine, CoroutineState}, sync::Arc};
+use std::{
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Coroutine, CoroutineState},
+    sync::Arc,
+};
 
 use nt_client::ClientHandle as NTClientHandle;
 use tokio::sync::watch;
@@ -35,10 +40,13 @@ pub trait Subsystem: Sized {
     type Proc: SubsysProcessor;
 
     /// Initialize the subsystem
-    async fn init(nt: &NTClientHandle, cam_config: config::Camera) -> Result<Self, <Self::Proc as SubsysProcessor>::Error>;
+    async fn init(
+        nt: &NTClientHandle,
+        cam_config: config::Camera,
+    ) -> Result<Self, <Self::Proc as SubsysProcessor>::Error>;
 }
 
-pub trait SubsysProcessor: Coroutine<(Self::Subsys, Arc<Vec<u8>>,)> {
+pub trait SubsysProcessor: Coroutine<(Self::Subsys, Arc<Vec<u8>>)> {
     type Subsys: Subsystem<Proc = Self>;
 
     type Output: Send + 'static;
@@ -77,7 +85,10 @@ impl<P: SubsysPreprocessor> Subsystem for NoopSubsys<P> {
     type Preproc = P;
     type Proc = Self;
 
-    async fn init(_nt: &NTClientHandle, _cam_config: config::Camera) -> Result<Self, <Self as SubsysProcessor>::Error> {
+    async fn init(
+        _nt: &NTClientHandle,
+        _cam_config: config::Camera,
+    ) -> Result<Self, <Self as SubsysProcessor>::Error> {
         Ok(Self::new())
     }
 }
@@ -97,11 +108,14 @@ impl<P: SubsysPreprocessor> SubsysProcessor for NoopSubsys<P> {
     }
 }
 
-impl<P: SubsysPreprocessor> Coroutine<(Self, Arc<Vec<u8>>,)> for NoopSubsys<P> {
+impl<P: SubsysPreprocessor> Coroutine<(Self, Arc<Vec<u8>>)> for NoopSubsys<P> {
     type Yield = <Self as SubsysProcessor>::Output;
     type Return = ();
-    
-    fn resume(self: std::pin::Pin<&mut Self>, arg: (Self, Arc<Vec<u8>>,)) -> std::ops::CoroutineState<Self::Yield, Self::Return> {
+
+    fn resume(
+        self: std::pin::Pin<&mut Self>,
+        arg: (Self, Arc<Vec<u8>>),
+    ) -> std::ops::CoroutineState<Self::Yield, Self::Return> {
         CoroutineState::Yielded(())
     }
 }

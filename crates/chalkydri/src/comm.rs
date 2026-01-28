@@ -1,8 +1,8 @@
-use cu29::prelude::*;
 use cu_zenoh_bridge::ZenohBridge;
+use cu29::prelude::*;
 
 pub mod messages {
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Default, Clone, Serialize, Deserialize)]
     pub struct Ping {

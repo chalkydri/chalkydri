@@ -3,7 +3,6 @@
 
 //! Convert a GStreamer buffer into a CuImage for downstream tasks.
 
-
 use cu_gstreamer::CuGstBuffer;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::prelude::*;

@@ -13,10 +13,7 @@ impl NetworkTables {
         let rt = Runtime::new().unwrap();
         let nt = Client::new(NewClientOptions::default());
 
-        Self {
-            rt,
-            nt,
-        }
+        Self { rt, nt }
     }
     pub fn run(&self, mut fut: impl AsyncFnMut(&ClientHandle)) {
         let handle = self.nt.handle();
@@ -29,23 +26,52 @@ impl NetworkTables {
 
         tokio::spawn(async move {
             let camera_root = photon_root.child("/test");
-            let driver_mode = camera_root.child("/driverMode").publish::<bool>(Default::default()).await.unwrap();
-            let fps_limit = camera_root.child("/fpsLimit").publish::<i32>(Default::default()).await.unwrap();
-            let pipeline_index_state = camera_root.child("/pipelineIndexState").publish::<i32>(Default::default()).await.unwrap();
-            let heartbeat = camera_root.child("/heartbeat").publish::<i32>(Default::default()).await.unwrap();
-            let led_mode_state = camera_root.child("/ledModeState").publish::<i32>(Default::default()).await.unwrap();
-            let version = camera_root.child("/version").publish::<String>(Default::default()).await.unwrap();
+            let driver_mode = camera_root
+                .child("/driverMode")
+                .publish::<bool>(Default::default())
+                .await
+                .unwrap();
+            let fps_limit = camera_root
+                .child("/fpsLimit")
+                .publish::<i32>(Default::default())
+                .await
+                .unwrap();
+            let pipeline_index_state = camera_root
+                .child("/pipelineIndexState")
+                .publish::<i32>(Default::default())
+                .await
+                .unwrap();
+            let heartbeat = camera_root
+                .child("/heartbeat")
+                .publish::<i32>(Default::default())
+                .await
+                .unwrap();
+            let led_mode_state = camera_root
+                .child("/ledModeState")
+                .publish::<i32>(Default::default())
+                .await
+                .unwrap();
+            let version = camera_root
+                .child("/version")
+                .publish::<String>(Default::default())
+                .await
+                .unwrap();
         });
-        client.topics([
-            "/FMSInfo/FMSControlData",
-            "/FMSInfo/EventName",
-            "/FMSInfo/MatchType",
-            "/FMSInfo/MatchNumber",
-            "/FMSInfo/ReplayNumber",
-            "/FMSInfo/isRedAlliance",
-            "/FMSInfo/StationNumber",
-            "/photonvision/apriltag_field_layout",
-        ].iter().map(|t| t.to_string()).collect::<Vec<_>>());
+        client.topics(
+            [
+                "/FMSInfo/FMSControlData",
+                "/FMSInfo/EventName",
+                "/FMSInfo/MatchType",
+                "/FMSInfo/MatchNumber",
+                "/FMSInfo/ReplayNumber",
+                "/FMSInfo/isRedAlliance",
+                "/FMSInfo/StationNumber",
+                "/photonvision/apriltag_field_layout",
+            ]
+            .iter()
+            .map(|t| t.to_string())
+            .collect::<Vec<_>>(),
+        );
     }
 }
 
@@ -53,5 +79,5 @@ pub struct PhonyVisionBundle;
 bundle_resources!(PhonyVisionBundle: PhonyVision);
 
 pub struct PhonyVision {
-    coprocessors: nt_client::subscribe::Subscriber
+    coprocessors: nt_client::subscribe::Subscriber,
 }

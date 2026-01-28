@@ -1,17 +1,20 @@
+use std::sync::Arc;
 use std::sync::mpsc::{self, Sender};
 use std::time::Duration;
 use std::{marker::PhantomData, ops::ControlFlow};
-use std::sync::Arc;
 
 use cu_gstreamer::CuGstBuffer;
 use cu29::prelude::*;
 use gstreamer::{
-    Caps, DebugGraphDetails, Device, Element, ElementFactory, FlowSuccess, Pipeline, Sample, State, Structure, prelude::*
+    Caps, DebugGraphDetails, Device, Element, ElementFactory, FlowSuccess, Pipeline, Sample, State,
+    Structure, prelude::*,
 };
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use tokio::sync::watch;
 
-use crate::cameras::providers::{CamProvider, CamProviderBundle, CamProviderBundleId, V4l2Provider};
+use crate::cameras::providers::{
+    CamProvider, CamProviderBundle, CamProviderBundleId, V4l2Provider,
+};
 use crate::{cameras::preproc::PreprocWrap, subsystems::SubsysManager};
 use chalkydri_core::prelude::*;
 
@@ -31,7 +34,6 @@ pub struct CamPipeline {
     videoflip: Element,
     appsink: AppSink,
     sample_queue: Arc<mpsc::Receiver<Sample>>,
-
     //pub mjpeg_preproc: PreprocWrap<MjpegProc>,
 }
 impl CamPipeline {
@@ -67,27 +69,28 @@ impl CamPipeline {
             //)
             .property(
                 "caps",
-                &Caps::builder(
-                    "video/x-raw"
-                )
-                //.field("width", settings.width as i32)
-                .field("width", 1280)
-                //.field("height", settings.height as i32)
-                .field("height", 720)
-                //.field("format", "DMA_DRM")
-                //.field(
-                //    "framerate",
-                //    &Fraction::new(
-                //        settings.frame_rate.num as i32,
-                //        settings.frame_rate.den as i32,
-                //    ),
-                //)
-                .build(),
+                &Caps::builder("video/x-raw")
+                    //.field("width", settings.width as i32)
+                    .field("width", 1280)
+                    //.field("height", settings.height as i32)
+                    .field("height", 720)
+                    //.field("format", "DMA_DRM")
+                    //.field(
+                    //    "framerate",
+                    //    &Fraction::new(
+                    //        settings.frame_rate.num as i32,
+                    //        settings.frame_rate.den as i32,
+                    //    ),
+                    //)
+                    .build(),
             )
             .build()
             .unwrap();
 
-        let videoconvert = ElementFactory::make("videoconvert").name("videoconvert").build().unwrap();
+        let videoconvert = ElementFactory::make("videoconvert")
+            .name("videoconvert")
+            .build()
+            .unwrap();
 
         let filter = ElementFactory::make("capsfilter")
             .name("capsfilter")
@@ -111,22 +114,20 @@ impl CamPipeline {
             //)
             .property(
                 "caps",
-                &Caps::builder(
-                    "video/x-raw"
-                )
-                //.field("width", settings.width as i32)
-                .field("width", 1280)
-                //.field("height", settings.height as i32)
-                .field("height", 720)
-                .field("format", "GRAY8")
-                //.field(
-                //    "framerate",
-                //    &Fraction::new(
-                //        settings.frame_rate.num as i32,
-                //        settings.frame_rate.den as i32,
-                //    ),
-                //)
-                .build(),
+                &Caps::builder("video/x-raw")
+                    //.field("width", settings.width as i32)
+                    .field("width", 1280)
+                    //.field("height", settings.height as i32)
+                    .field("height", 720)
+                    .field("format", "GRAY8")
+                    //.field(
+                    //    "framerate",
+                    //    &Fraction::new(
+                    //        settings.frame_rate.num as i32,
+                    //        settings.frame_rate.den as i32,
+                    //    ),
+                    //)
+                    .build(),
             )
             .build()
             .unwrap();
@@ -151,14 +152,30 @@ impl CamPipeline {
         //let appsink = AppSink::builder().async_(true).build().unwrap();
 
         pipeline
-            .add_many([&input, &prefilter, &videoconvert, &filter, &jpegdec, &videoflip, &appsink])
+            .add_many([
+                &input,
+                &prefilter,
+                &videoconvert,
+                &filter,
+                &jpegdec,
+                &videoflip,
+                &appsink,
+            ])
             .unwrap();
 
         // If we're getting an MJPEG stream from the cam, it needs to first be decoded
         // if is_mjpeg {
         //     Element::link_many([&input, &jpegdec, &videoflip, &appsink]).unwrap();
         // } else {
-            Element::link_many([&input, &prefilter, &videoconvert, &filter, &videoflip, &appsink]).unwrap();
+        Element::link_many([
+            &input,
+            &prefilter,
+            &videoconvert,
+            &filter,
+            &videoflip,
+            &appsink,
+        ])
+        .unwrap();
         //}
 
         //let mjpeg_preproc = PreprocWrap::<MjpegProc>::new(&pipeline);
@@ -166,16 +183,19 @@ impl CamPipeline {
         //    .setup_sampler(Some(mjpeg_preproc.inner().tx.clone()))
         //    .unwrap();
 
-
         let (tx, rx) = mpsc::sync_channel(64);
         let sample_queue = Arc::new(rx);
         let appsink = appsink.clone().dynamic_cast::<AppSink>().unwrap();
-        appsink.set_callbacks(AppSinkCallbacks::builder().new_sample(move |appsink: &AppSink| {
-            println!("got sampleeeeeee");
-            let sample = appsink.pull_sample().unwrap();
-            tx.send(sample.clone()).unwrap();
-            Ok(FlowSuccess::Ok)
-        }).build());
+        appsink.set_callbacks(
+            AppSinkCallbacks::builder()
+                .new_sample(move |appsink: &AppSink| {
+                    println!("got sampleeeeeee");
+                    let sample = appsink.pull_sample().unwrap();
+                    tx.send(sample.clone()).unwrap();
+                    Ok(FlowSuccess::Ok)
+                })
+                .build(),
+        );
         appsink.set_sync(true);
         appsink.set_enable_last_sample(false);
 
@@ -190,7 +210,6 @@ impl CamPipeline {
             videoflip,
             appsink,
             sample_queue,
-
             //mjpeg_preproc,
         }
     }
@@ -273,12 +292,23 @@ impl CamPipeline {
     }
 }
 
-pub struct Resources { pub v4l2: Owned<V4l2Provider> }
+pub struct Resources {
+    pub v4l2: Owned<V4l2Provider>,
+}
 impl<'r> ResourceBindings<'r> for Resources {
     type Binding = CamProviderBundleId;
-    fn from_bindings(mgr: &'r mut ResourceManager, map: Option<&ResourceBindingMap<Self::Binding>>) -> CuResult<Self> {
-        let key = map.expect("v4l2 binding").get(Self::Binding::V4L2).expect("v4l2").typed();
-        Ok(Self { v4l2: mgr.take(key)? })
+    fn from_bindings(
+        mgr: &'r mut ResourceManager,
+        map: Option<&ResourceBindingMap<Self::Binding>>,
+    ) -> CuResult<Self> {
+        let key = map
+            .expect("v4l2 binding")
+            .get(Self::Binding::V4L2)
+            .expect("v4l2")
+            .typed();
+        Ok(Self {
+            v4l2: mgr.take(key)?,
+        })
     }
 }
 
@@ -289,7 +319,7 @@ impl CuSrcTask for CamPipeline {
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
         let cam_provider = resources.v4l2.0;
 
@@ -307,7 +337,7 @@ impl CuSrcTask for CamPipeline {
         cam_provider.start();
         std::thread::sleep(Duration::from_secs(2));
         let dev = cam_provider.get_by_id(cfgg.id.clone()).unwrap();
-        
+
         let pipeline = Self::new(dev, cfgg.clone());
 
         Ok(pipeline)
@@ -330,7 +360,7 @@ impl CuSrcTask for CamPipeline {
         //    .appsink
         //    .try_pull_sample(Some(gstreamer::ClockTime::from_useconds(
         //        20,
-        //    ))) 
+        //    )))
         //{
         //    Some(sample) => {
         //        let buf = sample.buffer().unwrap();

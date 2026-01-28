@@ -7,7 +7,6 @@
 //!
 
 #![feature(coroutines, coroutine_trait)]
-
 #![allow(unreachable_code)]
 #![deny(
     unused_must_use,
@@ -49,15 +48,19 @@ extern crate tfledge;
 mod api;
 pub mod cameras;
 //mod pose;
+pub mod comm;
+mod resources;
 mod subsystems;
 mod utils;
-mod resources;
-pub mod comm;
 
+pub use crate::{cameras::pipeline::CamPipeline, subsystems::calibration::Calibrator};
 #[cfg(feature = "web")]
 use api::run_api;
 use cameras::CamManager;
-use chalkydri_core::{config::{Cfg, Config}, prelude::{Nt, config}};
+use chalkydri_core::{
+    config::{Cfg, Config},
+    prelude::{Nt, config},
+};
 use cu29::prelude::*;
 use mimalloc::MiMalloc;
 #[cfg(feature = "rerun")]
@@ -66,10 +69,13 @@ use re_sdk::{MemoryLimit, RecordingStream};
 use re_web_viewer_server::WebViewerServerPort;
 #[cfg(feature = "rerun")]
 use re_ws_comms::RerunServerPort;
-use std::{error::Error, path::{Path, PathBuf}, str::FromStr};
+use std::{
+    error::Error,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use tokio::sync::mpsc;
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
-pub use crate::{cameras::pipeline::CamPipeline, subsystems::calibration::Calibrator};
 
 // mimalloc is an excellent general purpose allocator
 #[global_allocator]
@@ -156,7 +162,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let clock = copper_ctx.clock;
 
-    let mut app = App::new(clock.clone(), copper_ctx.unified_logger.clone(), None).expect("failed to create runtime");
+    let mut app = App::new(clock.clone(), copper_ctx.unified_logger.clone(), None)
+        .expect("failed to create runtime");
 
     app.run().unwrap();
 

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use futures_util::StreamExt;
-use gstreamer::{prelude::*, Caps, Element, ElementFactory, FlowSuccess, Pipeline};
-use gstreamer_app::{app_sink::AppSinkStream, AppSink, AppSinkCallbacks};
+use gstreamer::{Caps, Element, ElementFactory, FlowSuccess, Pipeline, prelude::*};
+use gstreamer_app::{AppSink, AppSinkCallbacks, app_sink::AppSinkStream};
 use tokio::sync::watch;
 
 use chalkydri_core::prelude::*;
@@ -70,7 +70,11 @@ impl<P: SubsysPreprocessor<Frame = Vec<u8>>> PreprocWrap<P> {
                     trace!("got sample");
                     let sample = appsink.pull_sample().unwrap();
                     let buf = sample.buffer().unwrap();
-                    let buf = buf.to_owned().into_mapped_buffer_readable().unwrap().to_vec();
+                    let buf = buf
+                        .to_owned()
+                        .into_mapped_buffer_readable()
+                        .unwrap()
+                        .to_vec();
                     tx.send(Some(Arc::new(buf))).unwrap();
                     Ok(FlowSuccess::Ok)
                 })
@@ -87,7 +91,8 @@ impl<P: SubsysPreprocessor<Frame = Vec<u8>>> PreprocWrap<P> {
 
     /// Get the preprocessed frame buffer
     pub fn rx(&self) -> AppSinkStream {
-        Element::dynamic_cast::<AppSink>(self.appsink.clone()).unwrap().stream()
+        Element::dynamic_cast::<AppSink>(self.appsink.clone())
+            .unwrap()
+            .stream()
     }
 }
-

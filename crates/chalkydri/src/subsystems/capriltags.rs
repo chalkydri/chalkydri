@@ -31,9 +31,7 @@ use re_types::{
 use std::time::Instant;
 use tokio::sync::{Mutex, watch};
 
-use crate::{
-    config, subsystems::Subsystem, subsystems::calibration::CalibratedModel,
-};
+use crate::{config, subsystems::Subsystem, subsystems::calibration::CalibratedModel};
 
 const TAG_SIZE: f64 = 0.1651;
 
@@ -46,7 +44,10 @@ impl CuTask for ApriltagsDetector {
     type Input<'m> = input_msg!();
     type Resources<'r> = ();
 
-    async fn init(nt: &nt_client::ClientHandle, cam_config: config::Camera) -> Result<Self, <Self::Proc as chalkydri_core::subsystems::SubsysProcessor>::Error> {
+    async fn init(
+        nt: &nt_client::ClientHandle,
+        cam_config: config::Camera,
+    ) -> Result<Self, <Self::Proc as chalkydri_core::subsystems::SubsysProcessor>::Error> {
         let det = Detector::builder()
             .add_family_bits(Family::tag_36h11(), 3)
             .build()
@@ -62,17 +63,15 @@ impl SubsysProcessor for CApriltagsDetector {
     type Output = ();
     type Error = Box<dyn std::error::Error + Send>;
 
-    fn stop(&mut self) {
-        
-    }
+    fn stop(&mut self) {}
 
     async fn process(
-            &self,
-            subsys: Self::Subsys,
-            nt: &nt_client::ClientHandle,
-            cam_config: config::Camera,
-            frame: Arc<Vec<u8>>,
-        ) -> Result<Self::Output, Self::Error> {
+        &self,
+        subsys: Self::Subsys,
+        nt: &nt_client::ClientHandle,
+        cam_config: config::Camera,
+        frame: Arc<Vec<u8>>,
+    ) -> Result<Self::Output, Self::Error> {
         let model = CalibratedModel::new(cam_config.calib.unwrap());
         let cam_name = cam_config.name.clone();
 

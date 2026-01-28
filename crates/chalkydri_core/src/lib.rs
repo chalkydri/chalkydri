@@ -5,7 +5,6 @@
 //!
 
 #![feature(coroutines, coroutine_trait)]
-
 #![allow(
     // This is only used in Chalkydri code
     async_fn_in_trait,

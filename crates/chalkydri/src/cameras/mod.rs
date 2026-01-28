@@ -3,10 +3,10 @@
  * PLES SEND HELP
  */
 
+pub(crate) mod gst_to_cu;
 pub(crate) mod mjpeg;
 pub(crate) mod pipeline;
 pub(crate) mod preproc;
-pub(crate) mod gst_to_cu;
 pub(crate) mod providers;
 mod publisher;
 //mod format_selection;
@@ -122,9 +122,12 @@ impl CamManager {
                     }
 
                     println!("new cam: {id}");
-                    let mut cams = if let Some(cams) = Cfg.read().cameras.clone() { cams } else { Vec::new() };
-                        cams.push(
-                    config::Camera {
+                    let mut cams = if let Some(cams) = Cfg.read().cameras.clone() {
+                        cams
+                    } else {
+                        Vec::new()
+                    };
+                    cams.push(config::Camera {
                         id,
                         possible_settings: Some(
                             dev.caps()
@@ -152,7 +155,8 @@ impl CamManager {
                                             frame_rate,
                                             format: Some(
                                                 cap.get::<String>("format").unwrap_or_else(|_| {
-                                                    let fmt = if cap.name().as_str() == "image/jpeg" {
+                                                    let fmt = if cap.name().as_str() == "image/jpeg"
+                                                    {
                                                         "mjpeg"
                                                     } else {
                                                         ""
