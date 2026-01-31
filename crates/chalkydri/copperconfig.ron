@@ -1,6 +1,7 @@
 (
   resources: [
     (id: "cam_provider", provider: "crate::cameras::providers::CamProviderBundle"),
+    (id: "comm", provider: "crate::comm::CommBundle"),
   ],
   tasks: [
     (
