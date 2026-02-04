@@ -50,8 +50,8 @@ pub mod cameras;
 //mod pose;
 pub mod comm;
 mod resources;
-mod utils;
 mod subsystems;
+mod utils;
 
 pub use subsystems::apriltags::AprilAdapter;
 

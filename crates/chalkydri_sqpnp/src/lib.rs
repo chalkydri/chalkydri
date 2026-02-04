@@ -1,7 +1,6 @@
 use nalgebra::{SMatrix, SVector};
 use std::ops::AddAssign; //trust.
 
-
 /*Usage:
     1. Create a Solver
     2. .solve with 3d points in space and their normalized 2d coordinate vectors on the camera
@@ -27,9 +26,9 @@ type Mat9x3 = SMatrix<f64, 9, 3>;
 fn nearest_so3(r_vec: &Vec9) -> Vec9 {
     //first make r_vec a matrix again
     let m = Mat3::from_column_slice(r_vec.as_slice());
-    
+
     let svd = m.svd(true, true);
-    let u = svd.u.unwrap_or_default(); 
+    let u = svd.u.unwrap_or_default();
     let vt = svd.v_t.unwrap_or_default();
 
     let mut rot = u * vt;
@@ -60,11 +59,14 @@ fn constraints_and_jacobian(r_vec: &Vec9) -> (Vec6, Mat6x9) {
     );
 
     let mut jac = Mat6x9::zeros();
-    
+
     //derivatives of normality constraints
-    jac.fixed_view_mut::<1, 3>(0, 0).copy_from(&(2.0 * c1.transpose()));
-    jac.fixed_view_mut::<1, 3>(1, 3).copy_from(&(2.0 * c2.transpose()));
-    jac.fixed_view_mut::<1, 3>(2, 6).copy_from(&(2.0 * c3.transpose()));
+    jac.fixed_view_mut::<1, 3>(0, 0)
+        .copy_from(&(2.0 * c1.transpose()));
+    jac.fixed_view_mut::<1, 3>(1, 3)
+        .copy_from(&(2.0 * c2.transpose()));
+    jac.fixed_view_mut::<1, 3>(2, 6)
+        .copy_from(&(2.0 * c3.transpose()));
 
     //derivatives of orthogonality
     jac.fixed_view_mut::<1, 3>(3, 0).copy_from(&c2.transpose());
@@ -73,12 +75,12 @@ fn constraints_and_jacobian(r_vec: &Vec9) -> (Vec6, Mat6x9) {
     jac.fixed_view_mut::<1, 3>(4, 6).copy_from(&c1.transpose()); //row 4, c1 . c3
     jac.fixed_view_mut::<1, 3>(5, 3).copy_from(&c3.transpose());
     jac.fixed_view_mut::<1, 3>(5, 6).copy_from(&c2.transpose()); //row 5, c2 . c3
-    
+
     (h, jac)
 }
 
 #[inline(always)]
-fn solve_newton(r: &Vec9, omega: &Mat9, h: &Vec6, jac: &Mat6x9) -> Option<Vec9>{
+fn solve_newton(r: &Vec9, omega: &Mat9, h: &Vec6, jac: &Mat6x9) -> Option<Vec9> {
     let mut lhs = Mat15::zeros(); //left hand side (KKT Matrix)
     lhs.fixed_view_mut::<9, 9>(0, 0).copy_from(omega);
     lhs.fixed_view_mut::<9, 6>(0, 9).copy_from(&jac.transpose());
@@ -91,13 +93,13 @@ fn solve_newton(r: &Vec9, omega: &Mat9, h: &Vec6, jac: &Mat6x9) -> Option<Vec9>{
     rhs.fixed_view_mut::<9, 1>(0, 0).copy_from(&(-omega_r));
     //constraint correction
     rhs.fixed_view_mut::<6, 1>(9, 0).copy_from(&(-h));
-    
+
     //lu used bc symmetric indef
     match lhs.lu().solve(&rhs) {
         Some(sol) => {
             let sol: Vec15 = sol;
             Some(sol.fixed_view::<9, 1>(0, 0).into_owned())
-        },
+        }
         None => None,
     }
 }
@@ -137,9 +139,12 @@ fn build_linear_system(points_3d: &[Vec3], points_2d: &[Vec3]) -> LinearSys {
         q_rt.fixed_view_mut::<3, 3>(6, 0).add_assign(&pz);
 
         //diagonal
-        q_rr.fixed_view_mut::<3, 3>(0, 0).add_assign(&px.scale(p_3d.x));
-        q_rr.fixed_view_mut::<3, 3>(3, 3).add_assign(&py.scale(p_3d.y));
-        q_rr.fixed_view_mut::<3, 3>(6, 6).add_assign(&pz.scale(p_3d.z));
+        q_rr.fixed_view_mut::<3, 3>(0, 0)
+            .add_assign(&px.scale(p_3d.x));
+        q_rr.fixed_view_mut::<3, 3>(3, 3)
+            .add_assign(&py.scale(p_3d.y));
+        q_rr.fixed_view_mut::<3, 3>(6, 6)
+            .add_assign(&pz.scale(p_3d.z));
 
         //not diagonal
         let pxy = px.scale(p_3d.y);
@@ -156,10 +161,14 @@ fn build_linear_system(points_3d: &[Vec3], points_2d: &[Vec3]) -> LinearSys {
     }
 
     let q_tt_inv = q_tt.try_inverse().unwrap_or_default();
-    let temp = q_rt * q_tt_inv; 
+    let temp = q_rt * q_tt_inv;
     let omega = q_rr - temp * q_rt.transpose();
 
-    LinearSys { omega, q_tt_inv, q_rt }
+    LinearSys {
+        omega,
+        q_tt_inv,
+        q_rt,
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -170,7 +179,7 @@ pub struct SqPnP {
 
 impl Default for SqPnP {
     fn default() -> Self {
-        Self{
+        Self {
             max_iter: 15,
             tol_sq: 1e-16,
         }
@@ -178,14 +187,16 @@ impl Default for SqPnP {
 }
 
 impl SqPnP {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         Self::default()
     }
-    pub fn with_max_iter(mut self, max_iter: usize) -> Self { //number of iterations in gradient descent
+    pub fn with_max_iter(mut self, max_iter: usize) -> Self {
+        //number of iterations in gradient descent
         self.max_iter = max_iter;
         self
-    } 
-    pub fn with_tolerance(mut self, tol: f64) -> Self { //how close should we get to the end of the gradient descent before calling it
+    }
+    pub fn with_tolerance(mut self, tol: f64) -> Self {
+        //how close should we get to the end of the gradient descent before calling it
         self.tol_sq = tol * tol;
         self
     }
@@ -196,9 +207,9 @@ impl SqPnP {
         }
 
         let sys = build_linear_system(points_3d, points_2d);
-        
+
         let r_mat = self.solve_rotation(&sys.omega);
-        
+
         //t = -q_tt^-1 * q_rt^T * r
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
         let t_vec = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
@@ -206,19 +217,19 @@ impl SqPnP {
         Some((r_mat, t_vec))
     }
 
-    fn solve_rotation(&self, omega:&Mat9) -> Mat3 {
+    fn solve_rotation(&self, omega: &Mat9) -> Mat3 {
         let eigen = omega.symmetric_eigen();
 
         let mut best_r = Vec9::zeros();
         let mut min_energy = f64::MAX;
 
-        for i in 0..3{
+        for i in 0..3 {
             let e = eigen.eigenvectors.column(i);
-            for sign in [-1.0, 1.0]{
+            for sign in [-1.0, 1.0] {
                 let guess = e.scale(sign);
                 let r_start = nearest_so3(&guess);
                 let (refined_r, energy) = self.optimization(r_start, omega);
-                if energy < min_energy{
+                if energy < min_energy {
                     min_energy = energy;
                     best_r = refined_r;
                 }
@@ -234,7 +245,7 @@ impl SqPnP {
         let mut r = start_r;
         for _ in 0..self.max_iter {
             let (h, jac) = constraints_and_jacobian(&r);
-            match solve_newton(&r, omega, &h, &jac){
+            match solve_newton(&r, omega, &h, &jac) {
                 Some(delta_r) => {
                     r += delta_r;
 

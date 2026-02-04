@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use cu29::prelude::*;
 use cu_zenoh_bridge::ZenohBridge;
-use zenoh::{bytes::Encoding, pubsub::Publisher, Session, Wait};
+use cu29::prelude::*;
+use zenoh::{Session, Wait, bytes::Encoding, pubsub::Publisher};
 
 use crate::comm::messages::Position;
-use zenoh_ext::{z_serialize, Deserialize, Serialize};
+use zenoh_ext::{Deserialize, Serialize, z_serialize};
 
 pub mod messages {
     use super::*;
@@ -76,7 +76,10 @@ impl Comm {
     }
     pub fn publish(&self, pos: Position) {
         self.session
-            .put(format!("chalkydri/coproc/{}", self.dev_name), z_serialize(&pos))
+            .put(
+                format!("chalkydri/coproc/{}", self.dev_name),
+                z_serialize(&pos),
+            )
             .encoding(Encoding::ZENOH_SERIALIZED)
             .wait()
             .unwrap();

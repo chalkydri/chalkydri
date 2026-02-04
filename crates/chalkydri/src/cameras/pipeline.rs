@@ -6,7 +6,8 @@ use std::{marker::PhantomData, ops::ControlFlow};
 use cu_gstreamer::CuGstBuffer;
 use cu29::prelude::*;
 use gstreamer::{
-    Caps, ClockTime, DebugGraphDetails, Device, Element, ElementFactory, FlowSuccess, Pipeline, ReferenceTimestampMeta, Sample, State, Structure, prelude::*
+    Caps, ClockTime, DebugGraphDetails, Device, Element, ElementFactory, FlowSuccess, Pipeline,
+    ReferenceTimestampMeta, Sample, State, Structure, prelude::*,
 };
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use tokio::sync::watch;
@@ -53,10 +54,9 @@ impl CamPipeline {
                 let pixel_format = match structure_name.as_str() {
                     "image/jpeg" => "MJPEG".to_string(),
                     "video/x-h264" => "H264".to_string(),
-                    "video/x-raw" => {
-                        structure.get::<String>("format")
-                            .unwrap_or_else(|_| "RAW".to_string())
-                    }
+                    "video/x-raw" => structure
+                        .get::<String>("format")
+                        .unwrap_or_else(|_| "RAW".to_string()),
                     _ => continue, // Skip audio or other non-video streams
                 };
 
@@ -68,19 +68,15 @@ impl CamPipeline {
                 }
 
                 // Extract framerate (stored as a fraction like 30/1)
-                let fps: f64 = structure.get::<gstreamer::Fraction>("framerate")
+                let fps: f64 = structure
+                    .get::<gstreamer::Fraction>("framerate")
                     .map(|f| f.numer() as f64 / f.denom() as f64)
                     .unwrap_or(0.0);
                 if fps == 0.0 {
                     continue;
                 }
 
-                dbg!(
-                    width,
-                    height,
-                    fps,
-                    pixel_format,
-                );
+                dbg!(width, height, fps, pixel_format,);
             }
 
             // Clean up: return to NULL state
@@ -418,18 +414,26 @@ impl CuSrcTask for CamPipeline {
         if let Some(sample) = self.appsink.try_pull_sample(ClockTime::from_useconds(20)) {
             let buf = sample.buffer().unwrap();
             // Query the configured latency from the pipeline
-let mut query = gstreamer::query::Latency::new();
-if self.pipeline.query(&mut query) {
-    let (live, min_latency, max_latency) = query.result();
-    println!("Live: {}, Min latency: {:?}, Max latency: {:?}", 
-             live, min_latency, max_latency);
-}
+            let mut query = gstreamer::query::Latency::new();
+            if self.pipeline.query(&mut query) {
+                let (live, min_latency, max_latency) = query.result();
+                println!(
+                    "Live: {}, Min latency: {:?}, Max latency: {:?}",
+                    live, min_latency, max_latency
+                );
+            }
 
-            dbg!(buf.size(), buf.pts(), buf.dts(), buf.duration(), buf.meta::<ReferenceTimestampMeta>(), self.pipeline.latency());
+            dbg!(
+                buf.size(),
+                buf.pts(),
+                buf.dts(),
+                buf.duration(),
+                buf.meta::<ReferenceTimestampMeta>(),
+                self.pipeline.latency()
+            );
             new_msg.set_payload(CuGstBuffer(buf.to_owned()));
             println!("wooooo");
         }
-
 
         //if let Some(sample) = self.sample_queue.try_recv().ok() {
         //    let buf = sample.buffer().unwrap();
