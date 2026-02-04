@@ -50,8 +50,10 @@ pub mod cameras;
 //mod pose;
 pub mod comm;
 mod resources;
-mod subsystems;
 mod utils;
+mod subsystems;
+
+pub use subsystems::apriltags::AprilAdapter;
 
 pub use crate::{cameras::pipeline::CamPipeline, subsystems::calibration::Calibrator};
 #[cfg(feature = "web")]

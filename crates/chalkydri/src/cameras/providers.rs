@@ -196,7 +196,7 @@ bundle_resources!(CamProviderBundle: V4L2);
 impl ResourceBundle for CamProviderBundle {
     fn build(
         bundle: cu29::prelude::BundleContext<Self>,
-        config: Option<&cu29::prelude::ComponentConfig>,
+        _config: Option<&cu29::prelude::ComponentConfig>,
         manager: &mut cu29::prelude::ResourceManager,
     ) -> cu29::CuResult<()> {
         let v4l2_key = bundle.key(CamProviderBundleId::V4L2);

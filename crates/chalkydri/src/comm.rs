@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use cu29::prelude::*;
 use cu_zenoh_bridge::ZenohBridge;
 use zenoh::{bytes::Encoding, pubsub::Publisher, Session, Wait};
@@ -49,27 +51,32 @@ pub mod messages {
     }
 }
 
-pub struct Comm<'c> {
+#[derive(Clone)]
+pub struct Comm {
+    dev_name: String,
     session: Session,
-    publisher: Publisher<'c>,
+    //publisher: Arc<Publisher<'c>>,
 }
-impl Comm<'_> {
-    pub async fn new(dev_name: impl Into<String>) -> Self {
-        let session = zenoh::open(zenoh::Config::default()).wait().unwrap();
+//impl<'c> Comm<'c> {
+impl Comm {
+    pub fn new(dev_name: impl Into<String>) -> Self {
+        let mut cfgg = zenoh::Config::default();
+        let session = zenoh::open(cfgg).wait().unwrap();
 
-        let publisher = session
-            .declare_publisher(format!("chalkydri/coproc/{}", dev_name.into()))
-            .wait()
-            .unwrap();
+        //let publisher = session
+        //    .declare_publisher(format!("chalkydri/coproc/{}", dev_name.into()))
+        //    .wait()
+        //    .unwrap();
 
         Self {
+            dev_name: dev_name.into(),
             session,
-            publisher,
+            //publisher: Arc::new(publisher),
         }
     }
-    pub fn publish(&self) {
-        self.publisher
-            .put(z_serialize(&Position::default()))
+    pub fn publish(&self, pos: Position) {
+        self.session
+            .put(format!("chalkydri/coproc/{}", self.dev_name), z_serialize(&pos))
             .encoding(Encoding::ZENOH_SERIALIZED)
             .wait()
             .unwrap();

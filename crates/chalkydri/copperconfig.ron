@@ -32,9 +32,14 @@
       //config: {
       //},
     ),
+    //(
+    //  id: "apriltagproc",
+    //  type: "chalkydri_apriltags::ApriltagsProcessor",
+    //),
     (
-      id: "apriltagproc",
-      type: "chalkydri_apriltags::ApriltagsProcessor",
+      id: "april_adap",
+      type: "crate::AprilAdapter",
+      resources: { "comm": "comm.comm" },
     ),
     (
       id: "calibrator",
@@ -45,6 +50,7 @@
     (src: "camera", dst: "gst_to_cu", msg: "cu_gstreamer::CuGstBuffer"),
     (src: "gst_to_cu", dst: "apriltags", msg: "cu_sensor_payloads::CuImage<Vec<u8>>"),
     (src: "gst_to_cu", dst: "calibrator", msg: "cu_sensor_payloads::CuImage<Vec<u8>>"),
-    (src: "apriltags", dst: "apriltagproc", msg: "chalkydri_apriltags::AprilTagDetections"),
+    //(src: "apriltags", dst: "apriltagproc", msg: "chalkydri_apriltags::AprilTagDetections"),
+    (src: "apriltags", dst: "april_adap", msg: "chalkydri_apriltags::AprilTagDetections"),
   ],
 )
