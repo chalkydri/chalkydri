@@ -236,11 +236,7 @@ impl SqPnP {
         Some((r_mat, t_vec))
     }
 
-    fn corner_points_from_center(
-        &self,
-        isometry: &[Iso3],
-        buffer: &mut Vec<Pnt3>,
-    ) -> () {
+    fn corner_points_from_center(&self, isometry: &[Iso3], buffer: &mut Vec<Pnt3>) -> () {
         buffer.clear();
         isometry.iter().for_each(|iso: &Iso3| {
             let corners = [

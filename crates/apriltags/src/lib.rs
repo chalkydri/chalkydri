@@ -227,7 +227,7 @@ impl CuTask for AprilTags {
                 .build()
                 .unwrap();
 
-            let solver = SqPnP::new();            
+            let solver = SqPnP::new();
             return Ok(Self {
                 detector,
                 tag_params,
@@ -296,7 +296,10 @@ impl CuTask for AprilTags {
                 ids.push(detection.id());*/
             }
 
-            let state = self.solver.solve(&world_pts, &camera_pts, &mut sqpnp_buffer).unwrap();
+            let state = self
+                .solver
+                .solve(&world_pts, &camera_pts, &mut sqpnp_buffer)
+                .unwrap();
             let world_rotation = state.0;
             let world_translation = state.1;
         };
