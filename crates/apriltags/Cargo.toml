@@ -15,3 +15,5 @@ serde.workspace = true
 cu-bincode = { version = "2.0.2", features = ["serde"] }
 image = "0.25.9"
 anyhow = "1.0.100"
+chalkydri_sqpnp = { version = "0.1.1", path = "../chalkydri_sqpnp" }
+

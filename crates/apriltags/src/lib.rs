@@ -13,11 +13,16 @@ extern crate cu_bincode as bincode;
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
+#[cfg(unix)]
+use chalkydri_sqpnp::SqPnP;
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
 use cu29::prelude::*;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
+
+use chalkydri_sqpnp;
+use chalkydri_sqpnp::{Iso3, Pnt3};
 
 // the maximum number of detections that can be returned by the detector
 const MAX_DETECTIONS: usize = 16;
@@ -137,6 +142,7 @@ impl AprilTagDetections {
 pub struct AprilTags {
     detector: Detector,
     tag_params: TagParams,
+    solver: SqPnP,
 }
 
 #[cfg(not(unix))]
@@ -220,9 +226,12 @@ impl CuTask for AprilTags {
                 .add_family_bits(family, bits_corrected as usize)
                 .build()
                 .unwrap();
+
+            let solver = SqPnP::new();            
             return Ok(Self {
                 detector,
                 tag_params,
+                solver,
             });
         }
         Ok(Self {
@@ -237,6 +246,7 @@ impl CuTask for AprilTags {
                 cy: CY,
                 tagsize: TAG_SIZE,
             },
+            solver: SqPnP::new(),
         })
     }
 
@@ -248,35 +258,47 @@ impl CuTask for AprilTags {
     ) -> CuResult<()> {
         let mut result = AprilTagDetections::new();
         if let Some(payload) = input.payload() {
+            use chalkydri_sqpnp::Vec3;
+
             let image = image_from_cuimage(payload);
             let detections = self.detector.detect(&image);
+            let mut camera_pts: Vec<Vec3> = Vec::new();
+            let mut world_pts: Vec<Iso3> = Vec::new();
+            let mut sqpnp_buffer: Vec<Pnt3> = Vec::new(); //doing this kinda defeats the point, fix later
             for detection in detections {
-                if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
-                    let translation = aprilpose.translation();
-                    let rotation = aprilpose.rotation();
-                    let mut mat: [[f32; 4]; 4] = [[0.0, 0.0, 0.0, 0.0]; 4];
-                    mat[0][3] = translation.data()[0] as f32;
-                    mat[1][3] = translation.data()[1] as f32;
-                    mat[2][3] = translation.data()[2] as f32;
-                    mat[0][0] = rotation.data()[0] as f32;
-                    mat[0][1] = rotation.data()[3] as f32;
-                    mat[0][2] = rotation.data()[2 * 3] as f32;
-                    mat[1][0] = rotation.data()[1] as f32;
-                    mat[1][1] = rotation.data()[1 + 3] as f32;
-                    mat[1][2] = rotation.data()[1 + 2 * 3] as f32;
-                    mat[2][0] = rotation.data()[2] as f32;
-                    mat[2][1] = rotation.data()[2 + 3] as f32;
-                    mat[2][2] = rotation.data()[2 + 2 * 3] as f32;
-
-                    let pose = CuPose::<f32>::from_matrix(mat);
-                    let CuArrayVec(detections) = &mut result.poses;
-                    detections.push(pose);
-                    let CuArrayVec(decision_margin) = &mut result.decision_margins;
-                    decision_margin.push(detection.decision_margin());
-                    let CuArrayVec(ids) = &mut result.ids;
-                    ids.push(detection.id());
+                //world_pts.push(detection isometry); -- need to get apriltagfield in here so I can get this from ID
+                for corner in detection.corners() {
+                    camera_pts.push(Vec3::new(corner[0], corner[1], 1.0)); //I didn't check, make sure these are normalized
                 }
+                /*if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
+                let translation = aprilpose.translation();
+                let rotation = aprilpose.rotation();
+                let mut mat: [[f32; 4]; 4] = [[0.0, 0.0, 0.0, 0.0]; 4];
+                mat[0][3] = translation.data()[0] as f32;
+                mat[1][3] = translation.data()[1] as f32;
+                mat[2][3] = translation.data()[2] as f32;
+                mat[0][0] = rotation.data()[0] as f32;
+                mat[0][1] = rotation.data()[3] as f32;
+                mat[0][2] = rotation.data()[2 * 3] as f32;
+                mat[1][0] = rotation.data()[1] as f32;
+                mat[1][1] = rotation.data()[1 + 3] as f32;
+                mat[1][2] = rotation.data()[1 + 2 * 3] as f32;
+                mat[2][0] = rotation.data()[2] as f32;
+                mat[2][1] = rotation.data()[2 + 3] as f32;
+                mat[2][2] = rotation.data()[2 + 2 * 3] as f32;
+
+                let pose = CuPose::<f32>::from_matrix(mat);
+                let CuArrayVec(detections) = &mut result.poses;
+                detections.push(pose);
+                let CuArrayVec(decision_margin) = &mut result.decision_margins;
+                decision_margin.push(detection.decision_margin());
+                let CuArrayVec(ids) = &mut result.ids;
+                ids.push(detection.id());*/
             }
+
+            let state = self.solver.solve(&world_pts, &camera_pts, &mut sqpnp_buffer).unwrap();
+            let world_rotation = state.0;
+            let world_translation = state.1;
         };
         output.tov = input.tov;
         output.set_payload(result);
