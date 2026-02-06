@@ -1,4 +1,4 @@
-use nalgebra::{SMatrix, SVector};
+use nalgebra::{Isometry3, Point3, SMatrix, SVector};
 use std::ops::AddAssign; //trust.
 
 /*Usage:
@@ -7,15 +7,17 @@ use std::ops::AddAssign; //trust.
 */
 
 //These should be all that we need
-type Mat3 = SMatrix<f64, 3, 3>;
-type Mat9 = SMatrix<f64, 9, 9>;
-type Vec9 = SVector<f64, 9>;
-type Mat15 = SMatrix<f64, 15, 15>;
-type Vec15 = SVector<f64, 15>;
-type Mat6x9 = SMatrix<f64, 6, 9>;
-type Vec6 = SVector<f64, 6>;
-type Vec3 = SVector<f64, 3>;
-type Mat9x3 = SMatrix<f64, 9, 3>;
+pub type Mat3 = SMatrix<f64, 3, 3>;
+pub type Mat9 = SMatrix<f64, 9, 9>;
+pub type Vec9 = SVector<f64, 9>;
+pub type Mat15 = SMatrix<f64, 15, 15>;
+pub type Vec15 = SVector<f64, 15>;
+pub type Mat6x9 = SMatrix<f64, 6, 9>;
+pub type Vec6 = SVector<f64, 6>;
+pub type Vec3 = SVector<f64, 3>;
+pub type Mat9x3 = SMatrix<f64, 9, 3>;
+pub type Iso3 = Isometry3<f64>;
+pub type Pnt3 = Point3<f64>;
 
 //R is rot matrix, r_vec is column slice of R
 //Jacobian is just partial derivatives across a 3d space
@@ -175,6 +177,7 @@ fn build_linear_system(points_3d: &[Vec3], points_2d: &[Vec3]) -> LinearSys {
 pub struct SqPnP {
     max_iter: usize,
     tol_sq: f64,
+    corner_distance: f64,
 }
 
 impl Default for SqPnP {
@@ -182,6 +185,7 @@ impl Default for SqPnP {
         Self {
             max_iter: 15,
             tol_sq: 1e-16,
+            corner_distance: 20.64 / 2.0, //2026 in cm
         }
     }
 }
@@ -200,13 +204,28 @@ impl SqPnP {
         self.tol_sq = tol * tol;
         self
     }
+    pub fn with_tag_side_size(mut self, size: f64) -> Self {
+        self.corner_distance = size / 2.0;
+        self
+    }
 
-    pub fn solve(&self, points_3d: &[Vec3], points_2d: &[Vec3]) -> Option<(Mat3, Vec3)> {
+    pub fn solve(
+        &self,
+        points_isometry: &[Isometry3<f64>],
+        points_2d: &[Vec3],
+        buffer: &mut Vec<Pnt3>,
+    ) -> Option<(Mat3, Vec3)> {
+        self.corner_points_from_center(points_isometry, buffer);
+        let mut points_3d: Vec<Vec3> = Vec::new();
+        for point in buffer {
+            points_3d.push(Vec3::new(point.x, point.y, point.z));
+        }
+
         if points_3d.len() < 3 || points_3d.len() != points_2d.len() {
             return None;
         }
 
-        let sys = build_linear_system(points_3d, points_2d);
+        let sys = build_linear_system(&points_3d, points_2d);
 
         let r_mat = self.solve_rotation(&sys.omega);
 
@@ -215,6 +234,21 @@ impl SqPnP {
         let t_vec = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
 
         Some((r_mat, t_vec))
+    }
+
+    fn corner_points_from_center(&self, isometry: &[Iso3], buffer: &mut Vec<Pnt3>) -> () {
+        buffer.clear();
+        isometry.iter().for_each(|iso: &Iso3| {
+            let corners = [
+                Pnt3::new(self.corner_distance, self.corner_distance, 0.0),
+                Pnt3::new(self.corner_distance, -self.corner_distance, 0.0),
+                Pnt3::new(-self.corner_distance, self.corner_distance, 0.0),
+                Pnt3::new(-self.corner_distance, -self.corner_distance, 0.0),
+            ];
+            for c in corners {
+                buffer.push(iso * c);
+            }
+        });
     }
 
     fn solve_rotation(&self, omega: &Mat9) -> Mat3 {
