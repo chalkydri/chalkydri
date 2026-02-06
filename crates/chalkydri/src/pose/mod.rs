@@ -19,19 +19,19 @@ pub mod field_layout;
 // impl PoseEstimator {
 //     pub fn new() -> Result<Self, Error> {
 //         let (poses_tx, poses_rx) = mpsc::unbounded_channel();
-// 
+//
 //         let est = Self {
 //             layout: Arc::new(RwLock::new(None)),
 //             tag_mappings: Arc::new(RwLock::new(None)),
 //             poses_tx,
 //             poses_rx: Arc::new(Mutex::new(poses_rx)),
 //         };
-// 
+//
 //         est.load_layout().await?;
-// 
+//
 //         Ok(est)
 //     }
-// 
+//
 //     /// (Re)load the field layout
 //     pub fn load_layout(&self) -> Result<(), Error> {
 //         let Config {
@@ -42,7 +42,7 @@ pub mod field_layout;
 //             if let Some(layout_name) = &(*Cfg.read()).field_layout {
 //                 if let Some(layout) = layouts.get(layout_name) {
 //                     *self.layout.write().await = Some(layout.clone());
-// 
+//
 //                     Ok(())
 //                 } else {
 //                     Err(Error::FieldLayoutDoesNotExist { id: layout_name.clone() })
@@ -54,7 +54,7 @@ pub mod field_layout;
 //             Err(Error::NoFieldLayouts)
 //         }
 //     }
-// 
+//
 //     /// Add a transform to the transform registry
 //     pub async fn add_transform_from_tag(
 //         &self,
@@ -65,15 +65,15 @@ pub mod field_layout;
 //             if let Some(tag_field_pos) = tag_mappings.get(&tag_id) {
 //                 let cam_est_rel_pos = tag_est_pos.inverse();
 //                 let cam_relto_pos = cam_est_rel_pos.translation;
-// 
+//
 //                 let cam_relto_x = -cam_relto_pos.x;
 //                 let cam_relto_y = cam_relto_pos.y;
 //                 let cam_relto_z = -cam_relto_pos.z;
-// 
+//
 //                 let cam_angle = tag_field_pos
 //                     .rotation
 //                     .rotation_to(&cam_est_rel_pos.rotation);
-// 
+//
 //                 let cam_fcs_abs = na::Isometry3::from_parts(
 //                     na::Translation3::new(
 //                         cam_relto_x + tag_field_pos.translation.x,
@@ -82,18 +82,18 @@ pub mod field_layout;
 //                     ),
 //                     cam_angle,
 //                 );
-// 
+//
 //                 debug!("{cam_fcs_abs}");
-// 
+//
 //                 //let cam_fcs_abs_x = cam_fcs_abs.translation().x;
 //                 //let cam_fcs_abs_y = cam_fcs_abs.translation().y;
 //                 //let cam_fcs_abs_z = cam_fcs_abs.translation().z;
-// 
+//
 //                 //let robot_angle = cam_fcs_abs.rotation() +
-// 
+//
 //                 //
 //                 self.poses_tx.send(cam_fcs_abs).unwrap();
-// 
+//
 //                 Ok(())
 //             } else {
 //                 Err(Error::InvalidTag)
@@ -102,7 +102,7 @@ pub mod field_layout;
 //             Err(Error::FieldLayoutNotSelected)
 //         }
 //     }
-// 
+//
 //     ///// Interpolate the robot's pose based on transforms
 //     //pub async fn get_robot_pose(&self) -> Result<Transform, Error> {
 //     //    match self
@@ -115,7 +115,7 @@ pub mod field_layout;
 //     //        Err(err) => Err(Error::FailedToGetPose(err)),
 //     //    }
 //     //}
-// 
+//
 //     pub async fn nt_loop(&self) {
 //         let est = self.clone();
 //         tokio::spawn(async move {
@@ -148,7 +148,7 @@ pub mod field_layout;
 //                 //        error!("failed to get pose");
 //                 //    }
 //                 //}
-// 
+//
 //                 let mut poses = Vec::new();
 //                 while let Some(pose) = est.poses_rx.lock().await.recv().await {
 //                     poses.push(pose);
@@ -159,7 +159,7 @@ pub mod field_layout;
 //                 let quat =
 //                     na::UnitQuaternion::from_rotation_matrix(&rot.to_rotation_matrix()).to_owned();
 //                 //let pose = na::Isometry3::average(&poses).unwrap();
-// 
+//
 //                 robot_pose
 //                     .set(Pose3d {
 //                         translation: Translation3d {
@@ -178,7 +178,7 @@ pub mod field_layout;
 //                     })
 //                     .await
 //                     .unwrap();
-// 
+//
 //                 tokio::time::sleep(Duration::from_millis(20)).await;
 //             }
 //         });

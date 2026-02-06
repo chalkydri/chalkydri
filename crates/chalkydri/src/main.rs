@@ -49,10 +49,10 @@ mod api;
 pub mod cameras;
 //mod pose;
 pub mod comm;
+mod pose;
 mod resources;
 mod subsystems;
 mod utils;
-mod pose;
 
 pub use subsystems::apriltags::AprilAdapter;
 
