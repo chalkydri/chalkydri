@@ -1,7 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
 use chalkydri_core::prelude::RwLock;
-use cu_zenoh_bridge::ZenohBridge;
 use cu29::prelude::*;
 use whacknet::{RobotPose, VisionUncertainty, WhacknetClient};
 

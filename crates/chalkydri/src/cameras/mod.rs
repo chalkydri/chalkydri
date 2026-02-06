@@ -4,11 +4,10 @@
  */
 
 pub(crate) mod gst_to_cu;
-pub(crate) mod mjpeg;
+//pub(crate) mod mjpeg;
 pub(crate) mod pipeline;
 pub(crate) mod preproc;
 pub(crate) mod providers;
-mod publisher;
 //mod format_selection;
 
 pub use gst_to_cu::GstToCuImage;
@@ -22,7 +21,6 @@ use gstreamer_app::{AppSink, AppSinkCallbacks};
 use nt_client::ClientHandle as NTClientHandle;
 use pipeline::CamPipeline;
 use providers::{CamProvider, ProviderEvent, V4l2Provider};
-use publisher::CamPublisher;
 #[cfg(feature = "rerun")]
 use re_types::archetypes::EncodedImage;
 use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc};

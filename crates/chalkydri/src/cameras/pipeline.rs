@@ -1,24 +1,20 @@
 use std::sync::Arc;
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc;
 use std::time::Duration;
-use std::{marker::PhantomData, ops::ControlFlow};
+use std::ops::ControlFlow;
 
 use cu_gstreamer::CuGstBuffer;
 use cu29::prelude::*;
 use gstreamer::{
-    Caps, ClockTime, DebugGraphDetails, Device, Element, ElementFactory, FlowSuccess, Pipeline,
-    ReferenceTimestampMeta, Sample, State, Structure, prelude::*,
+    Caps, ClockTime, Device, Element, ElementFactory, Pipeline,
+    ReferenceTimestampMeta, Sample, State, prelude::*,
 };
-use gstreamer_app::{AppSink, AppSinkCallbacks};
-use tokio::sync::watch;
+use gstreamer_app::AppSink;
 
 use crate::cameras::providers::{
-    CamProvider, CamProviderBundle, CamProviderBundleId, V4l2Provider,
+    CamProvider, CamProviderBundleId, V4l2Provider,
 };
-use crate::{cameras::preproc::PreprocWrap, subsystems::SubsysManager};
 use chalkydri_core::prelude::*;
-
-use super::mjpeg::MjpegProc;
 
 /// A camera pipeline
 ///
@@ -33,8 +29,6 @@ pub struct CamPipeline {
     jpegdec: Element,
     videoflip: Element,
     appsink: AppSink,
-    sample_queue: Arc<mpsc::Receiver<Sample>>,
-    //pub mjpeg_preproc: PreprocWrap<MjpegProc>,
 }
 impl CamPipeline {
     /// Create a new camera pipeline from a [Device] and camera config
@@ -88,24 +82,6 @@ impl CamPipeline {
 
         let prefilter = ElementFactory::make("capsfilter")
             .name("precapsfilter")
-            //.property(
-            //    "caps",
-            //    &Caps::builder(if is_mjpeg {
-            //        "image/jpeg"
-            //    } else {
-            //        "video/x-raw"
-            //    })
-            //    .field("width", settings.width as i32)
-            //    .field("height", settings.height as i32)
-            //    //.field(
-            //    //    "framerate",
-            //    //    &Fraction::new(
-            //    //        settings.frame_rate.num as i32,
-            //    //        settings.frame_rate.den as i32,
-            //    //    ),
-            //    //)
-            //    .build(),
-            //)
             .property(
                 "caps",
                 &Caps::builder("video/x-raw")
@@ -133,24 +109,6 @@ impl CamPipeline {
 
         let filter = ElementFactory::make("capsfilter")
             .name("capsfilter")
-            //.property(
-            //    "caps",
-            //    &Caps::builder(if is_mjpeg {
-            //        "image/jpeg"
-            //    } else {
-            //        "video/x-raw"
-            //    })
-            //    .field("width", settings.width as i32)
-            //    .field("height", settings.height as i32)
-            //    //.field(
-            //    //    "framerate",
-            //    //    &Fraction::new(
-            //    //        settings.frame_rate.num as i32,
-            //    //        settings.frame_rate.den as i32,
-            //    //    ),
-            //    //)
-            //    .build(),
-            //)
             .property(
                 "caps",
                 &Caps::builder("video/x-raw")
@@ -188,7 +146,6 @@ impl CamPipeline {
             .unwrap();
 
         let appsink = ElementFactory::make("appsink").build().unwrap();
-        //let appsink = AppSink::builder().async_(true).build().unwrap();
 
         pipeline
             .add_many([
@@ -215,26 +172,8 @@ impl CamPipeline {
             &appsink,
         ])
         .unwrap();
-        //}
 
-        //let mjpeg_preproc = PreprocWrap::<MjpegProc>::new(&pipeline);
-        //mjpeg_preproc
-        //    .setup_sampler(Some(mjpeg_preproc.inner().tx.clone()))
-        //    .unwrap();
-
-        let (tx, rx) = mpsc::sync_channel(64);
-        let sample_queue = Arc::new(rx);
         let appsink = appsink.clone().dynamic_cast::<AppSink>().unwrap();
-        //appsink.set_callbacks(
-        //    AppSinkCallbacks::builder()
-        //        .new_sample(move |appsink: &AppSink| {
-        //            println!("got sampleeeeeee");
-        //            let sample = appsink.pull_sample().unwrap();
-        //            tx.send(sample.clone()).unwrap();
-        //            Ok(FlowSuccess::Ok)
-        //        })
-        //        .build(),
-        //);
         appsink.set_sync(false);
         appsink.set_max_buffers(1);
         appsink.set_drop(true);
@@ -250,8 +189,6 @@ impl CamPipeline {
             jpegdec,
             videoflip,
             appsink,
-            sample_queue,
-            //mjpeg_preproc,
         }
     }
 
@@ -397,20 +334,6 @@ impl CuSrcTask for CamPipeline {
     }
 
     fn process<'o>(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
-        //match self
-        //    .appsink
-        //    .try_pull_sample(Some(gstreamer::ClockTime::from_useconds(
-        //        20,
-        //    )))
-        //{
-        //    Some(sample) => {
-        //        let buf = sample.buffer().unwrap();
-        //        dbg!(sample.caps().unwrap());
-        //if let Some(sample) = self.sample.lock().take() {
-        //    let buf = sample.buffer().unwrap();
-        //    new_msg.set_payload(CuGstBuffer(buf.to_owned()));
-        //}
-
         if let Some(sample) = self.appsink.try_pull_sample(ClockTime::from_useconds(20)) {
             let buf = sample.buffer().unwrap();
             // Query the configured latency from the pipeline
@@ -435,20 +358,6 @@ impl CuSrcTask for CamPipeline {
             println!("wooooo");
         }
 
-        //if let Some(sample) = self.sample_queue.try_recv().ok() {
-        //    let buf = sample.buffer().unwrap();
-        //    new_msg.set_payload(CuGstBuffer(buf.to_owned()));
-        //    println!("wooooo");
-        //}
-
         Ok(())
-        //        println!("wooooo");
-        //        Ok(())
-        //    }
-        //    None => {
-        //        println!("crap");
-        //        Ok(())
-        //    }
-        //}
     }
 }
