@@ -14,10 +14,12 @@ members = [
   #"crates/minint",
   "crates/subsystems/python",
   "crates/chalkydri_config",
+  "crates/whacknet",
 ]
 default-members = [
   "crates/chalkydri_core",
   "crates/chalkydri",
+  "crates/whacknet",
 ]
 
 [workspace.package]

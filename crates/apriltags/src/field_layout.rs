@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fs::File};
 
+use chalkydri_sqpnp::Iso3;
 use nalgebra as na;
 
 use chalkydri_core::prelude::*;
@@ -7,18 +8,19 @@ use chalkydri_core::prelude::*;
 //use super::PoseEstimator;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AprilTagFieldLayout {
     pub tags: Vec<LayoutTag>,
     pub field: Field,
 }
 impl AprilTagFieldLayout {
-    pub fn load(
-        &self,
-        //pose_est: &mut PoseEstimator,
-    ) -> Result<HashMap<usize, na::Isometry3<f64>>, Error> {
-        let mut tags: HashMap<usize, na::Isometry3<f64>> = HashMap::new();
+    /// Attempt to load field layout from field.json
+    pub fn load() -> Result<HashMap<usize, Iso3>, ()> {
+        let mut f = File::open("field.json").expect("field.json must exist");
+
+        let layout: AprilTagFieldLayout = serde_json::from_reader(&mut f).unwrap();
+
+        let mut tags: HashMap<usize, Iso3> = HashMap::new();
         for LayoutTag {
             id,
             pose:
@@ -26,14 +28,14 @@ impl AprilTagFieldLayout {
                     translation,
                     rotation: LayoutRotation { quaternion },
                 },
-        } in self.tags.clone()
+        } in layout.tags.clone()
         {
             // Turn the field layout values into Rust datatypes
             let translation = na::Translation3::new(translation.x, translation.y, translation.z);
             let rotation =
                 na::Quaternion::new(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
             let rotation = na::UnitQuaternion::from_quaternion(rotation);
-            let isometry = na::Isometry3::from_parts(translation, rotation);
+            let isometry = Iso3::from_parts(translation, rotation);
 
             tags.insert(id as usize, isometry);
         }
@@ -43,7 +45,6 @@ impl AprilTagFieldLayout {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutTag {
     #[serde(rename = "ID")]
@@ -52,7 +53,6 @@ pub struct LayoutTag {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutPose {
     pub translation: LayoutTranslation,
@@ -60,7 +60,6 @@ pub struct LayoutPose {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutTranslation {
     pub x: f64,
@@ -69,14 +68,12 @@ pub struct LayoutTranslation {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutRotation {
     pub quaternion: LayoutQuaternion,
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutQuaternion {
     #[serde(rename = "W")]
@@ -90,7 +87,6 @@ pub struct LayoutQuaternion {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "web", derive(utopia::ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Field {
     pub length: f64,

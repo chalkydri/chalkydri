@@ -1,14 +1,21 @@
 #[cfg(windows)]
-compile_error!("this does not work under windows. please use a unix system.");
+compile_error!("this does not work under windows. please use a unix system. only linux is supported.");
 
+#[macro_use]
+extern crate serde;
+extern crate serde_json;
+extern crate cu_bincode as bincode;
+extern crate chalkydri_sqpnp;
+
+mod field_layout;
+
+use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 use std::ops::Deref;
 
 use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
 
 use apriltag_sys::image_u8_t;
-
-extern crate cu_bincode as bincode;
 
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
@@ -20,8 +27,9 @@ use cu29::prelude::*;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use chalkydri_sqpnp;
 use chalkydri_sqpnp::{Iso3, Pnt3};
+
+use crate::field_layout::AprilTagFieldLayout;
 
 // the maximum number of detections that can be returned by the detector
 const MAX_DETECTIONS: usize = 16;
@@ -135,6 +143,7 @@ pub struct AprilTags {
     detector: Detector,
     tag_params: TagParams,
     solver: SqPnP,
+    tags: HashMap<usize, Iso3>,
 }
 
 fn image_from_cuimage<A>(cu_image: &CuImage<A>) -> ManuallyDrop<Image>
@@ -175,6 +184,10 @@ impl CuTask for AprilTags {
             let fy = config.get("fy").unwrap_or(FY);
             let cx = config.get("cx").unwrap_or(CX);
             let cy = config.get("cy").unwrap_or(CY);
+            //let field_layout_path = config.get("field_json_path");
+            
+            AprilTagFieldLayout::load().unwrap();
+
             let tag_params = TagParams {
                 fx,
                 fy,
@@ -189,10 +202,12 @@ impl CuTask for AprilTags {
                 .unwrap();
 
             let solver = SqPnP::new();
+
             return Ok(Self {
                 detector,
                 tag_params,
                 solver,
+                tags: AprilTagFieldLayout::load().unwrap(),
             });
         }
         Ok(Self {
@@ -208,6 +223,7 @@ impl CuTask for AprilTags {
                 tagsize: TAG_SIZE,
             },
             solver: SqPnP::new(),
+            tags: AprilTagFieldLayout::load().unwrap(),
         })
     }
 

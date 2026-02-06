@@ -40,6 +40,9 @@
       id: "april_adap",
       type: "crate::AprilAdapter",
       resources: { "comm": "comm.comm" },
+      config: {
+        "cam_id": 1,
+      },
     ),
     (
       id: "calibrator",
