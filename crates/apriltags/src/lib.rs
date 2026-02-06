@@ -1,11 +1,11 @@
-#[cfg(unix)]
+#[cfg(windows)]
+compile_error!("this does not work under windows. please use a unix system.");
+
 use std::mem::ManuallyDrop;
 use std::ops::Deref;
 
-#[cfg(unix)]
 use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
 
-#[cfg(unix)]
 use apriltag_sys::image_u8_t;
 
 extern crate cu_bincode as bincode;
@@ -13,7 +13,6 @@ extern crate cu_bincode as bincode;
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
-#[cfg(unix)]
 use chalkydri_sqpnp::SqPnP;
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
@@ -28,17 +27,11 @@ use chalkydri_sqpnp::{Iso3, Pnt3};
 const MAX_DETECTIONS: usize = 16;
 
 // Defaults
-#[cfg(not(windows))]
 const TAG_SIZE: f64 = 0.14;
-#[cfg(not(windows))]
 const FX: f64 = 2600.0;
-#[cfg(not(windows))]
 const FY: f64 = 2600.0;
-#[cfg(not(windows))]
 const CX: f64 = 900.0;
-#[cfg(not(windows))]
 const CY: f64 = 520.0;
-#[cfg(not(windows))]
 const FAMILY: &str = "tag36h11";
 
 #[derive(Default, Debug, Clone, Encode)]
@@ -138,17 +131,12 @@ impl AprilTagDetections {
     }
 }
 
-#[cfg(unix)]
 pub struct AprilTags {
     detector: Detector,
     tag_params: TagParams,
     solver: SqPnP,
 }
 
-#[cfg(not(unix))]
-pub struct AprilTags {}
-
-#[cfg(not(windows))]
 fn image_from_cuimage<A>(cu_image: &CuImage<A>) -> ManuallyDrop<Image>
 where
     A: ArrayLike<Element = u8>,
@@ -169,33 +157,6 @@ where
 
 impl Freezable for AprilTags {}
 
-#[cfg(windows)]
-impl CuTask for AprilTags {
-    type Resources<'r> = ();
-    type Input<'m> = input_msg!(CuImage<Vec<u8>>);
-    type Output<'m> = output_msg!(AprilTagDetections);
-
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self {})
-    }
-
-    fn process(
-        &mut self,
-        _clock: &RobotClock,
-        _input: &Self::Input<'_>,
-        _output: &mut Self::Output<'_>,
-    ) -> CuResult<()> {
-        Ok(())
-    }
-}
-
-#[cfg(not(windows))]
 impl CuTask for AprilTags {
     type Input<'m> = input_msg!(CuImage<Vec<u8>>);
     type Output<'m> = output_msg!(AprilTagDetections);
@@ -346,7 +307,6 @@ mod tests {
     use image::{ImageBuffer, ImageReader};
     use image::{Luma, imageops::FilterType, imageops::crop, imageops::resize};
 
-    #[cfg(not(windows))]
     use cu_sensor_payloads::CuImageBufferFormat;
 
     #[allow(dead_code)]
@@ -366,7 +326,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(windows))]
     fn test_end2end_apriltag() -> Result<()> {
         let img = process_image("tests/data/simple.png")?;
         let format = CuImageBufferFormat {
