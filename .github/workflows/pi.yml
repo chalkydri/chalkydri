@@ -41,12 +41,6 @@ jobs:
         env:
           RUSTFLAGS: "-C target-cpu=cortex-a76 -C target-feature=+fp-armv8,+neon,+crc,+crypto"
         run: |
-          cd ui/
-          bun install
-          bun run gen_api
-          bun run build
-          cd ..
-          
           cargo build --release
           # Create a directory for the artifacts
           mkdir -p pi5-build
