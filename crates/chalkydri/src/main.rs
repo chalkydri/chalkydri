@@ -52,6 +52,7 @@ pub mod comm;
 mod resources;
 mod subsystems;
 mod utils;
+mod pose;
 
 pub use subsystems::apriltags::AprilAdapter;
 

@@ -190,12 +190,12 @@ impl SqPnP {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn with_max_iter(mut self, max_iter: usize) -> Self {
+    pub const fn max_iter(mut self, max_iter: usize) -> Self {
         //number of iterations in gradient descent
         self.max_iter = max_iter;
         self
     }
-    pub fn with_tolerance(mut self, tol: f64) -> Self {
+    pub const fn tolerance(mut self, tol: f64) -> Self {
         //how close should we get to the end of the gradient descent before calling it
         self.tol_sq = tol * tol;
         self
