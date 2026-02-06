@@ -37,13 +37,13 @@ impl CuSinkTask for AprilAdapter {
     where
         Self: Sized,
     {
-        let cam_id = config.expect("config must be present").get::<u64>("cam_id").expect("cam_id must be set");
+        let cam_id = config
+            .expect("config must be present")
+            .get::<u64>("cam_id")
+            .expect("cam_id must be set");
         let comm = resources.comm.0.clone();
 
-        Ok(Self {
-            cam_id,
-            comm,
-        })
+        Ok(Self { cam_id, comm })
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
@@ -58,11 +58,15 @@ impl CuSinkTask for AprilAdapter {
         let det = input.payload().unwrap().clone();
 
         if let Some(pose) = det.poses.0.first() {
-            self.comm.publish(self.cam_id, RobotPose {
-                x: pose.translation()[0].value as f64,
-                y: pose.translation()[1].value as f64,
-                rot: 0.0,
-            }, VisionUncertainty::default());
+            self.comm.publish(
+                self.cam_id,
+                RobotPose {
+                    x: pose.translation()[0].value as f64,
+                    y: pose.translation()[1].value as f64,
+                    rot: 0.0,
+                },
+                VisionUncertainty::default(),
+            );
         }
 
         Ok(())

@@ -52,7 +52,7 @@ impl WhacknetClient {
         // Create and connect to server
         let socket = UdpSocket::bind(BIND_ADDR)?;
         socket.connect(REMOTE_ADDR)?;
-    
+
         Ok(Self {
             cam_id,
             socket: Arc::new(socket),

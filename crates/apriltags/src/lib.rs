@@ -1,11 +1,13 @@
 #[cfg(windows)]
-compile_error!("this does not work under windows. please use a unix system. only linux is supported.");
+compile_error!(
+    "this does not work under windows. please use a unix system. only linux is supported."
+);
 
 #[macro_use]
 extern crate serde;
-extern crate serde_json;
-extern crate cu_bincode as bincode;
 extern crate chalkydri_sqpnp;
+extern crate cu_bincode as bincode;
+extern crate serde_json;
 
 mod field_layout;
 
@@ -185,7 +187,7 @@ impl CuTask for AprilTags {
             let cx = config.get("cx").unwrap_or(CX);
             let cy = config.get("cy").unwrap_or(CY);
             //let field_layout_path = config.get("field_json_path");
-            
+
             AprilTagFieldLayout::load().unwrap();
 
             let tag_params = TagParams {
