@@ -29,7 +29,6 @@ pub use error::Error;
 
 pub mod prelude {
     pub use super::parking_lot::{self, FairMutex, Mutex, RwLock};
-    pub use super::tokio::runtime::LocalRuntime;
     pub use super::tracing::{self, Instrument, debug, error, info, instrument, trace, warn};
 
     pub use super::config::{self, Cfg, Config};
