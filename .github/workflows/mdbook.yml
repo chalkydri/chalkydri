@@ -28,7 +28,7 @@ jobs:
       #   run: git config --global --add safe.directory /__w/chalkydri/chalkydri && git pull --force
       
       - name: Restore from cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           key: cargo
           path: |
@@ -69,7 +69,7 @@ jobs:
         run: cargo doc --workspace --document-private-items --no-deps
       
       - name: Save to cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           key: cargo
           path: |
