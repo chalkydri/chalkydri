@@ -31,7 +31,7 @@ pub use subsystems::apriltags::AprilAdapter;
 pub use crate::{cameras::pipeline::CamPipeline, subsystems::calibration::Calibrator};
 use chalkydri_core::{
     config::{Cfg, Config},
-    prelude::{Nt, config},
+    prelude::config,
 };
 use cu29::prelude::*;
 use mimalloc::MiMalloc;
