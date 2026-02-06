@@ -42,7 +42,7 @@ camera-intrinsic-calibration = { git = "https://github.com/chalkydri/camera-intr
 camera-intrinsic-model = { git = "https://github.com/chalkydri/camera-intrinsic-model-rs.git", branch = "main" }
 aprilgrid = { git = "https://github.com/chalkydri/aprilgrid-rs.git", branch = "master" }
 sqpnp_simple = "0.1.5"
-re_sdk = { version = "0.25.1", optional = true }
+re_sdk = { version = "0.28.2", optional = true }
 re_types = { version = "0.25.1", features = ["image"], optional = true }
 gstreamer.workspace = true
 gstreamer-app.workspace = true
