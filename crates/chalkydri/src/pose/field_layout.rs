@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 
 use nalgebra as na;
-use sophus_autodiff::linalg::VecF64;
-use sophus_lie::{Isometry3F64, Rotation3F64};
 
 use chalkydri_core::prelude::*;
 
-use super::PoseEstimator;
+//use super::PoseEstimator;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "web", derive(utopia::ToSchema))]
@@ -16,9 +14,9 @@ pub struct AprilTagFieldLayout {
     pub field: Field,
 }
 impl AprilTagFieldLayout {
-    pub async fn load(
+    pub fn load(
         &self,
-        pose_est: &mut PoseEstimator,
+        //pose_est: &mut PoseEstimator,
     ) -> Result<HashMap<usize, na::Isometry3<f64>>, Error> {
         let mut tags: HashMap<usize, na::Isometry3<f64>> = HashMap::new();
         for LayoutTag {
