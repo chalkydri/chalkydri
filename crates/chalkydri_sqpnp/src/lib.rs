@@ -273,7 +273,7 @@ impl SqPnP {
                 let test_r = Rot3::from_matrix(&test_r_mat).euler_angles().2;
                 //so like I would just compare with gyro and add weight, but that moves solution towards gyro making undefined behavior
                 //instead, ima add a value to the energy if the signs are different.
-                if (gyro != 0.0) && (test_r != 0.0) {
+                if (gyro == 0.0) && (test_r == 0.0) {
                     let gyro_sign = gyro / gyro.abs();
                     let test_r_sign = test_r / test_r.abs();
                     if gyro_sign != test_r_sign {
