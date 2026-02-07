@@ -29,7 +29,7 @@ use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use chalkydri_sqpnp::{Iso3, Pnt3};
-use whacknet::RobotPose;
+use whacknet::{Comm, CommBundleId, RobotPose};
 
 use crate::field_layout::AprilTagFieldLayout;
 
@@ -141,11 +141,32 @@ impl AprilTagDetections {
     }
 }
 
+pub struct Resources<'r> {
+    pub comm: Borrowed<'r, Comm>,
+}
+impl<'r> ResourceBindings<'r> for Resources<'r> {
+    type Binding = CommBundleId;
+    fn from_bindings(
+        manager: &'r mut ResourceManager,
+        mapping: Option<&ResourceBindingMap<Self::Binding>>,
+    ) -> CuResult<Self> {
+        let key = mapping
+            .expect("comm binding")
+            .get(Self::Binding::Comm)
+            .expect("comm")
+            .typed();
+        Ok(Self {
+            comm: manager.borrow(key)?,
+        })
+    }
+}
+
 pub struct AprilTags {
     detector: Detector,
     tag_params: TagParams,
     solver: SqPnP,
     tags: HashMap<usize, Iso3>,
+    comm: Comm,
 }
 
 fn image_from_cuimage<A>(cu_image: &CuImage<A>) -> ManuallyDrop<Image>
@@ -171,12 +192,14 @@ impl Freezable for AprilTags {}
 impl CuTask for AprilTags {
     type Input<'m> = input_msg!((CuImage<Vec<u8>>, CuDuration));
     type Output<'m> = output_msg!((RobotPose, CuDuration));
-    type Resources<'r> = ();
+    type Resources<'r> = Resources<'r>;
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
+        let comm = resources.comm.0.clone();
+
         if let Some(config) = _config {
             let family_cfg: String = config.get("family").unwrap_or(FAMILY.to_string());
             let family: Family = family_cfg.parse().unwrap();
@@ -208,6 +231,7 @@ impl CuTask for AprilTags {
                 tag_params,
                 solver,
                 tags: AprilTagFieldLayout::load().unwrap(),
+                comm,
             });
         }
         Ok(Self {
@@ -224,6 +248,7 @@ impl CuTask for AprilTags {
             },
             solver: SqPnP::new(),
             tags: AprilTagFieldLayout::load().unwrap(),
+            comm,
         })
     }
 
@@ -279,7 +304,7 @@ impl CuTask for AprilTags {
 
                 let state = self
                     .solver
-                    .solve(&world_pts, &camera_pts, &mut sqpnp_buffer)
+                    .solve(&world_pts, &camera_pts, self.comm.gyro_angle().unwrap_or(0.0), 0.0, &mut sqpnp_buffer)
                     .unwrap();
                 let world_rotation: Rot3 = state.0;
                 let world_translation = state.1;

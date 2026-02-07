@@ -1,7 +1,7 @@
 (
   resources: [
     (id: "cam_provider", provider: "crate::cameras::providers::CamProviderBundle"),
-    (id: "comm", provider: "crate::comm::CommBundle"),
+    (id: "comm", provider: "whacknet::CommBundle"),
   ],
   tasks: [
     (
@@ -29,6 +29,7 @@
     (
       id: "apriltags",
       type: "chalkydri_apriltags::AprilTags",
+      resources: { "comm": "comm.comm" },
       config: {
         "fx": 843.1708945985422,
         "fy": 842.6629324284082,

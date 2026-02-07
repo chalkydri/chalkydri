@@ -5,6 +5,10 @@ use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 use std::{io, net::UdpSocket, sync::Arc};
 use chalkydri_core::prelude::*;
+use std::collections::HashMap;
+
+use chalkydri_core::prelude::RwLock;
+use cu29::prelude::*;
 
 const BIND_ADDR: &str = "0.0.0.0:0";
 const REMOTE_ADDR: &str = "10.45.33.2:7001";
@@ -138,3 +142,64 @@ fn check_size() {
 }
 
 // TODO: add a benchmark
+
+#[derive(Clone)]
+pub struct Comm {
+    clients: Arc<RwLock<HashMap<u8, WhacknetClient>>>,
+}
+//impl<'c> Comm<'c> {
+impl Comm {
+    pub fn new() -> Self {
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+    pub fn publish(&self, cam_id: u8, tag_count: u8, ts: u64, pose: RobotPose, std_devs: VisionUncertainty) {
+        let mut has_init = true;
+
+        if let Some(clients) = self.clients.try_read() {
+            if let Some(client) = clients.get(&cam_id) {
+                match client.send(ts, tag_count, pose, std_devs) {
+                    Err(err) => {
+                        println!("failed to send pose: {err:?}");
+                    }
+                    _ => {}
+                }
+            } else {
+                has_init = false;
+            }
+        }
+
+        if !has_init {
+            let client = WhacknetClient::new(cam_id).expect("failed to initialize client");
+            self.clients.write().insert(cam_id, client);
+        }
+    }
+
+    pub fn gyro_angle(&self) -> Option<f64> {
+        if let Some(clients) = self.clients.try_read() {
+            if let Some(client) = clients.get(&1) {
+                return client.gyro_angle();
+            }
+        }
+
+        None
+    }
+}
+
+pub struct CommBundle;
+bundle_resources!(CommBundle: Comm);
+
+impl ResourceBundle for CommBundle {
+    fn build(
+        bundle: BundleContext<Self>,
+        _config: Option<&ComponentConfig>,
+        manager: &mut ResourceManager,
+    ) -> CuResult<()> {
+        let comm_key = bundle.key(CommBundleId::Comm);
+
+        manager.add_owned(comm_key, Comm::new())?;
+
+        Ok(())
+    }
+}

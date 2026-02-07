@@ -1,8 +1,6 @@
 use chalkydri_apriltags::AprilTagDetections;
 use cu29::prelude::*;
-use whacknet::{RobotPose, VisionUncertainty};
-
-use crate::comm::{Comm, CommBundleId};
+use whacknet::{RobotPose, VisionUncertainty, Comm, CommBundleId};
 
 pub struct Resources<'r> {
     pub comm: Borrowed<'r, Comm>,
@@ -25,7 +23,7 @@ impl<'r> ResourceBindings<'r> for Resources<'r> {
 }
 
 pub struct AprilAdapter {
-    cam_id: u64,
+    cam_id: u8,
     comm: Comm,
 }
 impl Freezable for AprilAdapter {}
@@ -39,7 +37,7 @@ impl CuSinkTask for AprilAdapter {
     {
         let cam_id = config
             .expect("config must be present")
-            .get::<u64>("cam_id")
+            .get::<u8>("cam_id")
             .expect("cam_id must be set");
         let comm = resources.comm.0.clone();
 
@@ -58,6 +56,7 @@ impl CuSinkTask for AprilAdapter {
         if let Some((pose, ts)) = input.payload() {
             self.comm.publish(
                 self.cam_id,
+                0,
                 clock.now().as_micros() - ts.as_micros(),
                 pose.clone(),
                 VisionUncertainty::default(),

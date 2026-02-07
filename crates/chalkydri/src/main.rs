@@ -22,7 +22,6 @@ extern crate tracing;
 extern crate serde;
 
 pub mod cameras;
-pub mod comm;
 mod subsystems;
 mod utils;
 
