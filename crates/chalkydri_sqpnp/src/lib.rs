@@ -279,11 +279,10 @@ impl SqPnP {
                     if gyro_sign != test_r_sign {
                         energy += sign_change_error;
                     }
-
-                    if energy < min_energy {
-                        min_energy = energy;
-                        best_r = refined_r;
-                    }
+                }
+                if energy < min_energy {
+                    min_energy = energy;
+                    best_r = refined_r;
                 }
                 if min_energy < 1e-12 {
                     break;
