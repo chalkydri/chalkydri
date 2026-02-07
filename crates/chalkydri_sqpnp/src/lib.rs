@@ -18,6 +18,7 @@ pub type Vec3 = SVector<f64, 3>;
 pub type Mat9x3 = SMatrix<f64, 9, 3>;
 pub type Iso3 = Isometry3<f64>;
 pub type Pnt3 = Point3<f64>;
+pub type Rot3 = Rotation3<f64>;
 
 //R is rot matrix, r_vec is column slice of R
 //Jacobian is just partial derivatives across a 3d space
@@ -233,7 +234,9 @@ impl SqPnP {
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
         let t_vec = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
 
-        Some((r_mat, t_vec))
+        let rot = Rot3::from_matrix(r_vec);
+
+        Some((rot, t_vec))
     }
 
     fn corner_points_from_center(&self, isometry: &[Iso3], buffer: &mut Vec<Pnt3>) -> () {
