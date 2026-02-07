@@ -1,0 +1,66 @@
+name: Raspberry Pi 5 Build
+
+on:
+  push:
+  workflow_dispatch: # Keeping manual trigger option
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    name: Build for Raspberry Pi 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@nightly
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          wget https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-official_3.1.0_arm64.deb
+          sudo apt-get install -y pkg-config libssl-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev ./libjpeg-turbo-official_3.1.0_arm64.deb
+
+      - name: Generate build info
+        id: build_info
+        run: |
+          echo "timestamp=$(date +'%Y%m%d_%H%M%S')" >> $GITHUB_OUTPUT
+          echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+          echo "commit_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build for Pi 5
+        env:
+          RUSTFLAGS: "-C target-cpu=cortex-a76 -C target-feature=+fp-armv8,+neon,+crc,+crypto"
+        run: |
+          cargo build --release
+          # Create a directory for the artifacts
+          mkdir -p pi5-build
+          # Copy the compiled binary and any needed files
+          cp target/release/chalkydri pi5-build/
+          # If you have additional files to include
+          # cp additional-files/* pi5-build/
+          # Create a build info file
+          echo "Built from branch: ${{ steps.build_info.outputs.branch }}" > pi5-build/build_info.txt
+          echo "Commit: ${{ steps.build_info.outputs.commit_sha }}" >> pi5-build/build_info.txt
+          echo "Build timestamp: ${{ steps.build_info.outputs.timestamp }}" >> pi5-build/build_info.txt
+          echo "Target CPU: cortex-a76" >> pi5-build/build_info.txt
+          echo "Built on native ARM64 runner" >> pi5-build/build_info.txt
+
+      - name: Build image
+        uses: usimd/pi-gen-action@v1
+        with:
+          pi-gen-release: Chalkydri
+          stage-list: stage0 stage1 ./custom
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi5-build-${{ steps.build_info.outputs.branch }}-${{ steps.build_info.outputs.commit_sha }}
+          path: pi5-build/
+          retention-days: 14
