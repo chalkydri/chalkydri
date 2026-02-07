@@ -1,5 +1,5 @@
 use nalgebra::{Isometry3, Point3, Rotation3, SMatrix, SVector};
-use std::ops::AddAssign; //trust.
+use std::{f64::consts::PI, f128::consts::PI, ops::AddAssign}; //trust.
 
 /*Usage:
     1. Create a Solver
@@ -274,7 +274,7 @@ impl SqPnP {
                 //so like I would just compare with gyro and add weight, but that moves solution towards gyro making undefined behavior
                 //instead, ima add a value to the energy if the signs are different.
                 if (gyro != 0.0) && (test_r != 0.0) {
-                    let gyro_sign = gyro / gyro.abs();
+                    let gyro_sign = gyro - PI;
                     let test_r_sign = test_r / test_r.abs();
                     if gyro_sign != test_r_sign {
                         energy += sign_change_error;
@@ -289,7 +289,7 @@ impl SqPnP {
                 }
             }
         }
-        dbg!("Solution Entropy: {}", min_energy);
+        println!("Solution Entropy: {}", min_energy);
         Mat3::from_column_slice(best_r.as_slice())
     }
 
