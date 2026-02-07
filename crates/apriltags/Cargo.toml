@@ -19,4 +19,5 @@ chalkydri_sqpnp = { version = "0.1.1", path = "../chalkydri_sqpnp" }
 serde_json.workspace = true
 chalkydri_core.workspace = true
 nalgebra = "0.34.1"
+whacknet = { version = "0.1.0", path = "../whacknet" }
 

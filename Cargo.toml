@@ -12,7 +12,7 @@ members = [
   #"crates/chalkydrilib",
   #"crates/chalkydrilibj",
   #"crates/minint",
-  "crates/subsystems/python",
+  #"crates/subsystems/python",
   "crates/chalkydri_config",
   "crates/whacknet",
 ]

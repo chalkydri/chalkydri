@@ -1,12 +1,16 @@
+extern crate cu_bincode as bincode;
+
+use serde::{Serialize, Deserialize};
 use bytemuck::{Pod, Zeroable};
+use bincode::{Decode, Encode};
 use std::{io, net::UdpSocket, sync::Arc};
 
 const BIND_ADDR: &str = "0.0.0.0:0";
-const REMOTE_ADDR: &str = "127.0.0.1:7001";
+const REMOTE_ADDR: &str = "10.45.33.2:7001";
 
 // The acutal positioning data from the code
 #[repr(C)]
-#[derive(Debug, Default, Clone, Copy, Pod, Zeroable)]
+#[derive(Debug, Default, Clone, Copy, Pod, Zeroable, Encode, Decode, Serialize, Deserialize)]
 pub struct RobotPose {
     /// X coord
     pub x: f64,
