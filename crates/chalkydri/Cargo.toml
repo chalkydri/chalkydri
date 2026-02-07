@@ -11,8 +11,6 @@ edition.workspace = true
 default = []
 #default = []
 #apriltags = ["dep:chalkydri-apriltags"]
-#ml = ["dep:tfledge"]
-python = ["dep:chalkydri_subsys_python"]
 
 # AprilTags C library
 #capriltags = ["dep:apriltag"]
@@ -53,7 +51,6 @@ tokio-util = { version = "0.7.16", features = ["rt"] }
 #kornia-linalg = { git = "https://github.com/kornia/kornia-rs", tag = "v0.1.9" }
 console-subscriber = { version = "0.4.1", optional = true }
 chalkydri_core = { workspace = true }
-chalkydri_subsys_python = { workspace = true, optional = true }
 chalkydri_config = { version = "0.1.0", path = "../chalkydri_config" }
 tokio-stream = "0.1.17"
 chalkydri_apriltags = { version = "0.1.0", path = "../apriltags" }
