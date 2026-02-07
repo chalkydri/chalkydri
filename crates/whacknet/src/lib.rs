@@ -1,8 +1,8 @@
 extern crate cu_bincode as bincode;
 
-use serde::{Serialize, Deserialize};
-use bytemuck::{Pod, Zeroable};
 use bincode::{Decode, Encode};
+use bytemuck::{Pod, Zeroable};
+use serde::{Deserialize, Serialize};
 use std::{io, net::UdpSocket, sync::Arc};
 
 const BIND_ADDR: &str = "0.0.0.0:0";
