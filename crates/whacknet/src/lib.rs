@@ -4,6 +4,7 @@ use bincode::{Decode, Encode};
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 use std::{io, net::UdpSocket, sync::Arc};
+use chalkydri_core::prelude::*;
 
 const BIND_ADDR: &str = "0.0.0.0:0";
 const REMOTE_ADDR: &str = "10.45.33.2:7001";
@@ -41,35 +42,77 @@ struct VisionMeasurement {
     /// Our accurracy stdevs to send to the bot
     pub std_devs: VisionUncertainty, // 24 bytes
     /// Camera id
-    camera_id: u64,
+    camera_id: u8,
+    /// Tag count
+    tag_count: u8,
+    /// Reserved for future use
+    _reserved_1: u8,
+    /// Reserved for future use
+    _reserved_2: u8,
+    /// Reserved for future use
+    _reserved_3: u8,
+    /// Reserved for future use
+    _reserved_4: u8,
+    /// Reserved for future use
+    _reserved_5: u8,
+    /// Reserved for future use
+    _reserved_6: u8,
     /// Timestamp (in micro secs)
     ts: u64,
 }
 
 pub struct WhacknetClient {
-    cam_id: u64,
+    cam_id: u8,
     socket: Arc<UdpSocket>,
+    gyro_angle: Arc<RwLock<Option<f64>>>,
 }
 impl WhacknetClient {
     /// Initialize a new whacknet client
-    pub fn new(cam_id: u64) -> io::Result<Self> {
+    pub fn new(cam_id: u8) -> io::Result<Self> {
         // Create and connect to server
         let socket = UdpSocket::bind(BIND_ADDR)?;
         socket.connect(REMOTE_ADDR)?;
 
+        let gyro_angle = Arc::new(RwLock::new(Some(0f64)));
+
+        let gyro_angle_ = gyro_angle.clone();
+        std::thread::spawn(move || {
+            let gyro_socket = UdpSocket::bind("0.0.0.0:7002").unwrap();
+
+            let mut buf = [0u8; 8];
+            loop {
+                match gyro_socket.recv(&mut buf) {
+                    Ok(_bytes) => {
+                        let mut guard = gyro_angle_.write();
+                        if guard.is_none() {
+                            break;
+                        }
+                        *guard = Some(f64::from_le_bytes(buf));
+                    }
+                    Err(_err) => {
+                    }
+                }
+
+                buf = [0u8; 8];
+            }
+        });
+
         Ok(Self {
             cam_id,
             socket: Arc::new(socket),
+            gyro_angle,
         })
     }
     /// Send a pose with std dev
-    pub fn send(&self, ts: u64, pose: RobotPose, std_devs: VisionUncertainty) -> io::Result<()> {
+    pub fn send(&self, ts: u64, tag_count: u8, pose: RobotPose, std_devs: VisionUncertainty) -> io::Result<()> {
         // Pack up all the data in the struct
         let measurement = VisionMeasurement {
             pose,
             std_devs,
             camera_id: self.cam_id,
+            tag_count,
             ts,
+            ..Default::default()
         };
 
         // Turn the measurement into raw bytes and send it over the UDP sock
@@ -77,6 +120,15 @@ impl WhacknetClient {
         self.socket.send(bytes)?;
 
         Ok(())
+    }
+    pub fn gyro_angle(&self) -> Option<f64> {
+        self.gyro_angle.try_read().map(|ga| ga.expect("this should not be possible"))
+    }
+}
+impl Drop for WhacknetClient {
+    fn drop(&mut self) {
+        // Tells the gyro listener thread to exit
+        *self.gyro_angle.write() = None;
     }
 }
 
