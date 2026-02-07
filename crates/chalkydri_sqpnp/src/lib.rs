@@ -214,6 +214,8 @@ impl SqPnP {
         &self,
         points_isometry: &[Isometry3<f64>],
         points_2d: &[Vec3],
+        gyro: f64,
+        sign_change_error: f64,
         buffer: &mut Vec<Pnt3>,
     ) -> Option<(Rot3, Vec3)> {
         self.corner_points_from_center(points_isometry, buffer);
@@ -228,7 +230,7 @@ impl SqPnP {
 
         let sys = build_linear_system(&points_3d, points_2d);
 
-        let r_mat = self.solve_rotation(&sys.omega);
+        let r_mat = self.solve_rotation(&sys.omega, gyro, sign_change_error);
 
         //t = -q_tt^-1 * q_rt^T * r
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
@@ -254,7 +256,7 @@ impl SqPnP {
         });
     }
 
-    fn solve_rotation(&self, omega: &Mat9) -> Mat3 {
+    fn solve_rotation(&self, omega: &Mat9, gyro: f64, sign_change_error: f64) -> Mat3 {
         let eigen = omega.symmetric_eigen();
 
         let mut best_r = Vec9::zeros();
@@ -265,7 +267,19 @@ impl SqPnP {
             for sign in [-1.0, 1.0] {
                 let guess = e.scale(sign);
                 let r_start = nearest_so3(&guess);
-                let (refined_r, energy) = self.optimization(r_start, omega);
+                let (refined_r, mut energy) = self.optimization(r_start, omega);
+                
+                let test_r_mat = Mat3::from_column_slice(refined_r.as_slice());
+                let test_r = Rot3::from_matrix(&test_r_mat).euler_angles().2;
+                //so like I would just compare with gyro and add weight, but that moves solution towards gyro making undefined behavior
+                //instead, ima add a value to the energy if the signs are different.
+                let gyro_sign = gyro / gyro.abs();
+                let test_r_sign = test_r / test_r.abs();
+
+                if gyro_sign != test_r_sign{
+                    energy += sign_change_error;
+                }
+                
                 if energy < min_energy {
                     min_energy = energy;
                     best_r = refined_r;
@@ -275,6 +289,7 @@ impl SqPnP {
                 break;
             }
         }
+        dbg!("Solution Entropy: {}", min_energy);
         Mat3::from_column_slice(best_r.as_slice())
     }
 
