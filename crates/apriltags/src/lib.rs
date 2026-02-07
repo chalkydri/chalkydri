@@ -30,6 +30,7 @@ use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use chalkydri_sqpnp::{Iso3, Pnt3};
+use whacknet::RobotPose;
 
 use crate::field_layout::AprilTagFieldLayout;
 
@@ -170,7 +171,7 @@ impl Freezable for AprilTags {}
 
 impl CuTask for AprilTags {
     type Input<'m> = input_msg!(CuImage<Vec<u8>>);
-    type Output<'m> = output_msg!(AprilTagDetections);
+    type Output<'m> = output_msg!(RobotPose);
     type Resources<'r> = ();
 
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
@@ -241,11 +242,12 @@ impl CuTask for AprilTags {
 
             let image = image_from_cuimage(payload);
             let detections = self.detector.detect(&image);
+            if detections.len() > 0 {
             let mut camera_pts: Vec<Vec3> = Vec::new();
             let mut world_pts: Vec<Iso3> = Vec::new();
             let mut sqpnp_buffer: Vec<Pnt3> = Vec::new(); //doing this kinda defeats the point, fix later
             for detection in detections {
-                world_pts.push(tags.get(detection.id));
+                world_pts.push(self.tags.get(&detection.id()).unwrap().clone());
                 for corner in detection.corners() {
                     camera_pts.push(Vec3::new(corner[0], corner[1], 1.0)); //I didn't check, make sure these are normalized
                 }
@@ -281,10 +283,16 @@ impl CuTask for AprilTags {
                 .unwrap();
             let world_rotation = state.0;
             let world_translation = state.1;
+
+            output.tov = input.tov;
+            output.set_payload(RobotPose {
+                x: world_translation[0],
+                y: world_translation[1],
+                rot: world_rotation[0],
+            });
             println!("Rotation: {}, Translation: {}", world_rotation, world_translation);
+            }
         };
-        output.tov = input.tov;
-        output.set_payload(result);
         Ok(())
     }
 }
