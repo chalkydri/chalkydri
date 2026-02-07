@@ -21,3 +21,6 @@ ui/Thumbs.db
 # Vite
 ui/vite.config.js.timestamp-*
 ui/vite.config.ts.timestamp-*
+
+chalkydri_*.copper
+cu29_log_index/
