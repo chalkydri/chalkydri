@@ -1,4 +1,4 @@
-use nalgebra::{Isometry3, Point3, SMatrix, SVector};
+use nalgebra::{Isometry3, Point3, Rotation3, SMatrix, SVector};
 use std::ops::AddAssign; //trust.
 
 /*Usage:
@@ -215,7 +215,7 @@ impl SqPnP {
         points_isometry: &[Isometry3<f64>],
         points_2d: &[Vec3],
         buffer: &mut Vec<Pnt3>,
-    ) -> Option<(Mat3, Vec3)> {
+    ) -> Option<(Rot3, Vec3)> {
         self.corner_points_from_center(points_isometry, buffer);
         let mut points_3d: Vec<Vec3> = Vec::new();
         for point in buffer {
@@ -234,7 +234,7 @@ impl SqPnP {
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
         let t_vec = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
 
-        let rot = Rot3::from_matrix(r_vec);
+        let rot = Rot3::from_matrix(&r_mat);
 
         Some((rot, t_vec))
     }

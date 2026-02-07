@@ -15,12 +15,12 @@ impl Comm {
             clients: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    pub fn publish(&self, cam_id: u64, pose: RobotPose, std_devs: VisionUncertainty) {
+    pub fn publish(&self, cam_id: u64, ts: u64, pose: RobotPose, std_devs: VisionUncertainty) {
         let mut has_init = true;
 
         if let Some(clients) = self.clients.try_read() {
             if let Some(client) = clients.get(&cam_id) {
-                match client.send(pose, std_devs) {
+                match client.send(ts, pose, std_devs) {
                     Err(err) => {
                         error!("failed to send pose: {err:?}");
                     }

@@ -291,7 +291,7 @@ impl<'r> ResourceBindings<'r> for Resources {
 impl Freezable for CamPipeline {}
 impl CuSrcTask for CamPipeline {
     type Resources<'r> = Resources;
-    type Output<'m> = output_msg!(CuGstBuffer);
+    type Output<'m> = output_msg!((CuGstBuffer, CuDuration));
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
@@ -333,27 +333,38 @@ impl CuSrcTask for CamPipeline {
 
     fn process<'o>(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
         if let Some(sample) = self.appsink.try_pull_sample(ClockTime::from_useconds(20)) {
-            let buf = sample.buffer().unwrap();
-            // Query the configured latency from the pipeline
-            let mut query = gstreamer::query::Latency::new();
-            if self.pipeline.query(&mut query) {
-                let (live, min_latency, max_latency) = query.result();
-                println!(
-                    "Live: {}, Min latency: {:?}, Max latency: {:?}",
-                    live, min_latency, max_latency
-                );
-            }
+            // Grab a timestamp for when the gstreamer pipeline gives us a sample
+            // TODO: how slow can this be in worst case? worth using quanta on the side? could
+            // clock.current() be used?
+            //let gst_ret_ts = clock.now();
 
-            dbg!(
-                buf.size(),
-                buf.pts(),
-                buf.dts(),
-                buf.duration(),
-                buf.meta::<ReferenceTimestampMeta>(),
-                self.pipeline.latency()
-            );
-            new_msg.set_payload(CuGstBuffer(buf.to_owned()));
-            println!("wooooo");
+            let buf = sample.buffer().unwrap();
+
+            // TODO: idk how to get this; need to look into how a pipeline becomes "live"
+            // // Query the configured latency from the pipeline
+            // let mut query = gstreamer::query::Latency::new();
+            // if self.pipeline.query(&mut query) {
+            //     let (live, min_latency, max_latency) = query.result();
+            //     println!(
+            //         "Live: {}, Min latency: {:?}, Max latency: {:?}",
+            //         live, min_latency, max_latency
+            //     );
+            // }
+
+            //dbg!(
+            //    buf.size(),
+            //    buf.pts(),
+            //    buf.dts(),
+            //    buf.duration(),
+            //    buf.meta::<ReferenceTimestampMeta>(),
+            //    self.pipeline.latency()
+            //);
+
+            // TODO: how trustworthy are gstreamer's timestamps?
+            let time_offset = CuDuration::from_micros(buf.pts().unwrap().useconds());
+
+            new_msg.set_payload((CuGstBuffer(buf.to_owned()), time_offset));
+            //dbg!(gst_ret_ts);
         }
 
         Ok(())

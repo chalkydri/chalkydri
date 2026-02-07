@@ -30,7 +30,7 @@ pub struct AprilAdapter {
 }
 impl Freezable for AprilAdapter {}
 impl CuSinkTask for AprilAdapter {
-    type Input<'m> = input_msg!(RobotPose);
+    type Input<'m> = input_msg!((RobotPose, CuDuration));
     type Resources<'r> = Resources<'r>;
 
     fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
@@ -54,15 +54,14 @@ impl CuSinkTask for AprilAdapter {
         Ok(())
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
-        if let Some(pose) = input.payload() {
-
-
-        self.comm.publish(
-            self.cam_id,
-            pose.clone(),
-            VisionUncertainty::default(),
-        );
+    fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        if let Some((pose, ts)) = input.payload() {
+            self.comm.publish(
+                self.cam_id,
+                clock.now().as_micros() - ts.as_micros(),
+                pose.clone(),
+                VisionUncertainty::default(),
+            );
         }
 
         Ok(())

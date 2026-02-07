@@ -63,13 +63,13 @@ impl WhacknetClient {
         })
     }
     /// Send a pose with std dev
-    pub fn send(&self, pose: RobotPose, std_devs: VisionUncertainty) -> io::Result<()> {
+    pub fn send(&self, ts: u64, pose: RobotPose, std_devs: VisionUncertainty) -> io::Result<()> {
         // Pack up all the data in the struct
         let measurement = VisionMeasurement {
             pose,
             std_devs,
             camera_id: self.cam_id,
-            ts: 0,
+            ts,
         };
 
         // Turn the measurement into raw bytes and send it over the UDP sock

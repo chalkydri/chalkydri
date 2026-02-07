@@ -22,7 +22,7 @@ use apriltag_sys::image_u8_t;
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
-use chalkydri_sqpnp::SqPnP;
+use chalkydri_sqpnp::{Rot3, SqPnP};
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
 use cu29::prelude::*;
@@ -170,8 +170,8 @@ where
 impl Freezable for AprilTags {}
 
 impl CuTask for AprilTags {
-    type Input<'m> = input_msg!(CuImage<Vec<u8>>);
-    type Output<'m> = output_msg!(RobotPose);
+    type Input<'m> = input_msg!((CuImage<Vec<u8>>, CuDuration));
+    type Output<'m> = output_msg!((RobotPose, CuDuration));
     type Resources<'r> = ();
 
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
@@ -240,7 +240,7 @@ impl CuTask for AprilTags {
         if let Some(payload) = input.payload() {
             use chalkydri_sqpnp::Vec3;
 
-            let image = image_from_cuimage(payload);
+            let image = image_from_cuimage(&payload.0);
             let detections = self.detector.detect(&image);
             if detections.len() > 0 {
             let mut camera_pts: Vec<Vec3> = Vec::new();
@@ -283,14 +283,13 @@ impl CuTask for AprilTags {
                 .unwrap();
             let world_rotation: Rot3 = state.0;
             let world_translation = state.1;
-            println!("Rotation: {}, Translation: {}", world_rotation.euler_angles().2, world_translation); //Euler_angles gives (roll, pitch, yaw)
 
             output.tov = input.tov;
-            output.set_payload(RobotPose {
+            output.set_payload((RobotPose {
                 x: world_translation[0],
                 y: world_translation[1],
-                rot: world_rotation[0],
-            });
+                rot: world_rotation.euler_angles().2,
+            }, payload.1));
             println!("Rotation: {}, Translation: {}", world_rotation, world_translation);
             }
         };

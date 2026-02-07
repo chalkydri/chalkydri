@@ -25,8 +25,8 @@ pub struct GstToCuImage {
 impl Freezable for GstToCuImage {}
 
 impl CuTask for GstToCuImage {
-    type Input<'m> = input_msg!(CuGstBuffer);
-    type Output<'m> = output_msg!(CuImage<Vec<u8>>);
+    type Input<'m> = input_msg!((CuGstBuffer, CuDuration));
+    type Output<'m> = output_msg!((CuImage<Vec<u8>>, CuDuration));
     type Resources<'r> = ();
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
@@ -82,7 +82,7 @@ impl CuTask for GstToCuImage {
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         let now_ns = clock.now().as_nanos();
-        let Some(buffer) = input.payload() else {
+        let Some((buffer, ts)) = input.payload() else {
             const WARN_AFTER_NS: u64 = 2_000_000_000;
             const WARN_EVERY_NS: u64 = 2_000_000_000;
             let last_payload_ns = self.last_payload_ns.unwrap_or(0);
@@ -149,7 +149,7 @@ impl CuTask for GstToCuImage {
             handle,
         );
         output.tov = input.tov;
-        output.set_payload(image);
+        output.set_payload((image, ts.clone()));
         Ok(())
     }
 }
