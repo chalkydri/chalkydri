@@ -1,4 +1,4 @@
-name: Raspberry Pi 5 Build
+name: Raspberry Pi 5 Image Build
 
 on:
   push:
@@ -56,7 +56,7 @@ jobs:
         uses: usimd/pi-gen-action@v1
         with:
           pi-gen-release: Chalkydri
-          stage-list: stage0 stage1 ./custom
+          stage-list: stage0 stage1 ./build/custom-pi-stage
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
