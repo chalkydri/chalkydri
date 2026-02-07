@@ -17,9 +17,9 @@ default = []
 
 tokio-console = ["dep:console-subscriber"]
 
-[[bin]]
-name = "logread"
-path = "src/bin/logread.rs"
+#[[bin]]
+#name = "logread"
+#path = "src/bin/logread.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "signal"] }
