@@ -107,7 +107,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let pathbuf = PathBuf::from_str("testytest.copper".into()).unwrap();
+    let pathbuf = PathBuf::from_str("chalkydri.copper".into()).unwrap();
     let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
 
     let clock = copper_ctx.clock;
