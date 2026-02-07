@@ -29,8 +29,13 @@
     (
       id: "apriltags",
       type: "chalkydri_apriltags::AprilTags",
-      //config: {
-      //},
+      config: {
+        "fx": 843.1708945985422,
+        "fy": 842.6629324284082,
+        "cx": 961.7755949686738,
+        "cy": 536.683745512305,
+        "bits_corrected": 1,
+      },
     ),
     //(
     //  id: "apriltagproc",

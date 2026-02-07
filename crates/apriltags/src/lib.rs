@@ -181,7 +181,7 @@ impl CuTask for AprilTags {
         if let Some(config) = _config {
             let family_cfg: String = config.get("family").unwrap_or(FAMILY.to_string());
             let family: Family = family_cfg.parse().unwrap();
-            let bits_corrected: u32 = config.get("bits_corrected").unwrap_or(8);
+            let bits_corrected: u32 = config.get("bits_corrected").unwrap_or(3);
             let tagsize = config.get("tag_size").unwrap_or(TAG_SIZE);
             let fx = config.get("fx").unwrap_or(FX);
             let fy = config.get("fy").unwrap_or(FY);
@@ -246,8 +246,11 @@ impl CuTask for AprilTags {
             let mut camera_pts: Vec<Vec3> = Vec::new();
             let mut world_pts: Vec<Iso3> = Vec::new();
             let mut sqpnp_buffer: Vec<Pnt3> = Vec::new(); //doing this kinda defeats the point, fix later
-            for detection in detections {
-                world_pts.push(self.tags.get(&detection.id()).unwrap().clone());
+            'det_proc: for detection in detections {
+                let Some(tag) = self.tags.get(&detection.id()) else {
+                    continue 'det_proc;
+                };
+                world_pts.push(tag.clone());
                 for corner in detection.corners() {
                     camera_pts.push(Vec3::new(corner[0], corner[1], 1.0)); //I didn't check, make sure these are normalized
                 }
