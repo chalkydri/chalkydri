@@ -49,13 +49,6 @@ jobs:
       #   uses: MineBartekSA/quick-mdbook@v1.1
       #   with:
       #     clib: musl
-      - name: Build Frontend
-        run: |
-          cd ui/
-          bun install
-          bun run gen_api
-          bun run build
-          cd ..
 
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v2.0.0
