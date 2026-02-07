@@ -3,6 +3,8 @@ compile_error!(
     "this does not work under windows. please use a unix system. only linux is supported."
 );
 
+const SIGN_FLIP_CONST: f64 = 50.0;
+
 #[macro_use]
 extern crate serde;
 extern crate chalkydri_sqpnp;
@@ -304,7 +306,7 @@ impl CuTask for AprilTags {
 
                 let state = self
                     .solver
-                    .solve(&world_pts, &camera_pts, self.comm.gyro_angle().unwrap_or(0.0), 0.0, &mut sqpnp_buffer)
+                    .solve(&world_pts, &camera_pts, self.comm.gyro_angle().unwrap_or(0.0), SIGN_FLIP_CONST, &mut sqpnp_buffer)
                     .unwrap();
                 let world_rotation: Rot3 = state.0;
                 let world_translation = state.1;
