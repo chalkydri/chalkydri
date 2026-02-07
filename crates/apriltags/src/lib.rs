@@ -13,7 +13,6 @@ mod field_layout;
 
 use std::collections::HashMap;
 use std::mem::ManuallyDrop;
-use std::ops::Deref;
 
 use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
 
@@ -189,8 +188,6 @@ impl CuTask for AprilTags {
             let cy = config.get("cy").unwrap_or(CY);
             //let field_layout_path = config.get("field_json_path");
 
-            AprilTagFieldLayout::load().unwrap();
-
             let tag_params = TagParams {
                 fx,
                 fy,
@@ -296,6 +293,7 @@ impl CuTask for AprilTags {
                     },
                     payload.1,
                 ));
+                dbg!(output.payload());
             }
         };
         Ok(())
