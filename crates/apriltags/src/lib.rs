@@ -281,8 +281,9 @@ impl CuTask for AprilTags {
                 .solver
                 .solve(&world_pts, &camera_pts, &mut sqpnp_buffer)
                 .unwrap();
-            let world_rotation = state.0;
+            let world_rotation: Rot3 = state.0;
             let world_translation = state.1;
+            println!("Rotation: {}, Translation: {}", world_rotation.euler_angles().2, world_translation); //Euler_angles gives (roll, pitch, yaw)
 
             output.tov = input.tov;
             output.set_payload(RobotPose {
