@@ -245,7 +245,7 @@ impl CuTask for AprilTags {
             let mut world_pts: Vec<Iso3> = Vec::new();
             let mut sqpnp_buffer: Vec<Pnt3> = Vec::new(); //doing this kinda defeats the point, fix later
             for detection in detections {
-                //world_pts.push(detection isometry); -- need to get apriltagfield in here so I can get this from ID
+                world_pts.push(tags.get(detection.id));
                 for corner in detection.corners() {
                     camera_pts.push(Vec3::new(corner[0], corner[1], 1.0)); //I didn't check, make sure these are normalized
                 }
@@ -281,6 +281,7 @@ impl CuTask for AprilTags {
                 .unwrap();
             let world_rotation = state.0;
             let world_translation = state.1;
+            println!("Rotation: {}, Translation: {}", world_rotation, world_translation);
         };
         output.tov = input.tov;
         output.set_payload(result);
