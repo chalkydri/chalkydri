@@ -21,13 +21,14 @@ extern crate tracing;
 #[macro_use]
 extern crate serde;
 
-pub mod cameras;
-mod subsystems;
-mod utils;
+use chalkydri::cameras;
+use chalkydri::subsystems;
+use chalkydri::utils;
 
 pub use subsystems::apriltags::AprilAdapter;
 
-pub use crate::{cameras::pipeline::CamPipeline, subsystems::calibration::Calibrator};
+pub use cameras::pipeline::CamPipeline;
+pub use subsystems::calibration::Calibrator;
 use chalkydri_core::{
     config::{Cfg, Config},
     prelude::config,

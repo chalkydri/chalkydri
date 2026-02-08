@@ -5,8 +5,8 @@
 
 pub(crate) mod gst_to_cu;
 //pub(crate) mod mjpeg;
-pub(crate) mod pipeline;
-pub(crate) mod providers;
+pub mod pipeline;
+pub mod providers;
 //mod format_selection;
 
 pub use gst_to_cu::GstToCuImage;

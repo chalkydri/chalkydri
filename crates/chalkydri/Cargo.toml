@@ -21,6 +21,10 @@ tokio-console = ["dep:console-subscriber"]
 #name = "logread"
 #path = "src/bin/logread.rs"
 
+[[bin]]
+name = "calibrate"
+path = "src/bin/calibrate.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "signal"] }
 serde.workspace = true
