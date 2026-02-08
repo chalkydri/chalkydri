@@ -43,10 +43,6 @@ use std::{
 };
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
-// mimalloc is an excellent general purpose allocator
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
-
 use cu29_helpers::basic_copper_setup;
 
 #[copper_runtime(config = "copperconfig.ron")]
