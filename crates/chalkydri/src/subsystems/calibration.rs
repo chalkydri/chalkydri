@@ -11,14 +11,9 @@ use camera_intrinsic_calibration::{
     util::*,
 };
 use camera_intrinsic_model::{GenericModel, OpenCVModel5};
-use cu29::cutask::CuTask;
-use image::{DynamicImage, GrayImage, Luma, RgbImage};
+use image::{DynamicImage, GrayImage, Luma};
 
-use gstreamer::{
-    Buffer, Element,
-    glib::{WeakRef, object::ObjectExt},
-};
-use tokio::{sync::watch, time::Instant};
+use tokio::time::Instant;
 
 pub struct CalibratedModel {
     model: GenericModel<f64>,

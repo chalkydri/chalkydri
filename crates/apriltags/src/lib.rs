@@ -23,12 +23,14 @@ use apriltag_sys::image_u8_t;
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
+use camera_intrinsic_model::{GenericModel, OpenCVModel5};
 use chalkydri_sqpnp::{Rot3, SqPnP};
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
 use cu29::prelude::*;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
+use nalgebra::{Matrix, Matrix2x1, Vector2, matrix};
 
 use chalkydri_sqpnp::{Iso3, Pnt3};
 use whacknet::{Comm, CommBundleId, RobotPose};
@@ -165,10 +167,10 @@ impl<'r> ResourceBindings<'r> for Resources<'r> {
 
 pub struct AprilTags {
     detector: Detector,
-    tag_params: TagParams,
     solver: SqPnP,
     tags: HashMap<usize, Iso3>,
     comm: Comm,
+    cam_model: GenericModel<f64>,
 }
 
 fn image_from_cuimage<A>(cu_image: &CuImage<A>) -> ManuallyDrop<Image>
@@ -207,19 +209,14 @@ impl CuTask for AprilTags {
             let family: Family = family_cfg.parse().unwrap();
             let bits_corrected: u32 = config.get("bits_corrected").unwrap_or(3);
             let tagsize = config.get("tag_size").unwrap_or(TAG_SIZE);
-            let fx = config.get("fx").unwrap_or(FX);
-            let fy = config.get("fy").unwrap_or(FY);
-            let cx = config.get("cx").unwrap_or(CX);
-            let cy = config.get("cy").unwrap_or(CY);
+            //let fx = config.get("fx").unwrap_or(FX);
+            //let fy = config.get("fy").unwrap_or(FY);
+            //let cx = config.get("cx").unwrap_or(CX);
+            //let cy = config.get("cy").unwrap_or(CY);
             //let field_layout_path = config.get("field_json_path");
+            let calib = config.get::<String>("calib").unwrap();
 
-            let tag_params = TagParams {
-                fx,
-                fy,
-                cx,
-                cy,
-                tagsize,
-            };
+            let cam_model: GenericModel<f64> = serde_json::from_str(&calib).unwrap();
 
             let detector = DetectorBuilder::default()
                 .add_family_bits(family, bits_corrected as usize)
@@ -230,10 +227,10 @@ impl CuTask for AprilTags {
 
             return Ok(Self {
                 detector,
-                tag_params,
                 solver,
                 tags: AprilTagFieldLayout::load().unwrap(),
                 comm,
+                cam_model,
             });
         }
         Ok(Self {
@@ -241,16 +238,10 @@ impl CuTask for AprilTags {
                 .add_family_bits(FAMILY.parse::<Family>().unwrap(), 1)
                 .build()
                 .unwrap(),
-            tag_params: TagParams {
-                fx: FX,
-                fy: FY,
-                cx: CX,
-                cy: CY,
-                tagsize: TAG_SIZE,
-            },
             solver: SqPnP::new(),
             tags: AprilTagFieldLayout::load().unwrap(),
             comm,
+            cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
         })
     }
 
@@ -275,9 +266,13 @@ impl CuTask for AprilTags {
                         continue 'det_proc;
                     };
                     world_pts.push(tag.clone());
-                    for corner in detection.corners() {
-                        camera_pts.push(Vec3::new(corner[0], corner[1], 1.0)); //I didn't check, make sure these are normalized
-                    }
+                    let corners = detection.corners().map(|corner| {
+                        Vector2::new(corner[0], corner[1])
+                    }).into_iter().collect::<Vec<_>>();
+                    let unprojected = self.cam_model.unproject(corners.as_slice()).into_iter().map(|corner| {
+                        corner.unwrap()
+                    }).collect::<Vec<_>>();
+                    camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
                     /*if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
                     let translation = aprilpose.translation();
                     let rotation = aprilpose.rotation();
