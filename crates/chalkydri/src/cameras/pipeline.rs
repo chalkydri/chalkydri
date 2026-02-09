@@ -335,7 +335,7 @@ impl CuSrcTask for CamPipeline {
             // Grab a timestamp for when the gstreamer pipeline gives us a sample
             // TODO: how slow can this be in worst case? worth using quanta on the side? could
             // clock.current() be used?
-            //let gst_ret_ts = clock.now();
+            let gst_ret_ts = clock.now();
 
             let buf = sample.buffer().unwrap();
 
@@ -362,6 +362,7 @@ impl CuSrcTask for CamPipeline {
             // TODO: how trustworthy are gstreamer's timestamps?
             let time_offset = CuDuration::from_micros(buf.pts().unwrap().useconds());
 
+            new_msg.tov = Tov::Time(gst_ret_ts);
             new_msg.set_payload((CuGstBuffer(buf.to_owned()), time_offset));
             //dbg!(gst_ret_ts);
         }
