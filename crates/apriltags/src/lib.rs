@@ -300,7 +300,7 @@ impl CuTask for AprilTags {
                     ids.push(detection.id());*/
                 }
 
-                let state = self
+                if let Some(state) = self
                     .solver
                     .solve(
                         &world_pts,
@@ -308,21 +308,21 @@ impl CuTask for AprilTags {
                         self.comm.gyro_angle().unwrap_or(0.0),
                         SIGN_FLIP_CONST,
                         &mut sqpnp_buffer,
-                    )
-                    .unwrap();
-                let world_rotation: Rot3 = state.0;
-                let world_translation = state.1;
+                    ) {
+                    let world_rotation: Rot3 = state.0;
+                    let world_translation = state.1;
 
-                output.tov = input.tov;
-                output.set_payload((
-                    RobotPose {
-                        x: world_translation[0],
-                        y: world_translation[1],
-                        rot: world_rotation.euler_angles().2,
-                    },
-                    payload.1,
-                ));
-                dbg!(output.payload());
+                    output.tov = input.tov;
+                    output.set_payload((
+                        RobotPose {
+                            x: world_translation[0],
+                            y: world_translation[1],
+                            rot: world_rotation.euler_angles().2,
+                        },
+                        payload.1,
+                    ));
+                    dbg!(output.payload());
+                }
             }
         };
         Ok(())
