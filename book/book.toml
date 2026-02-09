@@ -1,7 +1,7 @@
 [book]
 title = "The Chalkydri Book"
 authors = ["Lincoln"]
-multilingual = false
+#multilingual = false
 language = "en"
 src = "src"
 

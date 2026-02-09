@@ -1,0 +1,32 @@
+(
+  resources: [
+    (id: "cam_provider", provider: "CamProviderBundle"),
+  ],
+  tasks: [
+    (
+      id: "camera",
+      type: "CamPipeline",
+      config: {
+        "name": "Test",
+      },
+      resources: { "v4l2": "cam_provider.v4l2" },
+      logging: (enabled: false),
+    ),
+    (
+      id: "gst_to_cu",
+      type: "GstToCuImage",
+      config: {
+        "fourcc": "GREY",
+      },
+      logging: (enabled: false),
+    ),
+    (
+      id: "calibrator",
+      type: "Calibrator",
+    ),
+  ],
+  cnx: [
+    (src: "camera", dst: "gst_to_cu", msg: "(cu_gstreamer::CuGstBuffer, CuDuration)"),
+    (src: "gst_to_cu", dst: "calibrator", msg: "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)"),
+  ],
+)

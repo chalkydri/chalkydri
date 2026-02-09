@@ -6,5 +6,7 @@ edition.workspace = true
 
 [dependencies]
 bytemuck = { version = "1.25.0", features = ["aarch64_simd", "avx512_simd", "const_zeroed", "derive"] }
+chalkydri_core.workspace = true
 cu-bincode = { version = "2.0.2", features = ["serde"] }
+cu29.workspace = true
 serde = { workspace = true, features = ["derive"] }

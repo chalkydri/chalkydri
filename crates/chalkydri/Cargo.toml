@@ -21,14 +21,18 @@ tokio-console = ["dep:console-subscriber"]
 #name = "logread"
 #path = "src/bin/logread.rs"
 
+[[bin]]
+name = "calibrate"
+path = "src/bin/calibrate.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "signal"] }
 serde.workspace = true
 serde_json.workspace = true
 mimalloc = { version = "0.1.43", features = ["override"] }
-camera-intrinsic-calibration = { git = "https://github.com/chalkydri/camera-intrinsic-calibration-rs.git", branch = "main" }
-camera-intrinsic-model = { git = "https://github.com/chalkydri/camera-intrinsic-model-rs.git", branch = "main" }
-aprilgrid = { git = "https://github.com/chalkydri/aprilgrid-rs.git", branch = "master" }
+camera-intrinsic-calibration = { git = "https://github.com/powei-lin/camera-intrinsic-calibration-rs.git", branch = "main" }
+camera-intrinsic-model = { git = "https://github.com/powei-lin/camera-intrinsic-model-rs.git", branch = "main" }
+#aprilgrid = { git = "https://github.com/powei-lin/aprilgrid-rs.git", branch = "master" }
 gstreamer.workspace = true
 gstreamer-app.workspace = true
 #gstreamer-video = { version = "0.23.4", features = ["v1_22"] }

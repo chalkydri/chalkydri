@@ -186,7 +186,7 @@ impl Default for SqPnP {
         Self {
             max_iter: 15,
             tol_sq: 1e-16,
-            corner_distance: 20.64 / 2.0, //2026 in cm
+            corner_distance: f64::sqrt(16.51f64.powf(2.0) + 16.51f64.powf(2.0)) / 2.0, //2026 in cm
         }
     }
 }

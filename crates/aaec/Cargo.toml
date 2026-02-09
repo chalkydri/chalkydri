@@ -1,0 +1,9 @@
+[package]
+name = "chalkydri_aaec"
+license.workspace = true
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kornia-imgproc = "0.1.10"
+nalgebra = "0.34.1"

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Duration;
 
+use chalkydri_core::config::CameraSettings;
 use cu_gstreamer::CuGstBuffer;
 use cu29::prelude::*;
 use gstreamer::{
@@ -67,8 +68,6 @@ impl CamPipeline {
                 if fps == 0.0 {
                     continue;
                 }
-
-                dbg!(width, height, fps, pixel_format,);
             }
 
             // Clean up: return to NULL state
@@ -83,10 +82,8 @@ impl CamPipeline {
             .property(
                 "caps",
                 &Caps::builder("video/x-raw")
-                    //.field("width", settings.width as i32)
-                    .field("width", 1280)
-                    //.field("height", settings.height as i32)
-                    .field("height", 720)
+                    .field("width", settings.width as i32)
+                    .field("height", settings.height as i32)
                     //.field("format", "DMA_DRM")
                     //.field(
                     //    "framerate",
@@ -110,10 +107,8 @@ impl CamPipeline {
             .property(
                 "caps",
                 &Caps::builder("video/x-raw")
-                    //.field("width", settings.width as i32)
-                    .field("width", 1280)
-                    //.field("height", settings.height as i32)
-                    .field("height", 720)
+                    .field("width", settings.width as i32)
+                    .field("height", settings.height as i32)
                     .field("format", "GRAY8")
                     //.field(
                     //    "framerate",
@@ -303,8 +298,12 @@ impl CuSrcTask for CamPipeline {
         let cfgg = crate::config::Camera {
             id: rc.get("id").unwrap(),
             name: rc.get("name").unwrap(),
-            //calib: rc.get("calib").unwrap(),
-            //settings: rc.get("settings"),
+            //calib: rc.get("calib"),
+            settings: Some(CameraSettings {
+                width: rc.get("width").unwrap_or(1280),
+                height: rc.get("height").unwrap_or(720),
+                ..Default::default()
+            }),
             //possible_settings: rc.get("possible_settings"),
             auto_exposure: rc.get("auto_exposure").unwrap_or(true),
             manual_exposure: rc.get("manual_exposure"),

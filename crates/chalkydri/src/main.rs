@@ -21,20 +21,20 @@ extern crate tracing;
 #[macro_use]
 extern crate serde;
 
-pub mod cameras;
-pub mod comm;
-mod subsystems;
-mod utils;
+use chalkydri::cameras;
+use chalkydri::subsystems;
+use chalkydri::utils;
 
 pub use subsystems::apriltags::AprilAdapter;
 
-pub use crate::{cameras::pipeline::CamPipeline, subsystems::calibration::Calibrator};
+pub use cameras::pipeline::CamPipeline;
 use chalkydri_core::{
     config::{Cfg, Config},
     prelude::config,
 };
 use cu29::prelude::*;
 use mimalloc::MiMalloc;
+pub use subsystems::calibration::Calibrator;
 
 use std::{
     error::Error,
@@ -42,10 +42,6 @@ use std::{
     str::FromStr,
 };
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
-
-// mimalloc is an excellent general purpose allocator
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
 
 use cu29_helpers::basic_copper_setup;
 

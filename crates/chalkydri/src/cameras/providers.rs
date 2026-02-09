@@ -86,6 +86,15 @@ pub struct V4l2Provider {
     rx: Mutex<mpsc::Receiver<ProviderEvent>>,
     cached_devs: Arc<Mutex<Vec<Device>>>,
 }
+impl V4l2Provider {
+    pub fn devices(&self) -> Vec<String> {
+        self.cached_devs
+            .lock()
+            .iter()
+            .map(|dev| Self::get_id(dev))
+            .collect::<Vec<_>>()
+    }
+}
 impl CamProvider for V4l2Provider {
     fn init() -> Self {
         let inner = DeviceProviderFactory::find("v4l2deviceprovider")
