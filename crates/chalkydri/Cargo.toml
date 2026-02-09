@@ -8,7 +8,7 @@ edition.workspace = true
 [features]
 #default = ["python", "capriltags", "web"]
 #default = ["python", "web"]
-default = []
+default = ["rerun"]
 #default = []
 #apriltags = ["dep:chalkydri-apriltags"]
 
@@ -16,6 +16,7 @@ default = []
 #capriltags = ["dep:apriltag"]
 
 tokio-console = ["dep:console-subscriber"]
+rerun = ["dep:rerun"]
 
 #[[bin]]
 #name = "logread"
@@ -24,14 +25,15 @@ tokio-console = ["dep:console-subscriber"]
 [[bin]]
 name = "calibrate"
 path = "src/bin/calibrate.rs"
+required-features = ["rerun"]
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "signal"] }
 serde.workspace = true
 serde_json.workspace = true
 mimalloc = { version = "0.1.43", features = ["override"] }
-camera-intrinsic-calibration = { git = "https://github.com/powei-lin/camera-intrinsic-calibration-rs.git", branch = "main" }
-camera-intrinsic-model = { git = "https://github.com/powei-lin/camera-intrinsic-model-rs.git", branch = "main" }
+camera-intrinsic-calibration = { git = "https://github.com/frc4533-lincoln/camera-intrinsic-calibration-rs.git", branch = "main" }
+#camera-intrinsic-model = { git = "https://github.com/powei-lin/camera-intrinsic-model-rs.git", branch = "main" }
 #aprilgrid = { git = "https://github.com/powei-lin/aprilgrid-rs.git", branch = "master" }
 gstreamer.workspace = true
 gstreamer-app.workspace = true
@@ -65,6 +67,9 @@ cu-sensor-payloads.workspace = true
 cu29-export.workspace = true
 cu-gstreamer.workspace = true
 whacknet = { version = "0.1.0", path = "../whacknet" }
+rerun = { version = "0.27", default-features = false, features = ["sdk", "server", "web_viewer"], optional = true }
+aprilgrid = "0.8.0"
+camera-intrinsic-model = "0.8.0"
 
 [build-dependencies]
 bindgen = { version = "*", default-features = false, features = ["runtime"] }

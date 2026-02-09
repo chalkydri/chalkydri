@@ -19,8 +19,6 @@ use gstreamer::{
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use pipeline::CamPipeline;
 use providers::{CamProvider, ProviderEvent, V4l2Provider};
-#[cfg(feature = "rerun")]
-use re_types::archetypes::EncodedImage;
 use std::{collections::HashMap, mem::ManuallyDrop, sync::Arc};
 use tokio::{
     sync::{Mutex, MutexGuard, RwLock, mpsc, watch},
@@ -28,8 +26,6 @@ use tokio::{
 };
 use tracing::Level;
 
-#[cfg(feature = "rerun")]
-use crate::Rerun;
 use chalkydri_core::prelude::*;
 
 #[derive(Clone)]

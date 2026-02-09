@@ -18,6 +18,8 @@ use gstreamer::prelude::{DeviceExt, ElementExt, PadExt};
 struct App {}
 
 fn calib_camera(dev_id: &str, width: u32, height: u32) -> CalibratedModel {
+    
+
     let pathbuf = PathBuf::from_str("chalkydri.copper".into()).unwrap();
     let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
 
@@ -62,10 +64,10 @@ fn calib_camera(dev_id: &str, width: u32, height: u32) -> CalibratedModel {
         app.run_one_iteration().unwrap();
         let mut lock = CALIB_RESULT.lock();
         if lock.is_some() {
-            app.stop_all_tasks().unwrap();
             model = lock.take().unwrap();
             break;
         }
+        std::thread::sleep(Duration::from_millis(2));
     }
 
     model
@@ -169,8 +171,6 @@ impl Configurator {
             }
         }
 
-        calib_camera(dev_id, width, height);
-
         g.0.shrink_to_fit();
     }
     pub fn save(self) -> String {
@@ -243,6 +243,7 @@ fn main() {
         devs.insert(dev_id, (best_width, best_height));
     }
     provider.stop();
+    drop(provider);
 
     for (cam_id, (dev_id, (width, height))) in devs.iter().enumerate() {
         println!(" > configuring {dev_id} ({width}x{height})...");

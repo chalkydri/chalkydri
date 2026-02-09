@@ -44,7 +44,7 @@ pub struct Calibrator {
 }
 impl Calibrator {
     /// Calibrate
-    pub fn calibrate(&mut self) -> Option<GenericModel<f64>> {
+    pub fn calibrate(&mut self, rerun: rerun::RecordingStream) -> Option<GenericModel<f64>> {
         let mut calib_res = None;
 
         for i in 0..5 {
@@ -57,6 +57,7 @@ impl Calibrator {
                     .map(|f| Some(f))
                     .collect()],
                 &self.cam_model,
+                &rerun,
                 &CalibParams {
                     one_focal: false,
                     fixed_focal: None,
@@ -124,13 +125,20 @@ impl CuSinkTask for Calibrator {
                         self.start.elapsed().as_nanos() as i64,
                     )
                 {
+                    dbg!(&frame_feat.features.len());
                     self.frame_feats.push(frame_feat);
                     println!("     > {}/200", self.frame_feats.len());
                 }
             }
         } else {
+            let (recording, mem_sink) = rerun::RecordingStreamBuilder::new("calibration")
+                .memory()
+                .unwrap();
+            recording
+                .log_static("/", &rerun::ViewCoordinates::RDF())
+                .unwrap();
             *CALIB_RESULT.lock() = Some(CalibratedModel {
-                model: self.calibrate().unwrap(),
+                model: self.calibrate(recording).unwrap(),
             });
         }
 
