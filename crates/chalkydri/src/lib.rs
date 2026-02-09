@@ -25,25 +25,11 @@ pub mod cameras;
 pub mod subsystems;
 pub mod utils;
 
-pub(crate) use subsystems::apriltags::AprilAdapter;
-
-pub(crate) use crate::{cameras::pipeline::CamPipeline, subsystems::calibration::Calibrator};
 use chalkydri_core::{
-    config::{Cfg, Config},
     prelude::config,
 };
-use cu29::prelude::*;
 use mimalloc::MiMalloc;
-
-use std::{
-    error::Error,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
-use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 // mimalloc is an excellent general purpose allocator
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
-
-use cu29_helpers::basic_copper_setup;

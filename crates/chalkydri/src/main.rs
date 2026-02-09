@@ -21,20 +21,18 @@ extern crate tracing;
 #[macro_use]
 extern crate serde;
 
-use chalkydri::cameras;
-use chalkydri::subsystems;
-use chalkydri::utils;
 
-pub use subsystems::apriltags::AprilAdapter;
+use chalkydri::cameras::GstToCuImage;
+use chalkydri::cameras::pipeline::CamPipeline;
+use chalkydri::cameras::providers::{CamProvider, CamProviderBundle, V4l2Provider};
+use chalkydri::subsystems::apriltags::AprilAdapter;
 
-pub use cameras::pipeline::CamPipeline;
 use chalkydri_core::{
     config::{Cfg, Config},
     prelude::config,
 };
 use cu29::prelude::*;
 use mimalloc::MiMalloc;
-pub use subsystems::calibration::Calibrator;
 
 use std::{
     error::Error,

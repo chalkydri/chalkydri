@@ -30,7 +30,7 @@ use cu_spatial_payloads::Pose as CuPose;
 use cu29::prelude::*;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
-use nalgebra::{Matrix, Matrix2x1, Vector2, matrix};
+use nalgebra::{Matrix, Matrix2x1, Vector2, Vector3, matrix};
 
 use chalkydri_sqpnp::{Iso3, Pnt3};
 use whacknet::{Comm, CommBundleId, RobotPose};
@@ -269,10 +269,11 @@ impl CuTask for AprilTags {
                     let corners = detection.corners().map(|corner| {
                         Vector2::new(corner[0], corner[1])
                     }).into_iter().collect::<Vec<_>>();
-                    let unprojected = self.cam_model.unproject(corners.as_slice()).into_iter().map(|corner| {
-                        corner.unwrap()
-                    }).collect::<Vec<_>>();
-                    camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
+                    camera_pts.extend_from_slice(corners.into_iter().map(|c| Vector3::new(c[0], c[1], 1.0)).collect::<Vec<_>>().as_slice());
+                    //let unprojected = self.cam_model.unproject(corners.as_slice()).into_iter().zip(corners.clone()).map(|(corner, raw_corner)| {
+                    //    corner.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
+                    //}).collect::<Vec<_>>();
+                    //camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
                     /*if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
                     let translation = aprilpose.translation();
                     let rotation = aprilpose.rotation();
