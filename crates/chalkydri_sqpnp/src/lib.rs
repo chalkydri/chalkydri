@@ -1,5 +1,5 @@
 use nalgebra::{Isometry3, Point3, Rotation3, SMatrix, SVector};
-use std::ops::AddAssign; //trust.
+use std::{ops::AddAssign}; //trust.
 
 /*Usage:
     1. Create a Solver
