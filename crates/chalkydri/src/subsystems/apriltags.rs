@@ -1,6 +1,6 @@
 use chalkydri_apriltags::AprilTagDetections;
 use cu29::prelude::*;
-use whacknet::{RobotPose, VisionUncertainty, Comm, CommBundleId};
+use whacknet::{Comm, CommBundleId, RobotPose, VisionUncertainty};
 
 pub struct Resources<'r> {
     pub comm: Borrowed<'r, Comm>,

@@ -37,7 +37,7 @@ impl CalibratedModel {
 }
 
 const MIN_CORNERS: usize = 24;
-pub static CALIB_RESULT: Mutex<Option<CalibratedModel>> = Mutex::new(None); 
+pub static CALIB_RESULT: Mutex<Option<CalibratedModel>> = Mutex::new(None);
 
 /// A camera calibrator
 pub struct Calibrator {
@@ -117,12 +117,7 @@ impl CuSinkTask for Calibrator {
             if let Some(img) = input.payload() {
                 let buf = img.0.as_image_buffer::<Luma<u8>>().expect("image buffer");
                 let img = DynamicImage::ImageLuma8(
-                    GrayImage::from_vec(
-                        buf.width(),
-                        buf.height(),
-                        buf.to_vec(),
-                    )
-                    .unwrap(),
+                    GrayImage::from_vec(buf.width(), buf.height(), buf.to_vec()).unwrap(),
                 );
 
                 if let Some(frame_feat) =

@@ -28,13 +28,13 @@ use chalkydri::utils;
 pub use subsystems::apriltags::AprilAdapter;
 
 pub use cameras::pipeline::CamPipeline;
-pub use subsystems::calibration::Calibrator;
 use chalkydri_core::{
     config::{Cfg, Config},
     prelude::config,
 };
 use cu29::prelude::*;
 use mimalloc::MiMalloc;
+pub use subsystems::calibration::Calibrator;
 
 use std::{
     error::Error,

@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use chalkydri::cameras::GstToCuImage;
 use chalkydri::cameras::pipeline::CamPipeline;
-use chalkydri::subsystems::calibration::*;
 use chalkydri::cameras::providers::{CamProvider, CamProviderBundle, V4l2Provider};
+use chalkydri::subsystems::calibration::*;
 use cu29::bincode::config::Config;
 use cu29::config::{ComponentConfig, CuConfig, CuGraph, Node};
 use cu29::prelude::*;
@@ -21,20 +21,30 @@ fn calib_camera(dev_id: &str, width: u32, height: u32) -> CalibratedModel {
     let pathbuf = PathBuf::from_str("chalkydri.copper".into()).unwrap();
     let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
 
-    let mut config: CuConfig = read_configuration_str(include_str!("../../../../config/calibration.ron").to_owned(), None).unwrap();
+    let mut config: CuConfig = read_configuration_str(
+        include_str!("../../../../config/calibration.ron").to_owned(),
+        None,
+    )
+    .unwrap();
 
     let g = config.get_graph_mut(None).unwrap();
 
-    let cam = g.get_node_mut(g.get_node_id_by_name("camera").unwrap()).unwrap();
+    let cam = g
+        .get_node_mut(g.get_node_id_by_name("camera").unwrap())
+        .unwrap();
     cam.set_param("id", dev_id.to_owned());
     cam.set_param("width", width);
     cam.set_param("height", height);
 
-    let gst_to_cu = g.get_node_mut(g.get_node_id_by_name("gst_to_cu").unwrap()).unwrap();
+    let gst_to_cu = g
+        .get_node_mut(g.get_node_id_by_name("gst_to_cu").unwrap())
+        .unwrap();
     gst_to_cu.set_param("width", width);
     gst_to_cu.set_param("height", height);
 
-    let calib = g.get_node_mut(g.get_node_id_by_name("calibrator").unwrap()).unwrap();
+    let calib = g
+        .get_node_mut(g.get_node_id_by_name("calibrator").unwrap())
+        .unwrap();
     calib.set_param("width", width);
     calib.set_param("height", height);
 
@@ -68,9 +78,7 @@ impl Configurator {
     pub fn new() -> Self {
         let c = CuConfig::new_mission_type();
 
-        Self {
-            c,
-        }
+        Self { c }
     }
     pub fn configure_cam(&mut self, dev_id: &str, cam_id: u8, width: u32, height: u32) {
         {
@@ -144,15 +152,20 @@ impl Configurator {
 
             april_adap_id
         };
-        
+
         // Make all the connections
         for (src, target, msg) in [
             (cam, gst_to_cu, "(cu_gstreamer::CuGstBuffer, CuDuration)"),
-            (gst_to_cu, apriltags, "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)"),
+            (
+                gst_to_cu,
+                apriltags,
+                "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)",
+            ),
             (apriltags, april_adap, "(whacknet::RobotPose, CuDuration)"),
         ] {
             if !g.connection_exists(src, target) {
-                g.connect_ext(src, target, msg, Some(vec![dev_id.to_owned()]), None, None).expect("why");
+                g.connect_ext(src, target, msg, Some(vec![dev_id.to_owned()]), None, None)
+                    .expect("why");
             }
         }
 

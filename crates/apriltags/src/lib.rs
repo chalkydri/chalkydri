@@ -306,7 +306,13 @@ impl CuTask for AprilTags {
 
                 let state = self
                     .solver
-                    .solve(&world_pts, &camera_pts, self.comm.gyro_angle().unwrap_or(0.0), SIGN_FLIP_CONST, &mut sqpnp_buffer)
+                    .solve(
+                        &world_pts,
+                        &camera_pts,
+                        self.comm.gyro_angle().unwrap_or(0.0),
+                        SIGN_FLIP_CONST,
+                        &mut sqpnp_buffer,
+                    )
                     .unwrap();
                 let world_rotation: Rot3 = state.0;
                 let world_translation = state.1;

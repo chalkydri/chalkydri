@@ -2,10 +2,10 @@ extern crate cu_bincode as bincode;
 
 use bincode::{Decode, Encode};
 use bytemuck::{Pod, Zeroable};
-use serde::{Deserialize, Serialize};
-use std::{io, net::UdpSocket, sync::Arc};
 use chalkydri_core::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::{io, net::UdpSocket, sync::Arc};
 
 use chalkydri_core::prelude::RwLock;
 use cu29::prelude::*;
@@ -93,8 +93,7 @@ impl WhacknetClient {
                         }
                         *guard = Some(f64::from_le_bytes(buf));
                     }
-                    Err(_err) => {
-                    }
+                    Err(_err) => {}
                 }
 
                 buf = [0u8; 8];
@@ -108,7 +107,13 @@ impl WhacknetClient {
         })
     }
     /// Send a pose with std dev
-    pub fn send(&self, ts: u64, tag_count: u8, pose: RobotPose, std_devs: VisionUncertainty) -> io::Result<()> {
+    pub fn send(
+        &self,
+        ts: u64,
+        tag_count: u8,
+        pose: RobotPose,
+        std_devs: VisionUncertainty,
+    ) -> io::Result<()> {
         // Pack up all the data in the struct
         let measurement = VisionMeasurement {
             pose,
@@ -126,7 +131,9 @@ impl WhacknetClient {
         Ok(())
     }
     pub fn gyro_angle(&self) -> Option<f64> {
-        self.gyro_angle.try_read().map(|ga| ga.expect("this should not be possible"))
+        self.gyro_angle
+            .try_read()
+            .map(|ga| ga.expect("this should not be possible"))
     }
 }
 impl Drop for WhacknetClient {
@@ -154,7 +161,14 @@ impl Comm {
             clients: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    pub fn publish(&self, cam_id: u8, tag_count: u8, ts: u64, pose: RobotPose, std_devs: VisionUncertainty) {
+    pub fn publish(
+        &self,
+        cam_id: u8,
+        tag_count: u8,
+        ts: u64,
+        pose: RobotPose,
+        std_devs: VisionUncertainty,
+    ) {
         let mut has_init = true;
 
         if let Some(clients) = self.clients.try_read() {
