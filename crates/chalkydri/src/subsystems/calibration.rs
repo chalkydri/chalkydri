@@ -1,6 +1,7 @@
+use chalkydri_core::prelude::{Mutex, RwLock};
 use cu_sensor_payloads::CuImage;
 use cu29::prelude::*;
-use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use std::{cell::Cell, collections::HashMap, path::Path, sync::Arc, time::Duration};
 
 use aprilgrid::{TagFamily, detector::TagDetector};
 use camera_intrinsic_calibration::{
@@ -23,9 +24,9 @@ pub struct CalibratedModel {
     model: GenericModel<f64>,
 }
 impl CalibratedModel {
-    pub fn new(calib: serde_json::Value) -> Self {
+    pub fn from_str(calib: String) -> Self {
         // Load the camera model
-        let model = serde_json::from_value(calib).unwrap();
+        let model = serde_json::from_str(&calib).unwrap();
 
         Self { model }
     }
@@ -36,6 +37,7 @@ impl CalibratedModel {
 }
 
 const MIN_CORNERS: usize = 24;
+pub static CALIB_RESULT: Mutex<Option<CalibratedModel>> = Mutex::new(None); 
 
 /// A camera calibrator
 pub struct Calibrator {
@@ -84,7 +86,7 @@ impl Calibrator {
 }
 impl Freezable for Calibrator {}
 impl CuSinkTask for Calibrator {
-    type Input<'m> = input_msg!(CuImage<Vec<u8>>);
+    type Input<'m> = input_msg!((CuImage<Vec<u8>>, CuDuration));
     type Resources<'r> = ();
 
     fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
@@ -113,13 +115,12 @@ impl CuSinkTask for Calibrator {
             tracing::debug!("got frame");
             //valve.set_property("drop", true);
             if let Some(img) = input.payload() {
+                let buf = img.0.as_image_buffer::<Luma<u8>>().expect("image buffer");
                 let img = DynamicImage::ImageLuma8(
                     GrayImage::from_vec(
-                        1280,
-                        720,
-                        img.as_image_buffer::<Luma<u8>>()
-                            .expect("image buffer")
-                            .to_vec(),
+                        buf.width(),
+                        buf.height(),
+                        buf.to_vec(),
                     )
                     .unwrap(),
                 );
@@ -134,8 +135,13 @@ impl CuSinkTask for Calibrator {
                     )
                 {
                     self.frame_feats.push(frame_feat);
+                    println!("     > {}/200", self.frame_feats.len());
                 }
             }
+        } else {
+            *CALIB_RESULT.lock() = Some(CalibratedModel {
+                model: self.calibrate().unwrap(),
+            });
         }
 
         Ok(())

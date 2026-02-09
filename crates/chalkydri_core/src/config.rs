@@ -60,7 +60,7 @@ def_cfg! {
         //#[serde(skip_deserializing)]
         possible_settings: Option<Vec<CameraSettings>>,
         subsystems: CameraSubsystems,
-        calib: Option<serde_json::Value>,
+        calib: Option<String>,
         auto_exposure: bool,
         manual_exposure: Option<u32>,
         orientation: VideoOrientation,

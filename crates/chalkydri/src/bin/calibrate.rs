@@ -1,9 +1,65 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration;
 
+use chalkydri::cameras::GstToCuImage;
+use chalkydri::cameras::pipeline::CamPipeline;
 use chalkydri::subsystems::calibration::*;
-use chalkydri::cameras::providers::{CamProvider, V4l2Provider};
+use chalkydri::cameras::providers::{CamProvider, CamProviderBundle, V4l2Provider};
 use cu29::bincode::config::Config;
 use cu29::config::{ComponentConfig, CuConfig, CuGraph, Node};
+use cu29::prelude::*;
+use cu29_helpers::basic_copper_setup;
+use gstreamer::State;
+use gstreamer::prelude::{DeviceExt, ElementExt, PadExt};
+
+#[copper_runtime(config = "../../config/calibration.ron")]
+struct App {}
+
+fn calib_camera(dev_id: &str, width: u32, height: u32) -> CalibratedModel {
+    let pathbuf = PathBuf::from_str("chalkydri.copper".into()).unwrap();
+    let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
+
+    let mut config: CuConfig = read_configuration_str(include_str!("../../../../config/calibration.ron").to_owned(), None).unwrap();
+
+    let g = config.get_graph_mut(None).unwrap();
+
+    let cam = g.get_node_mut(g.get_node_id_by_name("camera").unwrap()).unwrap();
+    cam.set_param("id", dev_id.to_owned());
+    cam.set_param("width", width);
+    cam.set_param("height", height);
+
+    let gst_to_cu = g.get_node_mut(g.get_node_id_by_name("gst_to_cu").unwrap()).unwrap();
+    gst_to_cu.set_param("width", width);
+    gst_to_cu.set_param("height", height);
+
+    let calib = g.get_node_mut(g.get_node_id_by_name("calibrator").unwrap()).unwrap();
+    calib.set_param("width", width);
+    calib.set_param("height", height);
+
+    let mut app = AppBuilder::new()
+        .with_context(&copper_ctx)
+        .with_config(config)
+        .build()
+        .unwrap();
+
+    app.start_all_tasks().unwrap();
+    println!("   > running calibration...");
+
+    let model: CalibratedModel;
+    loop {
+        app.run_one_iteration().unwrap();
+        let mut lock = CALIB_RESULT.lock();
+        if lock.is_some() {
+            app.stop_all_tasks().unwrap();
+            model = lock.take().unwrap();
+            break;
+        }
+    }
+
+    model
+}
 
 pub struct Configurator {
     c: CuConfig,
@@ -67,10 +123,10 @@ impl Configurator {
             });
             let apriltags = g.get_node_mut(apriltags_id).expect("very wonk config");
 
-            apriltags.set_param("fx", 0.0);
-            apriltags.set_param("fy", 0.0);
-            apriltags.set_param("cx", 0.0);
-            apriltags.set_param("cy", 0.0);
+            let model = calib_camera(dev_id, width, height);
+
+            let calib = serde_json::to_string(&model.inner_model()).unwrap();
+            apriltags.set_param("calib", calib);
 
             apriltags_id
         };
@@ -100,6 +156,8 @@ impl Configurator {
             }
         }
 
+        calib_camera(dev_id, width, height);
+
         g.0.shrink_to_fit();
     }
     pub fn save(self) -> String {
@@ -125,9 +183,57 @@ fn main() {
     provider.start();
     println!("finding cameras...");
     std::thread::sleep(Duration::from_secs(2));
+    let mut devs = HashMap::new();
     for dev_id in provider.devices() {
-        println!(" > configuring {dev_id}...");
-        config.configure_cam(&dev_id, 1, 1280, 720);
+        let dev = provider.get_by_id(dev_id.clone()).unwrap();
+        let input = dev.create_element(Some("camera")).unwrap();
+
+        input.set_state(State::Ready).unwrap();
+        let pad = input.static_pad("src").unwrap();
+        let caps = pad.query_caps(None);
+
+        let mut best_width = 0i32;
+        let mut best_height = 0i32;
+
+        for structure in caps.iter() {
+            let structure_name = structure.name();
+
+            // Determine pixel format (handle both raw video and compressed formats)
+            let pixel_format = match structure_name.as_str() {
+                "image/jpeg" => "MJPEG".to_string(),
+                "video/x-h264" => "H264".to_string(),
+                "video/x-raw" => structure
+                    .get::<String>("format")
+                    .unwrap_or_else(|_| "RAW".to_string()),
+                _ => continue, // Skip audio or other non-video streams
+            };
+
+            // Extract resolution (skip if reported as ranges rather than fixed values)
+            let width: i32 = structure.get("width").ok().unwrap_or(0);
+            let height: i32 = structure.get("height").ok().unwrap_or(0);
+            if width == 0 || height == 0 {
+                continue; // Skip range-based entries for simplicity
+            }
+
+            if width > best_width {
+                best_width = width;
+                best_height = height;
+
+                println!("found better caps: {structure:?}");
+            }
+        }
+
+        // Clean up: return to NULL state
+        let _ = input.set_state(gstreamer::State::Null);
+
+        dbg!(best_width, best_height);
+        devs.insert(dev_id, (best_width, best_height));
+    }
+    provider.stop();
+
+    for (cam_id, (dev_id, (width, height))) in devs.iter().enumerate() {
+        println!(" > configuring {dev_id} ({width}x{height})...");
+        config.configure_cam(&dev_id, cam_id as u8, (*width) as u32, (*height) as u32);
     }
 
     println!("{}", config.save());
