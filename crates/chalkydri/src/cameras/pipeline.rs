@@ -99,11 +99,13 @@ impl CamPipelineImpl {
             .build()
             .unwrap();
 
+        // Does the neccessary pixel format conversion to grayscale
         let videoconvert = ElementFactory::make("videoconvert")
             .name("videoconvert")
             .build()
             .unwrap();
 
+        // Filter for grayscale, because GStreamer is weird and written by crazy people
         let filter = ElementFactory::make("capsfilter")
             .name("capsfilter")
             .property(
@@ -168,6 +170,7 @@ impl CamPipelineImpl {
         ])
         .unwrap();
 
+        // Some stuff to make it work somehow
         let appsink = appsink.clone().dynamic_cast::<AppSink>().unwrap();
         appsink.set_sync(false);
         appsink.set_max_buffers(1);
@@ -203,7 +206,7 @@ impl CamPipelineImpl {
 
     /// Update the pipeline
     #[instrument(skip(self), fields(cam = self.cam_config.id))]
-    pub async fn update(&self, cam_config: crate::config::Camera) {
+    pub fn update(&self, cam_config: crate::config::Camera) {
         trace!("pausing pipeline");
         self.pause();
 
@@ -235,15 +238,15 @@ impl CamPipelineImpl {
 
             let camera = self.pipeline.by_name("camera").unwrap();
 
-            let mut extra_controls = camera.property::<Structure>("extra-controls");
-            extra_controls.set(
-                "auto_exposure",
-                if cam_config.auto_exposure { 3 } else { 1 },
-            );
+            //let mut extra_controls = camera.property::<Structure>("extra-controls");
+            //extra_controls.set(
+            //    "auto_exposure",
+            //    if cam_config.auto_exposure { 3 } else { 1 },
+            //);
             //if let Some(manual_exposure) = cam_config.manual_exposure {
             //    extra_controls.set("exposure_time_absolute", &manual_exposure);
             //}
-            camera.set_property("extra-controls", extra_controls);
+            //camera.set_property("extra-controls", extra_controls);
 
             self.pipeline
                 .by_name("videoflip")
@@ -306,20 +309,17 @@ impl CuSrcTask for CamPipeline {
         let cfgg = crate::config::Camera {
             id: rc.get("id").unwrap(),
             name: rc.get("name").unwrap(),
-            //calib: rc.get("calib"),
             settings: Some(CameraSettings {
                 width: rc.get("width").unwrap_or(1280),
                 height: rc.get("height").unwrap_or(720),
                 ..Default::default()
             }),
-            //possible_settings: rc.get("possible_settings"),
             auto_exposure: rc.get("auto_exposure").unwrap_or(true),
             manual_exposure: rc.get("manual_exposure"),
             ..Default::default()
         };
         if !cam_provider.inner().is_started() {
             cam_provider.start();
-            //std::thread::sleep(Duration::from_secs(2));
         }
 
         let provider = cam_provider.clone();
@@ -339,7 +339,6 @@ impl CuSrcTask for CamPipeline {
         }
         if let Some(ref pipeline) = self.inner {
             pipeline.start_pipeline();
-            self.inner = None;
         }
 
         Ok(())
@@ -389,6 +388,7 @@ impl CuSrcTask for CamPipeline {
 
                 new_msg.tov = Tov::Time(gst_ret_ts);
                 new_msg.set_payload((CuGstBuffer(buf.to_owned()), time_offset));
+                pipeline.update(self.cfgg.clone());
                 //dbg!(gst_ret_ts);
             } else {
                 new_msg.clear_payload();
