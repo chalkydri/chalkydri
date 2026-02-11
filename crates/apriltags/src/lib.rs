@@ -270,9 +270,7 @@ impl CuTask for AprilTags {
                     let corners = detection
                         .corners()
                         .into_iter()
-                        .map(|corner| {
-                            Vector2::new(corner[0], corner[1])
-                        })
+                        .map(|corner| Vector2::new(corner[0], corner[1]))
                         .collect::<Vec<_>>();
                     //camera_pts.extend_from_slice(
                     //    corners
@@ -281,10 +279,17 @@ impl CuTask for AprilTags {
                     //        .collect::<Vec<_>>()
                     //        .as_slice(),
                     //);
-                    let unprojected = self.cam_model.unproject(corners.as_slice()).into_iter().map(|corner| { // |(corner, raw_corner)| {
-                        corner.unwrap() //.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
-                    }).collect::<Vec<_>>();
+                    let unprojected = self
+                        .cam_model
+                        .unproject(corners.as_slice())
+                        .into_iter()
+                        .map(|corner| {
+                            // |(corner, raw_corner)| {
+                            corner.unwrap() //.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
+                        })
+                        .collect::<Vec<_>>();
                     camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
+
                     /*if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
                     let translation = aprilpose.translation();
                     let rotation = aprilpose.rotation();
