@@ -80,10 +80,11 @@ pub trait CamProvider {
     }
 }
 
+#[derive(Clone)]
 pub struct V4l2Provider {
     inner: DeviceProvider,
     tx: mpsc::Sender<ProviderEvent>,
-    rx: Mutex<mpsc::Receiver<ProviderEvent>>,
+    rx: Arc<Mutex<mpsc::Receiver<ProviderEvent>>>,
     cached_devs: Arc<Mutex<Vec<Device>>>,
 }
 impl V4l2Provider {
@@ -105,7 +106,7 @@ impl CamProvider for V4l2Provider {
             .unwrap();
 
         let (tx, rx) = mpsc::channel(64);
-        let rx = Mutex::new(rx);
+        let rx = Arc::new(Mutex::new(rx));
         let cached_devs = Arc::new(Mutex::new(Vec::new()));
 
         Self {

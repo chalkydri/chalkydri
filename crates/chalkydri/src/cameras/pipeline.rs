@@ -1,4 +1,5 @@
 use std::ops::ControlFlow;
+use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -19,7 +20,7 @@ use chalkydri_core::prelude::*;
 /// A camera pipeline
 ///
 /// Each camera gets its own GStreamer pipeline.
-pub struct CamPipeline {
+pub struct CamPipelineImpl {
     dev: Device,
     cam_config: crate::config::Camera,
     pipeline: Pipeline,
@@ -30,7 +31,7 @@ pub struct CamPipeline {
     videoflip: Element,
     appsink: AppSink,
 }
-impl CamPipeline {
+impl CamPipelineImpl {
     /// Create a new camera pipeline from a [Device] and camera config
     pub fn new(dev: Device, cam_config: crate::config::Camera) -> Self {
         let pipeline = Pipeline::new();
@@ -284,6 +285,12 @@ impl<'r> ResourceBindings<'r> for Resources<'r> {
     }
 }
 
+pub struct CamPipeline {
+    inner: Option<CamPipelineImpl>,
+    was_present: bool,
+    provider: V4l2Provider,
+    cfgg: crate::config::Camera,
+}
 impl Freezable for CamPipeline {}
 impl CuSrcTask for CamPipeline {
     type Resources<'r> = Resources<'r>;
@@ -312,62 +319,80 @@ impl CuSrcTask for CamPipeline {
         };
         if !cam_provider.inner().is_started() {
             cam_provider.start();
-            std::thread::sleep(Duration::from_secs(2));
+            //std::thread::sleep(Duration::from_secs(2));
         }
-        let dev = cam_provider.get_by_id(cfgg.id.clone()).unwrap();
 
-        let pipeline = Self::new(dev, cfgg.clone());
+        let provider = cam_provider.clone();
 
-        Ok(pipeline)
+        Ok(Self {
+            inner: None,
+            was_present: false,
+            provider,
+            cfgg,
+        })
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        self.start_pipeline();
+        if let Some(dev) = self.provider.get_by_id(self.cfgg.id.clone()) {
+            let pipeline = CamPipelineImpl::new(dev, self.cfgg.clone());
+            self.inner = Some(pipeline);
+        }
+        if let Some(ref pipeline) = self.inner {
+            pipeline.start_pipeline();
+            self.inner = None;
+        }
 
         Ok(())
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        self.pause();
+        if let Some(ref pipeline) = self.inner {
+            pipeline.pause();
+            self.inner = None;
+        }
 
         Ok(())
     }
 
     fn process<'o>(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
-        if let Some(sample) = self.appsink.try_pull_sample(ClockTime::from_useconds(20)) {
-            // Grab a timestamp for when the gstreamer pipeline gives us a sample
-            // TODO: how slow can this be in worst case? worth using quanta on the side? could
-            // clock.current() be used?
-            let gst_ret_ts = clock.now();
+        if let Some(ref pipeline) = self.inner {
+            if let Some(sample) = pipeline.appsink.try_pull_sample(ClockTime::from_useconds(20)) {
+                // Grab a timestamp for when the gstreamer pipeline gives us a sample
+                // TODO: how slow can this be in worst case? worth using quanta on the side? could
+                // clock.current() be used?
+                let gst_ret_ts = clock.now();
 
-            let buf = sample.buffer().unwrap();
+                let buf = sample.buffer().unwrap();
 
-            // TODO: idk how to get this; need to look into how a pipeline becomes "live"
-            // // Query the configured latency from the pipeline
-            // let mut query = gstreamer::query::Latency::new();
-            // if self.pipeline.query(&mut query) {
-            //     let (live, min_latency, max_latency) = query.result();
-            //     println!(
-            //         "Live: {}, Min latency: {:?}, Max latency: {:?}",
-            //         live, min_latency, max_latency
-            //     );
-            // }
+                // TODO: idk how to get this; need to look into how a pipeline becomes "live"
+                // // Query the configured latency from the pipeline
+                // let mut query = gstreamer::query::Latency::new();
+                // if self.pipeline.query(&mut query) {
+                //     let (live, min_latency, max_latency) = query.result();
+                //     println!(
+                //         "Live: {}, Min latency: {:?}, Max latency: {:?}",
+                //         live, min_latency, max_latency
+                //     );
+                // }
 
-            //dbg!(
-            //    buf.size(),
-            //    buf.pts(),
-            //    buf.dts(),
-            //    buf.duration(),
-            //    buf.meta::<ReferenceTimestampMeta>(),
-            //    self.pipeline.latency()
-            //);
+                //dbg!(
+                //    buf.size(),
+                //    buf.pts(),
+                //    buf.dts(),
+                //    buf.duration(),
+                //    buf.meta::<ReferenceTimestampMeta>(),
+                //    self.pipeline.latency()
+                //);
 
-            // TODO: how trustworthy are gstreamer's timestamps?
-            let time_offset = CuDuration::from_micros(buf.pts().unwrap().useconds());
+                // TODO: how trustworthy are gstreamer's timestamps?
+                let time_offset = CuDuration::from_micros(buf.pts().unwrap().useconds());
 
-            new_msg.tov = Tov::Time(gst_ret_ts);
-            new_msg.set_payload((CuGstBuffer(buf.to_owned()), time_offset));
-            //dbg!(gst_ret_ts);
+                new_msg.tov = Tov::Time(gst_ret_ts);
+                new_msg.set_payload((CuGstBuffer(buf.to_owned()), time_offset));
+                //dbg!(gst_ret_ts);
+            } else {
+                new_msg.clear_payload();
+            }
         } else {
             new_msg.clear_payload();
         }
