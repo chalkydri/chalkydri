@@ -6,6 +6,7 @@ use std::time::Duration;
 use chalkydri_core::config::CameraSettings;
 use cu_gstreamer::CuGstBuffer;
 use cu29::prelude::*;
+use gstreamer::Structure;
 use gstreamer::{
     Caps, ClockTime, Device, Element, ElementFactory, Pipeline, ReferenceTimestampMeta, Sample,
     State, prelude::*,
@@ -233,15 +234,15 @@ impl CamPipeline {
 
             let camera = self.pipeline.by_name("camera").unwrap();
 
-            //let mut extra_controls = camera.property::<Structure>("extra-controls");
-            //extra_controls.set(
-            //    "auto_exposure",
-            //    if cam_config.auto_exposure { 3 } else { 1 },
-            //);
+            let mut extra_controls = camera.property::<Structure>("extra-controls");
+            extra_controls.set(
+                "auto_exposure",
+                if cam_config.auto_exposure { 3 } else { 1 },
+            );
             //if let Some(manual_exposure) = cam_config.manual_exposure {
             //    extra_controls.set("exposure_time_absolute", &manual_exposure);
             //}
-            //camera.set_property("extra-controls", extra_controls);
+            camera.set_property("extra-controls", extra_controls);
 
             self.pipeline
                 .by_name("videoflip")
@@ -263,10 +264,10 @@ impl CamPipeline {
     }
 }
 
-pub struct Resources {
-    pub v4l2: Owned<V4l2Provider>,
+pub struct Resources<'r> {
+    pub v4l2: Borrowed<'r, V4l2Provider>,
 }
-impl<'r> ResourceBindings<'r> for Resources {
+impl<'r> ResourceBindings<'r> for Resources<'r> {
     type Binding = CamProviderBundleId;
     fn from_bindings(
         mgr: &'r mut ResourceManager,
@@ -278,14 +279,14 @@ impl<'r> ResourceBindings<'r> for Resources {
             .expect("v4l2")
             .typed();
         Ok(Self {
-            v4l2: mgr.take(key)?,
+            v4l2: mgr.borrow(key)?,
         })
     }
 }
 
 impl Freezable for CamPipeline {}
 impl CuSrcTask for CamPipeline {
-    type Resources<'r> = Resources;
+    type Resources<'r> = Resources<'r>;
     type Output<'m> = output_msg!((CuGstBuffer, CuDuration));
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
@@ -309,8 +310,10 @@ impl CuSrcTask for CamPipeline {
             manual_exposure: rc.get("manual_exposure"),
             ..Default::default()
         };
-        cam_provider.start();
-        std::thread::sleep(Duration::from_secs(2));
+        if !cam_provider.inner().is_started() {
+            cam_provider.start();
+            std::thread::sleep(Duration::from_secs(2));
+        }
         let dev = cam_provider.get_by_id(cfgg.id.clone()).unwrap();
 
         let pipeline = Self::new(dev, cfgg.clone());
@@ -365,6 +368,8 @@ impl CuSrcTask for CamPipeline {
             new_msg.tov = Tov::Time(gst_ret_ts);
             new_msg.set_payload((CuGstBuffer(buf.to_owned()), time_offset));
             //dbg!(gst_ret_ts);
+        } else {
+            new_msg.clear_payload();
         }
 
         Ok(())

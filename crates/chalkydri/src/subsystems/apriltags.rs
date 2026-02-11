@@ -58,7 +58,6 @@ impl CuSinkTask for AprilAdapter {
             return Ok(());
         };
         if let Some((pose, ts)) = input.payload() {
-            println!("{}us", clock.now().as_micros() - time.as_micros());
             self.comm.publish(
                 self.cam_id,
                 0,

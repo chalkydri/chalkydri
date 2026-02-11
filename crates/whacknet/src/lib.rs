@@ -174,8 +174,8 @@ impl Comm {
         if let Some(clients) = self.clients.try_read() {
             if let Some(client) = clients.get(&cam_id) {
                 match client.send(ts, tag_count, pose, std_devs) {
-                    Err(err) => {
-                        println!("failed to send pose: {err:?}");
+                    Err(_err) => {
+                        //println!("failed to send pose: {err:?}");
                     }
                     _ => {}
                 }

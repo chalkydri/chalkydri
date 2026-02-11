@@ -286,7 +286,6 @@ impl SqPnP {
                 }
             }
         }
-        println!("Solution Entropy: {}", min_energy);
         Mat3::from_column_slice(best_r.as_slice())
     }
 

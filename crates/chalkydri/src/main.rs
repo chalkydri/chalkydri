@@ -43,7 +43,7 @@ use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::Subscribe
 
 use cu29_helpers::basic_copper_setup;
 
-#[copper_runtime(config = "copperconfig.ron")]
+#[copper_runtime(config = "../../chalkydri.ron")]
 struct App {}
 
 #[tokio::main(worker_threads = 16)]

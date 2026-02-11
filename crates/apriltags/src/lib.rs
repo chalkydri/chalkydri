@@ -252,6 +252,7 @@ impl CuTask for AprilTags {
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let mut result = AprilTagDetections::new();
+        output.clear_payload();
         if let Some(payload) = input.payload() {
             use chalkydri_sqpnp::Vec3;
 
@@ -266,9 +267,10 @@ impl CuTask for AprilTags {
                         continue 'det_proc;
                     };
                     world_pts.push(tag.clone());
-                    let corners = detection.corners().map(|corner| {
+                    let corners = detection.corners().into_iter().enumerate().map(|(i, corner)| {
+                        println!(">>>>>>>>>>>>>> {i}: {}, {}", corner[0], corner[1]);
                         Vector2::new(corner[0], corner[1])
-                    }).into_iter().collect::<Vec<_>>();
+                    }).collect::<Vec<_>>();
                     camera_pts.extend_from_slice(corners.into_iter().map(|c| Vector3::new(c[0], c[1], 1.0)).collect::<Vec<_>>().as_slice());
                     //let unprojected = self.cam_model.unproject(corners.as_slice()).into_iter().zip(corners.clone()).map(|(corner, raw_corner)| {
                     //    corner.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
@@ -321,7 +323,6 @@ impl CuTask for AprilTags {
                         },
                         payload.1,
                     ));
-                    dbg!(output.payload());
                 }
             }
         };
@@ -348,10 +349,6 @@ impl CuSinkTask for ApriltagsProcessor {
 
     fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         let input: &AprilTagDetections = input.payload().unwrap();
-
-        if input.ids.0.len() > 0 {
-            dbg!(input);
-        }
 
         Ok(())
     }
