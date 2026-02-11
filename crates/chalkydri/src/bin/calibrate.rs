@@ -92,14 +92,28 @@ impl Configurator {
             } else {
                 Some(CuConfig::new_simple_type())
             }
-        }.unwrap();
-            //
+        }
+        .unwrap();
+        //
 
-        c.logging = Some(LoggingConfig { enable_task_logging: false, ..Default::default() });
+        c.logging = Some(LoggingConfig {
+            enable_task_logging: false,
+            ..Default::default()
+        });
 
         if c.resources.len() == 0 {
-            c.resources.push(ResourceBundleConfig { id: "cam_provider".to_owned(), provider: "CamProviderBundle".to_owned(), config: None, missions: None });
-            c.resources.push(ResourceBundleConfig { id: "comm".to_owned(), provider: "whacknet::CommBundle".to_owned(), config: None, missions: None });
+            c.resources.push(ResourceBundleConfig {
+                id: "cam_provider".to_owned(),
+                provider: "CamProviderBundle".to_owned(),
+                config: None,
+                missions: None,
+            });
+            c.resources.push(ResourceBundleConfig {
+                id: "comm".to_owned(),
+                provider: "whacknet::CommBundle".to_owned(),
+                config: None,
+                missions: None,
+            });
         }
 
         Self { has_run: false, c }
@@ -206,7 +220,12 @@ impl Configurator {
     pub fn save(self) {
         self.c.validate_logging_config().unwrap();
         let serialized_config = self.c.serialize_ron();
-        let mut f = OpenOptions::new().create(true).write(true).truncate(true).open("chalkydri.ron").unwrap();
+        let mut f = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open("chalkydri.ron")
+            .unwrap();
         f.write_all(serialized_config.as_bytes()).unwrap();
     }
 }

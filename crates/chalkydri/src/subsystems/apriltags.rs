@@ -42,7 +42,11 @@ impl CuSinkTask for AprilAdapter {
             .expect("cam_id must be set");
         let comm = resources.comm.0.clone();
 
-        Ok(Self { cam_id, comm, last_time: None })
+        Ok(Self {
+            cam_id,
+            comm,
+            last_time: None,
+        })
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {

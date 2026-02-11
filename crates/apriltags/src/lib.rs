@@ -28,9 +28,9 @@ use chalkydri_sqpnp::{Rot3, SqPnP};
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
 use cu29::prelude::*;
+use nalgebra::{Matrix, Matrix2x1, Vector2, Vector3, matrix};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
-use nalgebra::{Matrix, Matrix2x1, Vector2, Vector3, matrix};
 
 use chalkydri_sqpnp::{Iso3, Pnt3};
 use whacknet::{Comm, CommBundleId, RobotPose};
@@ -267,11 +267,22 @@ impl CuTask for AprilTags {
                         continue 'det_proc;
                     };
                     world_pts.push(tag.clone());
-                    let corners = detection.corners().into_iter().enumerate().map(|(i, corner)| {
-                        println!(">>>>>>>>>>>>>> {i}: {}, {}", corner[0], corner[1]);
-                        Vector2::new(corner[0], corner[1])
-                    }).collect::<Vec<_>>();
-                    camera_pts.extend_from_slice(corners.into_iter().map(|c| Vector3::new(c[0], c[1], 1.0)).collect::<Vec<_>>().as_slice());
+                    let corners = detection
+                        .corners()
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, corner)| {
+                            println!(">>>>>>>>>>>>>> {i}: {}, {}", corner[0], corner[1]);
+                            Vector2::new(corner[0], corner[1])
+                        })
+                        .collect::<Vec<_>>();
+                    camera_pts.extend_from_slice(
+                        corners
+                            .into_iter()
+                            .map(|c| Vector3::new(c[0], c[1], 1.0))
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                    );
                     //let unprojected = self.cam_model.unproject(corners.as_slice()).into_iter().zip(corners.clone()).map(|(corner, raw_corner)| {
                     //    corner.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
                     //}).collect::<Vec<_>>();
@@ -302,15 +313,13 @@ impl CuTask for AprilTags {
                     ids.push(detection.id());*/
                 }
 
-                if let Some(state) = self
-                    .solver
-                    .solve(
-                        &world_pts,
-                        &camera_pts,
-                        self.comm.gyro_angle().unwrap_or(0.0),
-                        SIGN_FLIP_CONST,
-                        &mut sqpnp_buffer,
-                    ) {
+                if let Some(state) = self.solver.solve(
+                    &world_pts,
+                    &camera_pts,
+                    self.comm.gyro_angle().unwrap_or(0.0),
+                    SIGN_FLIP_CONST,
+                    &mut sqpnp_buffer,
+                ) {
                     let world_rotation: Rot3 = state.0;
                     let world_translation = state.1;
 

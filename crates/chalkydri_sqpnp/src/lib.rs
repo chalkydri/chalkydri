@@ -1,5 +1,5 @@
 use nalgebra::{Isometry3, Point3, Rotation3, SMatrix, SVector};
-use std::{ops::AddAssign}; //trust.
+use std::ops::AddAssign; //trust.
 
 /*Usage:
     1. Create a Solver
@@ -273,7 +273,7 @@ impl SqPnP {
 
                 let dot = (test_r_mat[(0, 0)] * gyro.cos()) + (test_r_mat[(1, 0)] * gyro.sin());
 
-                if dot < 0.0{
+                if dot < 0.0 {
                     energy += sign_change_error;
                 }
 

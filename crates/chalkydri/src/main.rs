@@ -21,7 +21,6 @@ extern crate tracing;
 #[macro_use]
 extern crate serde;
 
-
 use chalkydri::cameras::GstToCuImage;
 use chalkydri::cameras::pipeline::CamPipeline;
 use chalkydri::cameras::providers::{CamProvider, CamProviderBundle, V4l2Provider};

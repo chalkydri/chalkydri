@@ -25,9 +25,7 @@ pub mod cameras;
 pub mod subsystems;
 pub mod utils;
 
-use chalkydri_core::{
-    prelude::config,
-};
+use chalkydri_core::prelude::config;
 use mimalloc::MiMalloc;
 
 // mimalloc is an excellent general purpose allocator

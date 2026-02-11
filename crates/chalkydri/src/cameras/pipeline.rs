@@ -355,7 +355,10 @@ impl CuSrcTask for CamPipeline {
 
     fn process<'o>(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
         if let Some(ref pipeline) = self.inner {
-            if let Some(sample) = pipeline.appsink.try_pull_sample(ClockTime::from_useconds(20)) {
+            if let Some(sample) = pipeline
+                .appsink
+                .try_pull_sample(ClockTime::from_useconds(20))
+            {
                 // Grab a timestamp for when the gstreamer pipeline gives us a sample
                 // TODO: how slow can this be in worst case? worth using quanta on the side? could
                 // clock.current() be used?
