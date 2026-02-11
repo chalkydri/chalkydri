@@ -6,6 +6,9 @@ Chalkydri is a *blazingly fast* vision system for FRC written in Rust.
  > **In development**
  >
  > Chalkydri isn't ready to use quite yet.
+ >
+ > We're testing it out this year.
+ > Thanks for your interest though!
 
  > **New here?**
  >
