@@ -173,6 +173,7 @@ impl Configurator {
 
             apriltags.set_resources(Some([("comm".to_owned(), "comm.comm".to_owned())]));
 
+            // Due to GStreamer being GStreamer, can only do one camera calibration per run
             if apriltags.get_param::<String>("calib").is_none() && !self.has_run {
                 let model = calib_camera(dev_id, width, height);
                 let calib = serde_json::to_string(&model.inner_model()).unwrap();
@@ -217,6 +218,7 @@ impl Configurator {
 
         g.0.shrink_to_fit();
     }
+    /// Save the configuration to disk
     pub fn save(self) {
         self.c.validate_logging_config().unwrap();
         let serialized_config = self.c.serialize_ron();

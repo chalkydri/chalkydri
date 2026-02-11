@@ -2,7 +2,6 @@ extern crate cu_bincode as bincode;
 
 use bincode::{Decode, Encode};
 use bytemuck::{Pod, Zeroable};
-use chalkydri_core::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::{io, net::UdpSocket, sync::Arc};
@@ -68,7 +67,6 @@ struct VisionMeasurement {
 pub struct WhacknetClient {
     cam_id: u8,
     socket: Arc<UdpSocket>,
-    gyro_angle: Arc<RwLock<Option<f64>>>,
 }
 impl WhacknetClient {
     /// Initialize a new whacknet client
@@ -77,33 +75,9 @@ impl WhacknetClient {
         let socket = UdpSocket::bind(BIND_ADDR)?;
         socket.connect(REMOTE_ADDR)?;
 
-        let gyro_angle = Arc::new(RwLock::new(Some(0f64)));
-
-        let gyro_angle_ = gyro_angle.clone();
-        std::thread::spawn(move || {
-            let gyro_socket = UdpSocket::bind("0.0.0.0:7002").unwrap();
-
-            let mut buf = [0u8; 8];
-            loop {
-                match gyro_socket.recv(&mut buf) {
-                    Ok(_bytes) => {
-                        let mut guard = gyro_angle_.write();
-                        if guard.is_none() {
-                            break;
-                        }
-                        *guard = Some(f64::from_le_bytes(buf));
-                    }
-                    Err(_err) => {}
-                }
-
-                buf = [0u8; 8];
-            }
-        });
-
         Ok(Self {
             cam_id,
             socket: Arc::new(socket),
-            gyro_angle,
         })
     }
     /// Send a pose with std dev
@@ -130,17 +104,6 @@ impl WhacknetClient {
 
         Ok(())
     }
-    pub fn gyro_angle(&self) -> Option<f64> {
-        self.gyro_angle
-            .try_read()
-            .map(|ga| ga.expect("this should not be possible"))
-    }
-}
-impl Drop for WhacknetClient {
-    fn drop(&mut self) {
-        // Tells the gyro listener thread to exit
-        *self.gyro_angle.write() = None;
-    }
 }
 
 #[test]
@@ -153,14 +116,42 @@ fn check_size() {
 #[derive(Clone)]
 pub struct Comm {
     clients: Arc<RwLock<HashMap<u8, WhacknetClient>>>,
+    gyro_angle: Arc<RwLock<Option<f64>>>,
 }
-//impl<'c> Comm<'c> {
 impl Comm {
+    /// Initialize the communication handler thingie
     pub fn new() -> Self {
+        let gyro_angle = Arc::new(RwLock::new(Some(0f64)));
+
+        // Just putting the gyro value listener on its own thread
+        let gyro_angle_ = gyro_angle.clone();
+        std::thread::spawn(move || {
+            let gyro_socket = UdpSocket::bind("0.0.0.0:7002").unwrap();
+
+            let mut buf = [0u8; 8];
+            loop {
+                match gyro_socket.recv(&mut buf) {
+                    Ok(_bytes) => {
+                        let mut guard = gyro_angle_.write();
+                        if guard.is_none() {
+                            break;
+                        }
+                        *guard = Some(f64::from_le_bytes(buf));
+                    }
+                    Err(_err) => {}
+                }
+
+                buf = [0u8; 8];
+            }
+        });
+
         Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
+            gyro_angle,
         }
     }
+
+    /// Send a pose estimate to the RIO
     pub fn publish(
         &self,
         cam_id: u8,
@@ -190,14 +181,17 @@ impl Comm {
         }
     }
 
+    /// Get the robot's heading from the gyro
     pub fn gyro_angle(&self) -> Option<f64> {
-        if let Some(clients) = self.clients.try_read() {
-            if let Some(client) = clients.get(&1) {
-                return client.gyro_angle();
-            }
-        }
-
-        None
+        self.gyro_angle
+            .try_read()
+            .map(|ga| ga.expect("this should not be possible"))
+    }
+}
+impl Drop for Comm {
+    fn drop(&mut self) {
+        // Tells the gyro listener thread to exit
+        *self.gyro_angle.write() = None;
     }
 }
 

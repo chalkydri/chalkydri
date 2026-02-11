@@ -270,23 +270,21 @@ impl CuTask for AprilTags {
                     let corners = detection
                         .corners()
                         .into_iter()
-                        .enumerate()
-                        .map(|(i, corner)| {
-                            println!(">>>>>>>>>>>>>> {i}: {}, {}", corner[0], corner[1]);
+                        .map(|corner| {
                             Vector2::new(corner[0], corner[1])
                         })
                         .collect::<Vec<_>>();
-                    camera_pts.extend_from_slice(
-                        corners
-                            .into_iter()
-                            .map(|c| Vector3::new(c[0], c[1], 1.0))
-                            .collect::<Vec<_>>()
-                            .as_slice(),
-                    );
-                    //let unprojected = self.cam_model.unproject(corners.as_slice()).into_iter().zip(corners.clone()).map(|(corner, raw_corner)| {
-                    //    corner.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
-                    //}).collect::<Vec<_>>();
-                    //camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
+                    //camera_pts.extend_from_slice(
+                    //    corners
+                    //        .into_iter()
+                    //        .map(|c| Vector3::new(c[0], c[1], 1.0))
+                    //        .collect::<Vec<_>>()
+                    //        .as_slice(),
+                    //);
+                    let unprojected = self.cam_model.unproject(corners.as_slice()).into_iter().map(|corner| { // |(corner, raw_corner)| {
+                        corner.unwrap() //.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
+                    }).collect::<Vec<_>>();
+                    camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
                     /*if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
                     let translation = aprilpose.translation();
                     let rotation = aprilpose.rotation();
