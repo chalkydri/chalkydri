@@ -1,0 +1,89 @@
+(
+    tasks: [
+        (
+            id: "camera_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            type: "CamPipeline",
+            config: {
+                "name": "A",
+                "fourcc": "GREY",
+                "width": 1280,
+                "height": 720,
+                "id": "CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            },
+            resources: {
+                "v4l2": "cam_provider.v4l2",
+            },
+            missions: None,
+        ),
+        (
+            id: "apriltags_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            type: "chalkydri_apriltags::AprilTags",
+            config: {
+                "calib": "{\"OpenCVModel5\":{\"fx\":938.7858780315202,\"fy\":938.8155971832809,\"cx\":639.6203864167682,\"cy\":351.72911072961585,\"k1\":-0.2511845540452454,\"k2\":1.0,\"p1\":-0.001,\"p2\":-0.001,\"k3\":-1.0,\"width\":1280,\"height\":720}}",
+            },
+            resources: {
+                "comm": "comm.comm",
+            },
+            missions: None,
+        ),
+        (
+            id: "april_adap_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            type: "AprilAdapter",
+            config: {
+                "cam_id": 0,
+            },
+            resources: {
+                "comm": "comm.comm",
+            },
+            missions: None,
+        ),
+        (
+            id: "gst_to_cu_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            type: "GstToCuImage",
+            config: {
+                "fourcc": "GREY",
+                "width": 1280,
+                "height": 720,
+            },
+            missions: None,
+        ),
+    ],
+    resources: [
+        (
+            id: "cam_provider",
+            provider: "CamProviderBundle",
+        ),
+        (
+            id: "comm",
+            provider: "whacknet::CommBundle",
+        ),
+    ],
+    bridges: None,
+    cnx: [
+        (
+            src: "apriltags_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            dst: "april_adap_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            msg: "(whacknet::RobotPose, CuDuration)",
+            missions: None,
+        ),
+        (
+            src: "camera_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            dst: "gst_to_cu_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            msg: "(cu_gstreamer::CuGstBuffer, CuDuration)",
+            missions: None,
+        ),
+        (
+            src: "gst_to_cu_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            dst: "apriltags_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
+            msg: "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)",
+            missions: None,
+        ),
+    ],
+    monitor: None,
+    logging: (
+        enable_task_logging: false,
+    ),
+    runtime: None,
+    missions: None,
+    includes: None,
+)
