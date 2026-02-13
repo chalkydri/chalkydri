@@ -9,6 +9,7 @@ use chalkydri::cameras::GstToCuImage;
 use chalkydri::cameras::pipeline::CamPipeline;
 use chalkydri::cameras::providers::{CamProvider, CamProviderBundle, V4l2Provider};
 use chalkydri::subsystems::calibration::*;
+use chalkydri::subsystems::monitor::{Monitor, MonitorBundleId, MonitorBundle};
 use cu29::bincode::config::Config;
 use cu29::config::{ComponentConfig, CuConfig, CuGraph, Node};
 use cu29::prelude::*;

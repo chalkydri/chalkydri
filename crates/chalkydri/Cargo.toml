@@ -8,7 +8,7 @@ edition.workspace = true
 [features]
 #default = ["python", "capriltags", "web"]
 #default = ["python", "web"]
-default = []
+default = ["rerun"]
 #default = []
 #apriltags = ["dep:chalkydri-apriltags"]
 
