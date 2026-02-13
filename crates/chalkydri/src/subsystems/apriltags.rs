@@ -64,9 +64,17 @@ impl CuSinkTask for AprilAdapter {
         if let Some((pose, ts)) = input.payload() {
             self.comm.publish(
                 self.cam_id,
-                0,
+                1,
                 clock.now().as_micros() - time.as_micros(),
                 pose.clone(),
+                VisionUncertainty::default(),
+            );
+        } else {
+            self.comm.publish(
+                self.cam_id,
+                0,
+                clock.now().as_micros() - time.as_micros(),
+                RobotPose::default(),
                 VisionUncertainty::default(),
             );
         }
