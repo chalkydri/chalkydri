@@ -70,7 +70,7 @@ jobs:
       #   run: mv target/doc book/book
 
       - name: Upload to pages
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./book/book
 
