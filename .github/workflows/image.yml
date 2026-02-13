@@ -56,6 +56,7 @@ jobs:
         uses: usimd/pi-gen-action@v1
         with:
           pi-gen-release: Chalkydri
+          image-name: chalkydri
           stage-list: stage0 stage1 ./build/custom-pi-stage
 
       - name: Upload Artifact

@@ -391,7 +391,6 @@ impl CuSrcTask for CamPipeline {
 
                 new_msg.tov = Tov::Time(gst_ret_ts);
                 new_msg.set_payload((CuGstBuffer(buf.to_owned()), time_offset));
-                pipeline.update(self.cfgg.clone());
                 //dbg!(gst_ret_ts);
             } else {
                 new_msg.clear_payload();

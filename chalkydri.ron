@@ -5,9 +5,9 @@
             type: "CamPipeline",
             config: {
                 "name": "A",
-                "fourcc": "GREY",
                 "width": 1280,
                 "height": 720,
+                "fourcc": "GREY",
                 "id": "CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
             },
             resources: {
@@ -30,7 +30,7 @@
             id: "april_adap_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
             type: "AprilAdapter",
             config: {
-                "cam_id": 0,
+                "cam_id": 1,
             },
             resources: {
                 "comm": "comm.comm",
@@ -41,9 +41,55 @@
             id: "gst_to_cu_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
             type: "GstToCuImage",
             config: {
+                "height": 720,
                 "fourcc": "GREY",
                 "width": 1280,
-                "height": 720,
+            },
+            missions: None,
+        ),
+        (
+            id: "camera_DCX-240524--XH_SPCA2630_PC_Camera",
+            type: "CamPipeline",
+            config: {
+                "id": "DCX-240524--XH_SPCA2630_PC_Camera",
+                "width": 1600,
+                "name": "A",
+                "height": 1304,
+            },
+            resources: {
+                "v4l2": "cam_provider.v4l2",
+            },
+            missions: None,
+        ),
+        (
+            id: "gst_to_cu_DCX-240524--XH_SPCA2630_PC_Camera",
+            type: "GstToCuImage",
+            config: {
+                "height": 1304,
+                "fourcc": "GREY",
+                "width": 1600,
+            },
+            missions: None,
+        ),
+        (
+            id: "apriltags_DCX-240524--XH_SPCA2630_PC_Camera",
+            type: "chalkydri_apriltags::AprilTags",
+            config: {
+                "calib": "{\"OpenCVModel5\":{\"fx\":1121.6648441665402,\"fy\":1120.6840905829595,\"cx\":822.3866420997357,\"cy\":711.9941076744785,\"k1\":-0.44366364486873106,\"k2\":0.23978842898919886,\"p1\":0.001,\"p2\":-0.0003535951430134122,\"k3\":-0.07078650496339318,\"width\":1600,\"height\":1304}}",
+            },
+            resources: {
+                "comm": "comm.comm",
+            },
+            missions: None,
+        ),
+        (
+            id: "april_adap_DCX-240524--XH_SPCA2630_PC_Camera",
+            type: "AprilAdapter",
+            config: {
+                "cam_id": 0,
+            },
+            resources: {
+                "comm": "comm.comm",
             },
             missions: None,
         ),
@@ -76,6 +122,24 @@
             src: "gst_to_cu_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
             dst: "apriltags_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
             msg: "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)",
+            missions: None,
+        ),
+        (
+            src: "camera_DCX-240524--XH_SPCA2630_PC_Camera",
+            dst: "gst_to_cu_DCX-240524--XH_SPCA2630_PC_Camera",
+            msg: "(cu_gstreamer::CuGstBuffer, CuDuration)",
+            missions: None,
+        ),
+        (
+            src: "gst_to_cu_DCX-240524--XH_SPCA2630_PC_Camera",
+            dst: "apriltags_DCX-240524--XH_SPCA2630_PC_Camera",
+            msg: "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)",
+            missions: None,
+        ),
+        (
+            src: "apriltags_DCX-240524--XH_SPCA2630_PC_Camera",
+            dst: "april_adap_DCX-240524--XH_SPCA2630_PC_Camera",
+            msg: "(whacknet::RobotPose, CuDuration)",
             missions: None,
         ),
     ],
