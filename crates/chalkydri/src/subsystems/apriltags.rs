@@ -58,31 +58,31 @@ impl CuSinkTask for AprilAdapter {
     }
 
     fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
-        let Tov::Time(time) = input.tov() else {
-            return Ok(());
-        };
-        let ts = clock.now().as_micros() - time.as_micros();
-        if let Some((pose, _)) = input.payload() {
-            self.comm.publish(
-                self.cam_id,
-                1,
-                ts,
-                pose.clone(),
-                VisionUncertainty::default(),
-            );
-        } else {
-            let time = clock.now().as_millis();
-            if self.last_time.is_none() || (time - self.last_time.unwrap()) > 5 {
-                self.comm.publish(
-                    self.cam_id,
-                    0,
-                    ts,
-                    RobotPose::default(),
-                    VisionUncertainty::default(),
-                );
-                self.last_time = Some(time);
-            }
-        }
+        //let Tov::Time(time) = input.tov() else {
+        //    return Ok(());
+        //};
+        //let ts = clock.now().as_micros() - time.as_micros();
+        //if let Some((pose, _)) = input.payload() {
+        //    self.comm.publish(
+        //        self.cam_id,
+        //        1,
+        //        ts,
+        //        pose.clone(),
+        //        VisionUncertainty::default(),
+        //    );
+        //} else {
+        //    let time = clock.now().as_millis();
+        //    if self.last_time.is_none() || (time - self.last_time.unwrap()) > 5 {
+        //        self.comm.publish(
+        //            self.cam_id,
+        //            0,
+        //            ts,
+        //            RobotPose::default(),
+        //            VisionUncertainty::default(),
+        //        );
+        //        self.last_time = Some(time);
+        //    }
+        //}
 
         Ok(())
     }

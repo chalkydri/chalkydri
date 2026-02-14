@@ -170,10 +170,7 @@ impl Default for SqPnP {
         Self {
             max_iter: 15,
             tol_sq: 1e-16,
-            // 2026 Tag Size is 16.51cm.
-            // corner_distance is the X/Y offset from center to corner.
-            // offset = side_length / 2
-            corner_distance: 16.51 / 2.0,
+            corner_distance: 0.1651f64 / 2.0, //2026 in cm
         }
     }
 }
@@ -217,11 +214,13 @@ impl SqPnP {
 
         let sys = build_linear_system(&points_3d, points_2d);
 
-        let r_mat = self.solve_rotation(&sys.omega, gyro, sign_change_error);
+        let r_mat = self.solve_rotation(&sys.omega, gyro, sign_change_error, points_2d.len() < 8);
 
         // t = -q_tt^-1 * q_rt^T * r
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
         let t_vec = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
+
+        let result_t_vec = Vec3::new(-t_vec.y, t_vec.x, t_vec.z);
 
         let rot = Rot3::from_matrix(&r_mat);
 
@@ -301,7 +300,7 @@ impl SqPnP {
         });
     }
 
-    fn solve_rotation(&self, omega: &Mat9, gyro: f64, sign_change_error: f64) -> Mat3 {
+    fn solve_rotation(&self, omega: &Mat9, gyro: f64, sign_change_error: f64, single_tag: bool) -> Mat3 {
         let eigen = omega.symmetric_eigen();
 
         let mut best_r = Vec9::zeros();

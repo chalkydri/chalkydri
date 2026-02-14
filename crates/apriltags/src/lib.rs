@@ -3,7 +3,7 @@ compile_error!(
     "this does not work under windows. please use a unix system. only linux is supported."
 );
 
-const SIGN_FLIP_CONST: f64 = 50.0;
+const SIGN_FLIP_CONST: f64 = -50.0;
 
 #[macro_use]
 extern crate serde;
@@ -33,7 +33,7 @@ use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use chalkydri_sqpnp::{Iso3, Pnt3};
-use whacknet::{Comm, CommBundleId, RobotPose};
+use whacknet::{Comm, CommBundleId, RobotPose, VisionUncertainty};
 
 use crate::field_layout::AprilTagFieldLayout;
 
@@ -171,6 +171,8 @@ pub struct AprilTags {
     tags: HashMap<usize, Iso3>,
     comm: Comm,
     cam_model: GenericModel<f64>,
+    last_time: Option<u64>,
+    cam_id: u8,
 }
 
 fn image_from_cuimage<A>(cu_image: &CuImage<A>) -> ManuallyDrop<Image>
@@ -193,9 +195,8 @@ where
 
 impl Freezable for AprilTags {}
 
-impl CuTask for AprilTags {
+impl CuSinkTask for AprilTags {
     type Input<'m> = input_msg!((CuImage<Vec<u8>>, CuDuration));
-    type Output<'m> = output_msg!((RobotPose, CuDuration));
     type Resources<'r> = Resources<'r>;
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
@@ -209,6 +210,7 @@ impl CuTask for AprilTags {
             let family: Family = family_cfg.parse().unwrap();
             let bits_corrected: u32 = config.get("bits_corrected").unwrap_or(3);
             let tagsize = config.get("tag_size").unwrap_or(TAG_SIZE);
+            let cam_id: u8 = config.get("cam_id").unwrap();
             //let fx = config.get("fx").unwrap_or(FX);
             //let fy = config.get("fy").unwrap_or(FY);
             //let cx = config.get("cx").unwrap_or(CX);
@@ -226,14 +228,17 @@ impl CuTask for AprilTags {
             let solver = SqPnP::new();
 
             return Ok(Self {
+                cam_id,
                 detector,
                 solver,
                 tags: AprilTagFieldLayout::load().unwrap(),
                 comm,
                 cam_model,
+                last_time: None,
             });
         }
         Ok(Self {
+            cam_id: u8::MAX,
             detector: DetectorBuilder::default()
                 .add_family_bits(FAMILY.parse::<Family>().unwrap(), 1)
                 .build()
@@ -242,17 +247,15 @@ impl CuTask for AprilTags {
             tags: AprilTagFieldLayout::load().unwrap(),
             comm,
             cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
+            last_time: None,
         })
     }
 
-    fn process<'i, 'o>(
-        &mut self,
-        _clock: &RobotClock,
-        input: &Self::Input<'i>,
-        output: &mut Self::Output<'o>,
-    ) -> CuResult<()> {
-        let mut result = AprilTagDetections::new();
-        output.clear_payload();
+    fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        let Tov::Time(time) = input.tov() else {
+            println!("did not got time");
+            return Ok(());
+        };
         if let Some(payload) = input.payload() {
             use chalkydri_sqpnp::Vec3;
 
@@ -262,58 +265,30 @@ impl CuTask for AprilTags {
                 let mut camera_pts: Vec<Vec3> = Vec::new();
                 let mut world_pts: Vec<Iso3> = Vec::new();
                 let mut sqpnp_buffer: Vec<Pnt3> = Vec::new(); //doing this kinda defeats the point, fix later
-                'det_proc: for detection in detections {
+                'det_proc: for detection in detections.iter() {
                     let Some(tag) = self.tags.get(&detection.id()) else {
                         continue 'det_proc;
                     };
+
                     world_pts.push(tag.clone());
+
                     let corners = detection
                         .corners()
                         .into_iter()
                         .map(|corner| Vector2::new(corner[0], corner[1]))
                         .collect::<Vec<_>>();
-                    //camera_pts.extend_from_slice(
-                    //    corners
-                    //        .into_iter()
-                    //        .map(|c| Vector3::new(c[0], c[1], 1.0))
-                    //        .collect::<Vec<_>>()
-                    //        .as_slice(),
-                    //);
+
                     let unprojected = self
                         .cam_model
                         .unproject(corners.as_slice())
                         .into_iter()
                         .map(|corner| {
-                            // |(corner, raw_corner)| {
                             corner.unwrap() //.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
                         })
                         .collect::<Vec<_>>();
+
                     camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
 
-                    /*if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
-                    let translation = aprilpose.translation();
-                    let rotation = aprilpose.rotation();
-                    let mut mat: [[f32; 4]; 4] = [[0.0, 0.0, 0.0, 0.0]; 4];
-                    mat[0][3] = translation.data()[0] as f32;
-                    mat[1][3] = translation.data()[1] as f32;
-                    mat[2][3] = translation.data()[2] as f32;
-                    mat[0][0] = rotation.data()[0] as f32;
-                    mat[0][1] = rotation.data()[3] as f32;
-                    mat[0][2] = rotation.data()[2 * 3] as f32;
-                    mat[1][0] = rotation.data()[1] as f32;
-                    mat[1][1] = rotation.data()[1 + 3] as f32;
-                    mat[1][2] = rotation.data()[1 + 2 * 3] as f32;
-                    mat[2][0] = rotation.data()[2] as f32;
-                    mat[2][1] = rotation.data()[2 + 3] as f32;
-                    mat[2][2] = rotation.data()[2 + 2 * 3] as f32;
-
-                    let pose = CuPose::<f32>::from_matrix(mat);
-                    let CuArrayVec(detections) = &mut result.poses;
-                    detections.push(pose);
-                    let CuArrayVec(decision_margin) = &mut result.decision_margins;
-                    decision_margin.push(detection.decision_margin());
-                    let CuArrayVec(ids) = &mut result.ids;
-                    ids.push(detection.id());*/
                 }
 
                 if let Some(state) = self.solver.solve(
@@ -325,19 +300,39 @@ impl CuTask for AprilTags {
                 ) {
                     let world_rotation: Rot3 = state.0;
                     let world_translation = state.1;
+                    let pose = RobotPose {
+                        x: world_translation[0],
+                        y: world_translation[1],
+                        rot: world_rotation.euler_angles().1,
+                    };
+                    dbg!(pose);
 
-                    output.tov = input.tov;
-                    output.set_payload((
-                        RobotPose {
-                            x: world_translation[0],
-                            y: world_translation[1],
-                            rot: world_rotation.euler_angles().2,
-                        },
-                        payload.1,
-                    ));
+                    let ts = clock.now().as_micros() - time.as_micros();
+                    self.comm.publish(
+                        self.cam_id,
+                        detections.len().try_into().unwrap_or(u8::MAX),
+                        ts,
+                        pose.clone(),
+                        VisionUncertainty::default(),
+                    );
+                }
+            } else {
+                let timey_time = clock.now().as_millis();
+                let ts = clock.now().as_micros() - time.as_micros();
+                if self.last_time.is_none() || (timey_time - self.last_time.unwrap()) > 5 {
+                    self.comm.publish(
+                        self.cam_id,
+                        0,
+                        ts,
+                        RobotPose::default(),
+                        VisionUncertainty::default(),
+                    );
+                    self.last_time = Some(timey_time);
                 }
             }
-        };
+            println!("{time:?}");
+        }
+
         Ok(())
     }
 }
