@@ -44,6 +44,8 @@ struct VisionMeasurement {
     pub pose: RobotPose, // 24 bytes
     /// Our accurracy stdevs to send to the bot
     pub std_devs: VisionUncertainty, // 24 bytes
+    /// Timestamp (in micro secs)
+    ts: u64,
     /// Camera id
     camera_id: u8,
     /// Tag count
@@ -60,8 +62,6 @@ struct VisionMeasurement {
     _reserved_5: u8,
     /// Reserved for future use
     _reserved_6: u8,
-    /// Timestamp (in micro secs)
-    ts: u64,
 }
 
 pub struct WhacknetClient {
