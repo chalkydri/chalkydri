@@ -81,9 +81,9 @@ impl CuTask for GstToCuImage {
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
+        output.clear_payload();
         let now_ns = clock.now().as_nanos();
         let Some((buffer, ts)) = input.payload() else {
-            output.clear_payload();
             return Ok(());
         };
         self.last_payload_ns = Some(now_ns);
