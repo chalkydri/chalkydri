@@ -1,12 +1,6 @@
-use nalgebra::{Isometry3, Point3, Rotation3, SMatrix, SVector};
-use std::ops::AddAssign; //trust.
+use nalgebra::{Isometry3, Point3, Rotation3, SMatrix, SVector, Translation3};
+use std::ops::AddAssign;
 
-/*Usage:
-    1. Create a Solver
-    2. .solve with 3d points in space and their normalized 2d coordinate vectors on the camera
-*/
-
-//These should be all that we need
 pub type Mat3 = SMatrix<f64, 3, 3>;
 pub type Mat9 = SMatrix<f64, 9, 9>;
 pub type Vec9 = SVector<f64, 9>;
@@ -20,22 +14,25 @@ pub type Iso3 = Isometry3<f64>;
 pub type Pnt3 = Point3<f64>;
 pub type Rot3 = Rotation3<f64>;
 
-//R is rot matrix, r_vec is column slice of R
-//Jacobian is just partial derivatives across a 3d space
-//fixed_view_mut is an edit in place
-//svd is single value decomposition
+// Standard Computer Vision to Robot (NWU: X-Forward, Y-Left, Z-Up) Rotation Matrix
+// Maps: Cam Z(Fwd) -> Rob X(Fwd), Cam X(Right) -> Rob Y(Left), Cam Y(Down) -> Rob Z(Up) (negated)
+// R = [ 0  0  1 ]
+//     [-1  0  0 ]
+//     [ 0 -1  0 ]
+const CAM_TO_ROBOT_ROT: Mat3 = Mat3::new(
+    0.0, 0.0, 1.0, 
+   -1.0, 0.0, 0.0, 
+    0.0, -1.0, 0.0
+);
 
 #[inline(always)]
 fn nearest_so3(r_vec: &Vec9) -> Vec9 {
-    //first make r_vec a matrix again
     let m = Mat3::from_column_slice(r_vec.as_slice());
-
     let svd = m.svd(true, true);
     let u = svd.u.unwrap_or_default();
     let vt = svd.v_t.unwrap_or_default();
 
     let mut rot = u * vt;
-    //fix chirality
     if rot.determinant() < 0.0 {
         let mut u_prime = u;
         u_prime.column_mut(2).scale_mut(-1.0);
@@ -46,45 +43,38 @@ fn nearest_so3(r_vec: &Vec9) -> Vec9 {
 
 #[inline(always)]
 fn constraints_and_jacobian(r_vec: &Vec9) -> (Vec6, Mat6x9) {
-    //references to each column of rot matrix
     let c1 = r_vec.fixed_view::<3, 1>(0, 0);
     let c2 = r_vec.fixed_view::<3, 1>(3, 0);
     let c3 = r_vec.fixed_view::<3, 1>(6, 0);
 
-    //residuals
     let h = Vec6::new(
         c1.norm_squared() - 1.0,
         c2.norm_squared() - 1.0,
-        c3.norm_squared() - 1.0, //normality contraints
+        c3.norm_squared() - 1.0,
         c1.dot(&c2),
         c1.dot(&c3),
-        c2.dot(&c3), //orthogonality constraints
+        c2.dot(&c3),
     );
 
     let mut jac = Mat6x9::zeros();
 
-    //derivatives of normality constraints
-    jac.fixed_view_mut::<1, 3>(0, 0)
-        .copy_from(&(2.0 * c1.transpose()));
-    jac.fixed_view_mut::<1, 3>(1, 3)
-        .copy_from(&(2.0 * c2.transpose()));
-    jac.fixed_view_mut::<1, 3>(2, 6)
-        .copy_from(&(2.0 * c3.transpose()));
+    jac.fixed_view_mut::<1, 3>(0, 0).copy_from(&(2.0 * c1.transpose()));
+    jac.fixed_view_mut::<1, 3>(1, 3).copy_from(&(2.0 * c2.transpose()));
+    jac.fixed_view_mut::<1, 3>(2, 6).copy_from(&(2.0 * c3.transpose()));
 
-    //derivatives of orthogonality
     jac.fixed_view_mut::<1, 3>(3, 0).copy_from(&c2.transpose());
-    jac.fixed_view_mut::<1, 3>(3, 3).copy_from(&c1.transpose()); //row 3, c1 . c2
+    jac.fixed_view_mut::<1, 3>(3, 3).copy_from(&c1.transpose());
     jac.fixed_view_mut::<1, 3>(4, 0).copy_from(&c3.transpose());
-    jac.fixed_view_mut::<1, 3>(4, 6).copy_from(&c1.transpose()); //row 4, c1 . c3
+    jac.fixed_view_mut::<1, 3>(4, 6).copy_from(&c1.transpose());
     jac.fixed_view_mut::<1, 3>(5, 3).copy_from(&c3.transpose());
-    jac.fixed_view_mut::<1, 3>(5, 6).copy_from(&c2.transpose()); //row 5, c2 . c3
+    jac.fixed_view_mut::<1, 3>(5, 6).copy_from(&c2.transpose());
 
     (h, jac)
 }
 
 #[inline(always)]
 fn solve_newton(r: &Vec9, omega: &Mat9, h: &Vec6, jac: &Mat6x9) -> Option<Vec9> {
-    let mut lhs = Mat15::zeros(); //left hand side (KKT Matrix)
+    let mut lhs = Mat15::zeros();
     lhs.fixed_view_mut::<9, 9>(0, 0).copy_from(omega);
     lhs.fixed_view_mut::<9, 6>(0, 9).copy_from(&jac.transpose());
     lhs.fixed_view_mut::<6, 9>(9, 0).copy_from(jac);
@@ -92,17 +82,11 @@ fn solve_newton(r: &Vec9, omega: &Mat9, h: &Vec6, jac: &Mat6x9) -> Option<Vec9> 
     let mut rhs = Vec15::zeros();
     let omega_r = omega * r;
 
-    //gradient descent
     rhs.fixed_view_mut::<9, 1>(0, 0).copy_from(&(-omega_r));
-    //constraint correction
     rhs.fixed_view_mut::<6, 1>(9, 0).copy_from(&(-h));
 
-    //lu used bc symmetric indef
     match lhs.lu().solve(&rhs) {
-        Some(sol) => {
-            let sol: Vec15 = sol;
-            Some(sol.fixed_view::<9, 1>(0, 0).into_owned())
-        }
+        Some(sol) => Some(sol.fixed_view::<9, 1>(0, 0).into_owned()),
         None => None,
     }
 }
@@ -123,7 +107,6 @@ fn build_linear_system(points_3d: &[Vec3], points_2d: &[Vec3]) -> LinearSys {
     let mut q_tt = Mat3::zeros();
 
     for (p_3d, p_img) in points_3d.iter().zip(points_2d.iter()) {
-        //projection matrix P = I - (v * v^T) / (v^T * v)
         let sq_norm = p_img.norm_squared();
         let inv_norm = 1.0 / sq_norm;
         let v_vt = p_img * p_img.transpose();
@@ -135,21 +118,14 @@ fn build_linear_system(points_3d: &[Vec3], points_2d: &[Vec3]) -> LinearSys {
         let py = p.scale(p_3d.y);
         let pz = p.scale(p_3d.z);
 
-        //No rust, I in fact did not want to assign a value to the result of a function call. Thanks though.
-        //q_rt
         q_rt.fixed_view_mut::<3, 3>(0, 0).add_assign(&px);
         q_rt.fixed_view_mut::<3, 3>(3, 0).add_assign(&py);
         q_rt.fixed_view_mut::<3, 3>(6, 0).add_assign(&pz);
 
-        //diagonal
-        q_rr.fixed_view_mut::<3, 3>(0, 0)
-            .add_assign(&px.scale(p_3d.x));
-        q_rr.fixed_view_mut::<3, 3>(3, 3)
-            .add_assign(&py.scale(p_3d.y));
-        q_rr.fixed_view_mut::<3, 3>(6, 6)
-            .add_assign(&pz.scale(p_3d.z));
+        q_rr.fixed_view_mut::<3, 3>(0, 0).add_assign(&px.scale(p_3d.x));
+        q_rr.fixed_view_mut::<3, 3>(3, 3).add_assign(&py.scale(p_3d.y));
+        q_rr.fixed_view_mut::<3, 3>(6, 6).add_assign(&pz.scale(p_3d.z));
 
-        //not diagonal
         let pxy = px.scale(p_3d.y);
         q_rr.fixed_view_mut::<3, 3>(0, 3).add_assign(&pxy);
         q_rr.fixed_view_mut::<3, 3>(3, 0).add_assign(&pxy);
@@ -186,7 +162,7 @@ impl Default for SqPnP {
         Self {
             max_iter: 15,
             tol_sq: 1e-16,
-            corner_distance: 0.01651f64 / 2.0, //2026 in cm
+            corner_distance: f64::sqrt(16.51f64.powf(2.0) + 16.51f64.powf(2.0)) / 2.0,
         }
     }
 }
@@ -196,12 +172,10 @@ impl SqPnP {
         Self::default()
     }
     pub const fn max_iter(mut self, max_iter: usize) -> Self {
-        //number of iterations in gradient descent
         self.max_iter = max_iter;
         self
     }
     pub const fn tolerance(mut self, tol: f64) -> Self {
-        //how close should we get to the end of the gradient descent before calling it
         self.tol_sq = tol * tol;
         self
     }
@@ -210,6 +184,8 @@ impl SqPnP {
         self
     }
 
+    /// Solves for the standard Computer Vision pose (World -> Camera).
+    /// Returns (Rotation, Translation) where P_cam = R * P_world + T
     pub fn solve(
         &self,
         points_isometry: &[Isometry3<f64>],
@@ -219,7 +195,7 @@ impl SqPnP {
         buffer: &mut Vec<Pnt3>,
     ) -> Option<(Rot3, Vec3)> {
         self.corner_points_from_center(points_isometry, buffer);
-        let mut points_3d: Vec<Vec3> = Vec::new();
+        let mut points_3d: Vec<Vec3> = Vec::with_capacity(buffer.len());
         for point in buffer {
             points_3d.push(Vec3::new(point.x, point.y, point.z));
         }
@@ -232,15 +208,48 @@ impl SqPnP {
 
         let r_mat = self.solve_rotation(&sys.omega, gyro, sign_change_error);
 
-        //t = -q_tt^-1 * q_rt^T * r
+        // t = -q_tt^-1 * q_rt^T * r
+        // This T is the translation from World to Camera in Camera Frame.
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
         let t_vec = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
-
-        let result_t_vec = Vec3::new(t_vec.x, t_vec.z, t_vec.y);
-
+        
         let rot = Rot3::from_matrix(&r_mat);
 
-        Some((rot, result_t_vec))
+        // Return pure mathematical results. Do not swizzle axes here.
+        Some((rot, t_vec))
+    }
+
+    /// Solves for the Robot's Position in the World (Field Frame).
+    /// Handles the coordinate system change (CV -> Robot) and the PnP Inversion.
+    pub fn solve_robot_pose(
+        &self,
+        points_isometry: &[Isometry3<f64>],
+        points_2d: &[Vec3],
+        gyro: f64,
+        sign_change_error: f64,
+        buffer: &mut Vec<Pnt3>,
+    ) -> Option<(Rot3, Vec3)> {
+        // 1. Get raw World-to-Camera (CV Frame)
+        let (r_wc, t_wc) = self.solve(points_isometry, points_2d, gyro, sign_change_error, buffer)?;
+
+        // 2. Invert to get Camera-to-World (CV Frame)
+        // Position of Camera in World = -R^T * T
+        let cam_pos_world = -r_wc.transpose() * t_wc;
+        // Rotation of Camera in World = R^T
+        let cam_rot_world = r_wc.inverse();
+
+        // 3. Convert Camera Frame to Robot Frame
+        // Assuming Camera is mounted Forward-Facing on the robot.
+        // We want the pose of the Robot Body, not the Optical Sensor.
+        // Robot_Rot = Cam_Rot_World * (Cam_to_Robot_Rotation)
+        let robot_rot = cam_rot_world * Rotation3::from_matrix(&CAM_TO_ROBOT_ROT);
+        
+        // The position is the same (assuming camera is at robot center, 
+        // otherwise subtract camera offset here), but if the World Frame 
+        // axes differ from CV World axes, that's handled by points_isometry usually.
+        // However, usually we just want the vector.
+        
+        Some((robot_rot, cam_pos_world))
     }
 
     fn corner_points_from_center(&self, isometry: &[Iso3], buffer: &mut Vec<Pnt3>) -> () {
@@ -273,6 +282,8 @@ impl SqPnP {
 
                 let test_r_mat = Mat3::from_column_slice(refined_r.as_slice());
 
+                // Check gyro consistency (World-to-Camera rotation)
+                // Note: Ensure `gyro` is in the same frame reference as the projection
                 let dot = (test_r_mat[(0, 0)] * gyro.cos()) + (test_r_mat[(1, 0)] * gyro.sin());
 
                 if dot < 0.0 {
@@ -288,6 +299,7 @@ impl SqPnP {
                 }
             }
         }
+        // println!("Solution Entropy: {}", min_energy);
         Mat3::from_column_slice(best_r.as_slice())
     }
 
@@ -298,12 +310,11 @@ impl SqPnP {
             match solve_newton(&r, omega, &h, &jac) {
                 Some(delta_r) => {
                     r += delta_r;
-
                     if delta_r.norm_squared() < self.tol_sq {
                         break;
                     }
                 }
-                None => break, //shouldn't happen like ever
+                None => break,
             }
         }
         let energy = r.dot(&(omega * r));
