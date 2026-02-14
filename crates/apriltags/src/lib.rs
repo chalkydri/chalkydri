@@ -3,7 +3,7 @@ compile_error!(
     "this does not work under windows. please use a unix system. only linux is supported."
 );
 
-const SIGN_FLIP_CONST: f64 = 50.0;
+const SIGN_FLIP_CONST: f64 = -50.0;
 
 #[macro_use]
 extern crate serde;
@@ -253,6 +253,7 @@ impl CuSinkTask for AprilTags {
 
     fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         let Tov::Time(time) = input.tov() else {
+            println!("did not got time");
             return Ok(());
         };
         if let Some(payload) = input.payload() {
@@ -302,8 +303,9 @@ impl CuSinkTask for AprilTags {
                     let pose = RobotPose {
                         x: world_translation[0],
                         y: world_translation[1],
-                        rot: world_rotation.euler_angles().2,
+                        rot: world_rotation.euler_angles().1,
                     };
+                    dbg!(pose);
 
                     let ts = clock.now().as_micros() - time.as_micros();
                     self.comm.publish(
@@ -328,8 +330,9 @@ impl CuSinkTask for AprilTags {
                     self.last_time = Some(timey_time);
                 }
             }
+            println!("{time:?}");
         }
-        
+
         Ok(())
     }
 }

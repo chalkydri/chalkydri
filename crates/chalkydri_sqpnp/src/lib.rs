@@ -186,7 +186,7 @@ impl Default for SqPnP {
         Self {
             max_iter: 15,
             tol_sq: 1e-16,
-            corner_distance: 0.01651f64 / 2.0, //2026 in cm
+            corner_distance: 0.1651f64 / 2.0, //2026 in cm
         }
     }
 }
@@ -230,13 +230,13 @@ impl SqPnP {
 
         let sys = build_linear_system(&points_3d, points_2d);
 
-        let r_mat = self.solve_rotation(&sys.omega, gyro, sign_change_error);
+        let r_mat = self.solve_rotation(&sys.omega, gyro, sign_change_error, points_2d.len() < 8);
 
         //t = -q_tt^-1 * q_rt^T * r
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
         let t_vec = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
 
-        let result_t_vec = Vec3::new(t_vec.x, t_vec.z, t_vec.y);
+        let result_t_vec = Vec3::new(-t_vec.y, t_vec.x, t_vec.z);
 
         let rot = Rot3::from_matrix(&r_mat);
 
@@ -247,10 +247,10 @@ impl SqPnP {
         buffer.clear();
         isometry.iter().for_each(|iso: &Iso3| {
             let corners = [
-                Pnt3::new(self.corner_distance, self.corner_distance, 0.0),
-                Pnt3::new(self.corner_distance, -self.corner_distance, 0.0),
-                Pnt3::new(-self.corner_distance, self.corner_distance, 0.0),
                 Pnt3::new(-self.corner_distance, -self.corner_distance, 0.0),
+                Pnt3::new(self.corner_distance, -self.corner_distance, 0.0),
+                Pnt3::new(self.corner_distance, self.corner_distance, 0.0),
+                Pnt3::new(-self.corner_distance, self.corner_distance, 0.0),
             ];
             for c in corners {
                 buffer.push(iso * c);
@@ -258,7 +258,7 @@ impl SqPnP {
         });
     }
 
-    fn solve_rotation(&self, omega: &Mat9, gyro: f64, sign_change_error: f64) -> Mat3 {
+    fn solve_rotation(&self, omega: &Mat9, gyro: f64, sign_change_error: f64, single_tag: bool) -> Mat3 {
         let eigen = omega.symmetric_eigen();
 
         let mut best_r = Vec9::zeros();
