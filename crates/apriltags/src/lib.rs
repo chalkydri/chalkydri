@@ -285,6 +285,7 @@ impl CuSinkTask for AprilTags {
                             corner.unwrap() //.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
                         })
                         .collect::<Vec<_>>();
+
                     camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
 
                 }
@@ -305,26 +306,27 @@ impl CuSinkTask for AprilTags {
                     };
 
                     let ts = clock.now().as_micros() - time.as_micros();
-                        self.comm.publish(
-                            self.cam_id,
-                            detections.len().try_into().unwrap_or(u8::MAX),
-                            ts,
-                            pose.clone(),
-                            VisionUncertainty::default(),
-                        );
+                    self.comm.publish(
+                        self.cam_id,
+                        detections.len().try_into().unwrap_or(u8::MAX),
+                        ts,
+                        pose.clone(),
+                        VisionUncertainty::default(),
+                    );
                 }
-            }
-            let timey_time = clock.now().as_millis();
-            let ts = clock.now().as_micros() - time.as_micros();
-            if self.last_time.is_none() || (timey_time - self.last_time.unwrap()) > 5 {
-                self.comm.publish(
-                    self.cam_id,
-                    0,
-                    ts,
-                    RobotPose::default(),
-                    VisionUncertainty::default(),
-                );
-                self.last_time = Some(timey_time);
+            } else {
+                let timey_time = clock.now().as_millis();
+                let ts = clock.now().as_micros() - time.as_micros();
+                if self.last_time.is_none() || (timey_time - self.last_time.unwrap()) > 5 {
+                    self.comm.publish(
+                        self.cam_id,
+                        0,
+                        ts,
+                        RobotPose::default(),
+                        VisionUncertainty::default(),
+                    );
+                    self.last_time = Some(timey_time);
+                }
             }
         }
         
