@@ -1,7 +1,10 @@
 use cu_sensor_payloads::CuImage;
 use cu29::prelude::*;
 use image::Luma;
-use rerun::{MemoryLimit, PlaybackBehavior, RecordingStream, RecordingStreamBuilder, ServerOptions, web_viewer::WebViewerConfig};
+use rerun::{
+    MemoryLimit, PlaybackBehavior, RecordingStream, RecordingStreamBuilder, ServerOptions,
+    web_viewer::WebViewerConfig,
+};
 
 pub struct MonitorBundle;
 bundle_resources!(MonitorBundle: Monitor);
@@ -27,19 +30,31 @@ pub struct MonitorResource {
 impl MonitorResource {
     pub fn new() -> Self {
         let stream = RecordingStreamBuilder::new("chalkydri")
-            .serve_grpc_opts("0.0.0.0", 6767, ServerOptions { playback_behavior: PlaybackBehavior::NewestFirst, memory_limit: MemoryLimit::from_fraction_of_total(0.25) })
+            .serve_grpc_opts(
+                "0.0.0.0",
+                6767,
+                ServerOptions {
+                    playback_behavior: PlaybackBehavior::NewestFirst,
+                    memory_limit: MemoryLimit::from_fraction_of_total(0.25),
+                },
+            )
             .unwrap();
 
         //let mut web_config = WebViewerConfig::default();
         //web_config.connect_to = vec!["rerun+http://localhost/proxy".to_owned()];
         //web_config.open_browser = false;
-        let ip_addrs = sysinfo::Networks::new_with_refreshed_list().iter().map(|net| {
-            net.1.ip_networks().into_iter().map(|ip_net| {
-                ip_net.addr
-            }).filter(|ip_addr| {
-                !ip_addr.is_loopback() && ip_addr.is_ipv4()
-            }).collect::<Vec<_>>()
-        }).flatten().collect::<Vec<_>>();
+        let ip_addrs = sysinfo::Networks::new_with_refreshed_list()
+            .iter()
+            .map(|net| {
+                net.1
+                    .ip_networks()
+                    .into_iter()
+                    .map(|ip_net| ip_net.addr)
+                    .filter(|ip_addr| !ip_addr.is_loopback() && ip_addr.is_ipv4())
+                    .collect::<Vec<_>>()
+            })
+            .flatten()
+            .collect::<Vec<_>>();
         //web_config.bind_ip = "0.0.0.0".to_owned();
         //let wv_server = web_config.host_web_viewer().unwrap();
         for ip_addr in ip_addrs {
@@ -82,7 +97,7 @@ impl CuSinkTask for Monitor {
 
     fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
         let cam_id = config
             .expect("config must be present")
@@ -91,10 +106,7 @@ impl CuSinkTask for Monitor {
 
         let monitor = resources.monitor.0.clone();
 
-        Ok(Self {
-            cam_id,
-            monitor,
-        })
+        Ok(Self { cam_id, monitor })
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
@@ -107,14 +119,19 @@ impl CuSinkTask for Monitor {
 
     fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
-            self.monitor.stream.set_time_sequence("time", clock.now().as_micros() as i64);
+            self.monitor
+                .stream
+                .set_time_sequence("time", clock.now().as_micros() as i64);
 
             let img = payload.0.as_image_buffer::<Luma<u8>>().unwrap();
 
-            self.monitor.stream.log(
-                format!("cam{}/image", self.cam_id),
-                &rerun::Image::from_l8(img.to_vec(), [img.width(), img.height()]),
-            ).unwrap();
+            self.monitor
+                .stream
+                .log(
+                    format!("cam{}/image", self.cam_id),
+                    &rerun::Image::from_l8(img.to_vec(), [img.width(), img.height()]),
+                )
+                .unwrap();
         }
 
         Ok(())
