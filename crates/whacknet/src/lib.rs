@@ -2,11 +2,13 @@ extern crate cu_bincode as bincode;
 
 use bincode::{Decode, Encode};
 use bytemuck::{Pod, Zeroable};
+use chalkydri_core::parking_lot;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::mpsc;
 use std::{io, net::UdpSocket, sync::Arc};
 
-use chalkydri_core::prelude::RwLock;
+use chalkydri_core::prelude::{Mutex, RwLock};
 use cu29::prelude::*;
 
 const BIND_ADDR: &str = "0.0.0.0:0";
@@ -65,39 +67,24 @@ struct VisionMeasurement {
 }
 
 pub struct WhacknetClient {
-    cam_id: u8,
     socket: Arc<UdpSocket>,
 }
 impl WhacknetClient {
     /// Initialize a new whacknet client
-    pub fn new(cam_id: u8) -> io::Result<Self> {
+    pub fn new() -> io::Result<Self> {
         // Create and connect to server
         let socket = UdpSocket::bind(BIND_ADDR)?;
         socket.connect(REMOTE_ADDR)?;
 
         Ok(Self {
-            cam_id,
             socket: Arc::new(socket),
         })
     }
     /// Send a pose with std dev
     pub fn send(
         &self,
-        ts: u64,
-        tag_count: u8,
-        pose: RobotPose,
-        std_devs: VisionUncertainty,
+        measurement: VisionMeasurement,
     ) -> io::Result<()> {
-        // Pack up all the data in the struct
-        let measurement = VisionMeasurement {
-            pose,
-            std_devs,
-            camera_id: self.cam_id,
-            tag_count,
-            ts,
-            ..Default::default()
-        };
-
         // Turn the measurement into raw bytes and send it over the UDP sock
         let bytes = bytemuck::bytes_of(&measurement);
         self.socket.send(bytes)?;
@@ -117,6 +104,7 @@ fn check_size() {
 pub struct Comm {
     clients: Arc<RwLock<HashMap<u8, WhacknetClient>>>,
     gyro_angle: Arc<RwLock<Option<f64>>>,
+    measurements_tx: Arc<mpsc::Sender<VisionMeasurement>>,
 }
 impl Comm {
     /// Initialize the communication handler thingie
@@ -145,9 +133,22 @@ impl Comm {
             }
         });
 
+        let (tx, rx) = mpsc::channel();
+        let measurements_tx = Arc::new(tx);
+
+        std::thread::spawn(move || {
+            let client = WhacknetClient::new().expect("failed to initialize client");
+            loop {
+                while let Ok(measurement) = rx.recv() {
+                    client.send(measurement).unwrap();
+                }
+            }
+        });
+
         Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
             gyro_angle,
+            measurements_tx,
         }
     }
 
@@ -160,25 +161,17 @@ impl Comm {
         pose: RobotPose,
         std_devs: VisionUncertainty,
     ) {
-        let mut has_init = true;
+        // Pack up all the data in the struct
+        let measurement = VisionMeasurement {
+            pose,
+            std_devs,
+            camera_id: cam_id,
+            tag_count,
+            ts,
+            ..Default::default()
+        };
 
-        if let Some(clients) = self.clients.try_read() {
-            if let Some(client) = clients.get(&cam_id) {
-                match client.send(ts, tag_count, pose, std_devs) {
-                    Err(_err) => {
-                        //println!("failed to send pose: {err:?}");
-                    }
-                    _ => {}
-                }
-            } else {
-                has_init = false;
-            }
-        }
-
-        if !has_init {
-            let client = WhacknetClient::new(cam_id).expect("failed to initialize client");
-            self.clients.write().insert(cam_id, client);
-        }
+        self.measurements_tx.send(measurement).unwrap();
     }
 
     /// Get the robot's heading from the gyro
