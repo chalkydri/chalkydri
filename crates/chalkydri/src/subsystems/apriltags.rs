@@ -61,22 +61,27 @@ impl CuSinkTask for AprilAdapter {
         let Tov::Time(time) = input.tov() else {
             return Ok(());
         };
-        if let Some((pose, ts)) = input.payload() {
+        let ts = clock.now().as_micros() - time.as_micros();
+        if let Some((pose, _)) = input.payload() {
             self.comm.publish(
                 self.cam_id,
                 1,
-                clock.now().as_micros() - time.as_micros(),
+                ts,
                 pose.clone(),
                 VisionUncertainty::default(),
             );
         } else {
-            self.comm.publish(
-                self.cam_id,
-                0,
-                clock.now().as_micros() - time.as_micros(),
-                RobotPose::default(),
-                VisionUncertainty::default(),
-            );
+            let time = clock.now().as_millis();
+            if self.last_time.is_none() || (time - self.last_time.unwrap()) > 5 {
+                self.comm.publish(
+                    self.cam_id,
+                    0,
+                    ts,
+                    RobotPose::default(),
+                    VisionUncertainty::default(),
+                );
+                self.last_time = Some(time);
+            }
         }
 
         Ok(())
