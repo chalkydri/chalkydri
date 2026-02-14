@@ -25,6 +25,7 @@ impl<'r> ResourceBindings<'r> for Resources<'r> {
 pub struct AprilAdapter {
     cam_id: u8,
     comm: Comm,
+    last_time: Option<u64>,
 }
 impl Freezable for AprilAdapter {}
 impl CuSinkTask for AprilAdapter {
@@ -41,7 +42,11 @@ impl CuSinkTask for AprilAdapter {
             .expect("cam_id must be set");
         let comm = resources.comm.0.clone();
 
-        Ok(Self { cam_id, comm })
+        Ok(Self {
+            cam_id,
+            comm,
+            last_time: None,
+        })
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
@@ -53,14 +58,30 @@ impl CuSinkTask for AprilAdapter {
     }
 
     fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
-        if let Some((pose, ts)) = input.payload() {
+        let Tov::Time(time) = input.tov() else {
+            return Ok(());
+        };
+        let ts = clock.now().as_micros() - time.as_micros();
+        if let Some((pose, _)) = input.payload() {
             self.comm.publish(
                 self.cam_id,
-                0,
-                clock.now().as_micros() - ts.as_micros(),
+                1,
+                ts,
                 pose.clone(),
                 VisionUncertainty::default(),
             );
+        } else {
+            let time = clock.now().as_millis();
+            if self.last_time.is_none() || (time - self.last_time.unwrap()) > 5 {
+                self.comm.publish(
+                    self.cam_id,
+                    0,
+                    ts,
+                    RobotPose::default(),
+                    VisionUncertainty::default(),
+                );
+                self.last_time = Some(time);
+            }
         }
 
         Ok(())

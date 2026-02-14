@@ -83,18 +83,6 @@ impl CuTask for GstToCuImage {
     ) -> CuResult<()> {
         let now_ns = clock.now().as_nanos();
         let Some((buffer, ts)) = input.payload() else {
-            const WARN_AFTER_NS: u64 = 2_000_000_000;
-            const WARN_EVERY_NS: u64 = 2_000_000_000;
-            let last_payload_ns = self.last_payload_ns.unwrap_or(0);
-            if now_ns.saturating_sub(last_payload_ns) >= WARN_AFTER_NS
-                && now_ns.saturating_sub(self.last_warn_ns) >= WARN_EVERY_NS
-            {
-                warning!(
-                    "gst_to_image: no frames received for {} ms",
-                    now_ns.saturating_sub(last_payload_ns) / 1_000_000
-                );
-                self.last_warn_ns = now_ns;
-            }
             output.clear_payload();
             return Ok(());
         };

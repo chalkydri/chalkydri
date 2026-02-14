@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
@@ -7,6 +9,7 @@ use chalkydri::cameras::GstToCuImage;
 use chalkydri::cameras::pipeline::CamPipeline;
 use chalkydri::cameras::providers::{CamProvider, CamProviderBundle, V4l2Provider};
 use chalkydri::subsystems::calibration::*;
+use chalkydri::subsystems::monitor::{Monitor, MonitorBundleId, MonitorBundle};
 use cu29::bincode::config::Config;
 use cu29::config::{ComponentConfig, CuConfig, CuGraph, Node};
 use cu29::prelude::*;
@@ -18,8 +21,6 @@ use gstreamer::prelude::{DeviceExt, ElementExt, PadExt};
 struct App {}
 
 fn calib_camera(dev_id: &str, width: u32, height: u32) -> CalibratedModel {
-    
-
     let pathbuf = PathBuf::from_str("chalkydri.copper".into()).unwrap();
     let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
 
@@ -70,23 +71,60 @@ fn calib_camera(dev_id: &str, width: u32, height: u32) -> CalibratedModel {
         std::thread::sleep(Duration::from_millis(2));
     }
 
+    app.stop_all_tasks().unwrap();
+
     model
 }
 
 pub struct Configurator {
+    has_run: bool,
     c: CuConfig,
 }
 impl Configurator {
     pub fn new() -> Self {
-        let c = CuConfig::new_mission_type();
+        let mut c = {
+            let mut buf = String::new();
+            if let Some(mut f) = File::open("chalkydri.ron").ok() {
+                if f.read_to_string(&mut buf).is_err() {
+                    None
+                } else {
+                    Some(read_configuration("chalkydri.ron").unwrap())
+                }
+            } else {
+                Some(CuConfig::new_simple_type())
+            }
+        }
+        .unwrap();
+        //
 
-        Self { c }
+        c.logging = Some(LoggingConfig {
+            enable_task_logging: false,
+            ..Default::default()
+        });
+
+        if c.resources.len() == 0 {
+            c.resources.push(ResourceBundleConfig {
+                id: "cam_provider".to_owned(),
+                provider: "CamProviderBundle".to_owned(),
+                config: None,
+                missions: None,
+            });
+            c.resources.push(ResourceBundleConfig {
+                id: "comm".to_owned(),
+                provider: "whacknet::CommBundle".to_owned(),
+                config: None,
+                missions: None,
+            });
+        }
+
+        Self { has_run: false, c }
     }
     pub fn configure_cam(&mut self, dev_id: &str, cam_id: u8, width: u32, height: u32) {
-        {
-            let _ = self.c.graphs.add_mission(dev_id).unwrap();
-        }
-        let g = self.c.get_graph_mut(Some(dev_id)).unwrap();
+        //{
+        //    let _ = self.c.graphs.add_mission(dev_id).unwrap();
+        //}
+        //let g = self.c.get_graph_mut(Some(dev_id)).unwrap();
+        let g = self.c.get_graph_mut(None).unwrap();
 
         // The camera itself
         let cam = {
@@ -101,6 +139,7 @@ impl Configurator {
             cam.set_resources(Some([("v4l2".to_owned(), "cam_provider.v4l2".to_owned())]));
 
             // Configure the camera
+            cam.set_param("name", "A".to_owned());
             cam.set_param("id", dev_id.to_owned());
             cam.set_param("width", width);
             cam.set_param("height", height);
@@ -110,9 +149,9 @@ impl Configurator {
 
         // GstBuffer -> CuImage conversion
         let gst_to_cu = {
-            let text_id = format!("camera_{width}_{height}");
+            let text_id = format!("gst_to_cu_{dev_id}");
             let gst_to_cu_id = g.get_node_id_by_name(&text_id).unwrap_or_else(|| {
-                let node = Node::new(&text_id, "chalkydri::cameras::GstToCuImage");
+                let node = Node::new(&text_id, "GstToCuImage");
                 g.add_node(node).expect("this should never fail")
             });
             let gst_to_cu = g.get_node_mut(gst_to_cu_id).expect("very wonk config");
@@ -133,10 +172,15 @@ impl Configurator {
             });
             let apriltags = g.get_node_mut(apriltags_id).expect("very wonk config");
 
-            let model = calib_camera(dev_id, width, height);
+            apriltags.set_resources(Some([("comm".to_owned(), "comm.comm".to_owned())]));
 
-            let calib = serde_json::to_string(&model.inner_model()).unwrap();
-            apriltags.set_param("calib", calib);
+            // Due to GStreamer being GStreamer, can only do one camera calibration per run
+            if apriltags.get_param::<String>("calib").is_none() && !self.has_run {
+                let model = calib_camera(dev_id, width, height);
+                let calib = serde_json::to_string(&model.inner_model()).unwrap();
+                apriltags.set_param("calib", calib);
+                self.has_run = true;
+            }
 
             apriltags_id
         };
@@ -145,10 +189,12 @@ impl Configurator {
         let april_adap = {
             let text_id = format!("april_adap_{dev_id}");
             let april_adap_id = g.get_node_id_by_name(&text_id).unwrap_or_else(|| {
-                let node = Node::new(&text_id, "chalkydri::AprilAdapter");
+                let node = Node::new(&text_id, "AprilAdapter");
                 g.add_node(node).expect("this should never fail")
             });
             let april_adap = g.get_node_mut(april_adap_id).expect("very wonk config");
+
+            april_adap.set_resources(Some([("comm".to_owned(), "comm.comm".to_owned())]));
 
             april_adap.set_param("cam_id", cam_id);
 
@@ -166,16 +212,24 @@ impl Configurator {
             (apriltags, april_adap, "(whacknet::RobotPose, CuDuration)"),
         ] {
             if !g.connection_exists(src, target) {
-                g.connect_ext(src, target, msg, Some(vec![dev_id.to_owned()]), None, None)
+                g.connect_ext(src, target, msg, None, None, None)
                     .expect("why");
             }
         }
 
         g.0.shrink_to_fit();
     }
-    pub fn save(self) -> String {
+    /// Save the configuration to disk
+    pub fn save(self) {
         self.c.validate_logging_config().unwrap();
-        self.c.serialize_ron()
+        let serialized_config = self.c.serialize_ron();
+        let mut f = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open("chalkydri.ron")
+            .unwrap();
+        f.write_all(serialized_config.as_bytes()).unwrap();
     }
 }
 
@@ -250,5 +304,5 @@ fn main() {
         config.configure_cam(&dev_id, cam_id as u8, (*width) as u32, (*height) as u32);
     }
 
-    println!("{}", config.save());
+    config.save();
 }

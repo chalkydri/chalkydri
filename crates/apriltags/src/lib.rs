@@ -28,9 +28,9 @@ use chalkydri_sqpnp::{Rot3, SqPnP};
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
 use cu29::prelude::*;
+use nalgebra::{Matrix, Matrix2x1, Vector2, Vector3, matrix};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
-use nalgebra::{Matrix, Matrix2x1, Vector2, matrix};
 
 use chalkydri_sqpnp::{Iso3, Pnt3};
 use whacknet::{Comm, CommBundleId, RobotPose};
@@ -252,6 +252,7 @@ impl CuTask for AprilTags {
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let mut result = AprilTagDetections::new();
+        output.clear_payload();
         if let Some(payload) = input.payload() {
             use chalkydri_sqpnp::Vec3;
 
@@ -266,13 +267,29 @@ impl CuTask for AprilTags {
                         continue 'det_proc;
                     };
                     world_pts.push(tag.clone());
-                    let corners = detection.corners().map(|corner| {
-                        Vector2::new(corner[0], corner[1])
-                    }).into_iter().collect::<Vec<_>>();
-                    let unprojected = self.cam_model.unproject(corners.as_slice()).into_iter().map(|corner| {
-                        corner.unwrap()
-                    }).collect::<Vec<_>>();
+                    let corners = detection
+                        .corners()
+                        .into_iter()
+                        .map(|corner| Vector2::new(corner[0], corner[1]))
+                        .collect::<Vec<_>>();
+                    //camera_pts.extend_from_slice(
+                    //    corners
+                    //        .into_iter()
+                    //        .map(|c| Vector3::new(c[0], c[1], 1.0))
+                    //        .collect::<Vec<_>>()
+                    //        .as_slice(),
+                    //);
+                    let unprojected = self
+                        .cam_model
+                        .unproject(corners.as_slice())
+                        .into_iter()
+                        .map(|corner| {
+                            // |(corner, raw_corner)| {
+                            corner.unwrap() //.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
+                        })
+                        .collect::<Vec<_>>();
                     camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
+
                     /*if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
                     let translation = aprilpose.translation();
                     let rotation = aprilpose.rotation();
@@ -299,29 +316,26 @@ impl CuTask for AprilTags {
                     ids.push(detection.id());*/
                 }
 
-                let state = self
-                    .solver
-                    .solve(
-                        &world_pts,
-                        &camera_pts,
-                        self.comm.gyro_angle().unwrap_or(0.0),
-                        SIGN_FLIP_CONST,
-                        &mut sqpnp_buffer,
-                    )
-                    .unwrap();
-                let world_rotation: Rot3 = state.0;
-                let world_translation = state.1;
+                if let Some(state) = self.solver.solve(
+                    &world_pts,
+                    &camera_pts,
+                    self.comm.gyro_angle().unwrap_or(0.0),
+                    SIGN_FLIP_CONST,
+                    &mut sqpnp_buffer,
+                ) {
+                    let world_rotation: Rot3 = state.0;
+                    let world_translation = state.1;
 
-                output.tov = input.tov;
-                output.set_payload((
-                    RobotPose {
-                        x: world_translation[0],
-                        y: world_translation[1],
-                        rot: world_rotation.euler_angles().2,
-                    },
-                    payload.1,
-                ));
-                dbg!(output.payload());
+                    output.tov = input.tov;
+                    output.set_payload((
+                        RobotPose {
+                            x: world_translation[0],
+                            y: world_translation[1],
+                            rot: world_rotation.euler_angles().2,
+                        },
+                        payload.1,
+                    ));
+                }
             }
         };
         Ok(())
@@ -347,10 +361,6 @@ impl CuSinkTask for ApriltagsProcessor {
 
     fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         let input: &AprilTagDetections = input.payload().unwrap();
-
-        if input.ids.0.len() > 0 {
-            dbg!(input);
-        }
 
         Ok(())
     }

@@ -1,5 +1,5 @@
 use nalgebra::{Isometry3, Point3, Rotation3, SMatrix, SVector};
-use std::{ops::AddAssign}; //trust.
+use std::ops::AddAssign; //trust.
 
 /*Usage:
     1. Create a Solver
@@ -186,7 +186,7 @@ impl Default for SqPnP {
         Self {
             max_iter: 15,
             tol_sq: 1e-16,
-            corner_distance: f64::sqrt(16.51f64.powf(2.0) + 16.51f64.powf(2.0)) / 2.0, //2026 in cm
+            corner_distance: 0.01651f64 / 2.0, //2026 in cm
         }
     }
 }
@@ -275,7 +275,7 @@ impl SqPnP {
 
                 let dot = (test_r_mat[(0, 0)] * gyro.cos()) + (test_r_mat[(1, 0)] * gyro.sin());
 
-                if dot < 0.0{
+                if dot < 0.0 {
                     energy += sign_change_error;
                 }
 
@@ -288,7 +288,6 @@ impl SqPnP {
                 }
             }
         }
-        println!("Solution Entropy: {}", min_energy);
         Mat3::from_column_slice(best_r.as_slice())
     }
 

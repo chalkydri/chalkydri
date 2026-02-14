@@ -6,6 +6,9 @@ Chalkydri is a *blazingly fast* vision system for FRC written in Rust.
  > **In development**
  >
  > Chalkydri isn't ready to use quite yet.
+ >
+ > We're testing it out this year.
+ > Thanks for your interest though!
 
  > **New here?**
  >
@@ -15,9 +18,6 @@ Chalkydri is a *blazingly fast* vision system for FRC written in Rust.
 
 Chalkydri was created by and is managed by FRC Team 4533 (Phoenix).
 
-We're trying to make vision less of a black box, so *all* FRC teams can use it, no matter their size and level of experience.
-We also want it to be easier to use effectively with less hassle.
-
 Chalkydri has been built from the ground up for performance on popular FRC vision hardware and uses less CPU and memory than existing solutions.
 
 ## Credits
@@ -25,11 +25,9 @@ Chalkydri has been built from the ground up for performance on popular FRC visio
  - [Lincoln](https://github.com/frc4533-lincoln) (Student, 4533)
    - Phoenix vision code lead
 
- - [Chloe](https://github.com/chofuu) (Student, 4533)
-   - Implemented pose estimation
-
- - [Eda](https://github.com/) (Student, 4533)
-   - Implemented AprilTags edge checking algorithm
+ - [Nathan](https://github.com/Magifire64) (Student, 4533)
+   - Phoenix math guru
+   - Implemented SQPnP pose estimation
 
  - [Drake](https://github.com/drakeerv) (Student, 4533)
    - Past vision code lead
