@@ -195,9 +195,8 @@ where
 
 impl Freezable for AprilTags {}
 
-impl CuTask for AprilTags {
+impl CuSinkTask for AprilTags {
     type Input<'m> = input_msg!((CuImage<Vec<u8>>, CuDuration));
-    type Output<'m> = output_msg!((RobotPose, CuDuration));
     type Resources<'r> = Resources<'r>;
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
@@ -252,16 +251,10 @@ impl CuTask for AprilTags {
         })
     }
 
-    fn process<'i, 'o>(
-        &mut self,
-        clock: &RobotClock,
-        input: &Self::Input<'i>,
-        output: &mut Self::Output<'o>,
-    ) -> CuResult<()> {
+    fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         let Tov::Time(time) = input.tov() else {
             return Ok(());
         };
-        output.clear_payload();
         if let Some(payload) = input.payload() {
             use chalkydri_sqpnp::Vec3;
 
@@ -311,7 +304,6 @@ impl CuTask for AprilTags {
                         rot: world_rotation.euler_angles().2,
                     };
 
-                    output.tov = input.tov;
                     let ts = clock.now().as_micros() - time.as_micros();
                         self.comm.publish(
                             self.cam_id,
@@ -320,10 +312,6 @@ impl CuTask for AprilTags {
                             pose.clone(),
                             VisionUncertainty::default(),
                         );
-                    output.set_payload((
-                        pose,
-                        payload.1,
-                    ));
                 }
             }
             let timey_time = clock.now().as_millis();
