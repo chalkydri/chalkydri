@@ -291,7 +291,7 @@ impl CuSinkTask for AprilTags {
 
                 }
 
-                if let Some(state) = self.solver.solve(
+                if let Some(state) = self.solver.solve_robot_pose(
                     &world_pts,
                     &camera_pts,
                     self.comm.gyro_angle().unwrap_or(0.0),

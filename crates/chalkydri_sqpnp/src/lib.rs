@@ -236,11 +236,11 @@ impl SqPnP {
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
         let t_vec = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
 
-        let result_t_vec = Vec3::new(-t_vec.y, t_vec.x, t_vec.z);
+        //let result_t_vec = Vec3::new(-t_vec.y, t_vec.x, t_vec.z);
 
         let rot = Rot3::from_matrix(&r_mat);
 
-        Some((rot, result_t_vec))
+        Some((rot, t_vec))
     }
 
     fn corner_points_from_center(&self, isometry: &[Iso3], buffer: &mut Vec<Pnt3>) -> () {
