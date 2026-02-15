@@ -269,8 +269,6 @@ impl CuSinkTask for AprilTags {
                         continue 'det_proc;
                     };
 
-                    world_pts.push(tag.clone());
-
                     let corners = detection
                         .corners()
                         .into_iter()
@@ -281,13 +279,16 @@ impl CuSinkTask for AprilTags {
                         .cam_model
                         .unproject(corners.as_slice())
                         .into_iter()
-                        .map(|corner| {
-                            corner.unwrap() //.unwrap_or_else(|| Vector3::new(raw_corner[0], raw_corner[1], 1.0))
+                        .filter_map(|corner| {
+                            corner
                         })
                         .collect::<Vec<_>>();
 
-                    camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
-
+                    // Only use it if the corners could be unprojected
+                    if unprojected.len() == 4 {
+                        world_pts.push(tag.clone());
+                        camera_pts.extend_from_slice(unprojected.as_slice()); //I didn't check, make sure these are normalized
+                    }
                 }
 
                 if let Some(state) = self.solver.solve_robot_pose(
