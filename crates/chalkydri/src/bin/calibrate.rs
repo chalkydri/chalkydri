@@ -182,23 +182,9 @@ impl Configurator {
                 self.has_run = true;
             }
 
+            apriltags.set_param("cam_id", cam_id);
+
             apriltags_id
-        };
-
-        // AprilTag adapter (sends data back to the bot)
-        let april_adap = {
-            let text_id = format!("april_adap_{dev_id}");
-            let april_adap_id = g.get_node_id_by_name(&text_id).unwrap_or_else(|| {
-                let node = Node::new(&text_id, "AprilAdapter");
-                g.add_node(node).expect("this should never fail")
-            });
-            let april_adap = g.get_node_mut(april_adap_id).expect("very wonk config");
-
-            april_adap.set_resources(Some([("comm".to_owned(), "comm.comm".to_owned())]));
-
-            april_adap.set_param("cam_id", cam_id);
-
-            april_adap_id
         };
 
         // Make all the connections
@@ -209,7 +195,6 @@ impl Configurator {
                 apriltags,
                 "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)",
             ),
-            (apriltags, april_adap, "(whacknet::RobotPose, CuDuration)"),
         ] {
             if !g.connection_exists(src, target) {
                 g.connect_ext(src, target, msg, None, None, None)

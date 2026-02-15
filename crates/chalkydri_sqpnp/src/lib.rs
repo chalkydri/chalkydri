@@ -214,7 +214,7 @@ impl SqPnP {
 
         let sys = build_linear_system(&points_3d, points_2d);
 
-        let r_mat = self.solve_rotation(&sys.omega, gyro, sign_change_error, points_2d.len() < 8);
+        let r_mat = self.solve_rotation(&sys.omega, gyro, sign_change_error);
 
         // t = -q_tt^-1 * q_rt^T * r
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
@@ -278,19 +278,11 @@ impl SqPnP {
         buffer.clear();
         let s = self.corner_distance;
         isometry.iter().for_each(|iso: &Iso3| {
-            // ORDER: Clockwise starting from Bottom-Left.
-            // SYSTEM: Y increases DOWN (so +Y is Bottom, -Y is Top).
-            //         X increases RIGHT (so +X is Right, -X is Left).
-
             let corners = [
-                // 1. Bottom-Left (-X, +Y)
-                Pnt3::new(-s, s, 0.0),
-                // 2. Top-Left (-X, -Y) (Clockwise step up)
                 Pnt3::new(-s, -s, 0.0),
-                // 3. Top-Right (+X, -Y) (Clockwise step right)
                 Pnt3::new(s, -s, 0.0),
-                // 4. Bottom-Right (+X, +Y) (Clockwise step down)
                 Pnt3::new(s, s, 0.0),
+                Pnt3::new(-s, s, 0.0),
             ];
 
             for c in corners {
@@ -300,7 +292,7 @@ impl SqPnP {
         });
     }
 
-    fn solve_rotation(&self, omega: &Mat9, gyro: f64, sign_change_error: f64, single_tag: bool) -> Mat3 {
+    fn solve_rotation(&self, omega: &Mat9, gyro: f64, sign_change_error: f64) -> Mat3 {
         let eigen = omega.symmetric_eigen();
 
         let mut best_r = Vec9::zeros();

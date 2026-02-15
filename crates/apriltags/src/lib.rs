@@ -253,7 +253,6 @@ impl CuSinkTask for AprilTags {
 
     fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         let Tov::Time(time) = input.tov() else {
-            println!("did not got time");
             return Ok(());
         };
         if let Some(payload) = input.payload() {
