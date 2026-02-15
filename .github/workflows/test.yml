@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Restore from cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           key: cargo
           path: |
@@ -40,7 +40,7 @@ jobs:
         run: cargo test --workspace --no-fail-fast
       
       - name: Save to cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           key: cargo
           path: |
