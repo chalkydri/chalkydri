@@ -81,10 +81,7 @@ impl WhacknetClient {
         })
     }
     /// Send a pose with std dev
-    pub fn send(
-        &self,
-        measurement: VisionMeasurement,
-    ) -> io::Result<()> {
+    pub fn send(&self, measurement: VisionMeasurement) -> io::Result<()> {
         // Turn the measurement into raw bytes and send it over the UDP sock
         let bytes = bytemuck::bytes_of(&measurement);
         self.socket.send(bytes)?;

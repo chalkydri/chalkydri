@@ -279,9 +279,7 @@ impl CuSinkTask for AprilTags {
                         .cam_model
                         .unproject(corners.as_slice())
                         .into_iter()
-                        .filter_map(|corner| {
-                            corner
-                        })
+                        .filter_map(|corner| corner)
                         .collect::<Vec<_>>();
 
                     // Only use it if the corners could be unprojected
