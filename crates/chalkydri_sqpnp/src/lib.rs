@@ -1,5 +1,5 @@
 use nalgebra::{Isometry3, Point3, Rotation3, SMatrix, SVector};
-use std::ops::AddAssign;
+use std::{f64, ops::AddAssign};
 
 // --- Type Definitions ---
 pub type Mat3 = SMatrix<f64, 3, 3>;
@@ -298,7 +298,12 @@ impl SqPnP {
         let mut best_r = Vec9::zeros();
         let mut min_energy = f64::MAX;
 
-        for i in 0..3 {
+        let mut indices: Vec<usize> = (0..9).collect();
+        indices.sort_by(|&a, &b| {
+            eigen.eigenvalues[a].partial_cmp(&eigen.eigenvalues[b]).unwrap()
+        });
+
+        for &i in indices.iter().take(3) {
             let e = eigen.eigenvectors.column(i);
             for sign in [-1.0, 1.0] {
                 let guess = e.scale(sign);
@@ -314,12 +319,14 @@ impl SqPnP {
                 let robot_fwd_x = test_r_mat[(2, 0)];
                 let robot_fwd_y = test_r_mat[(2, 1)];
 
-                // Dot product of Robot Forward vector and Gyro vector
-                let dot = (robot_fwd_x * gyro.cos()) + (robot_fwd_y * gyro.sin());
+                
 
-                if dot < 0.0 {
-                    energy += sign_change_error;
-                }
+                // Dot product of Robot Forward vector and Gyro vector
+                //let dot = (robot_fwd_x * f64::consts::FRAC_PI_2) + (robot_fwd_y * f64::consts::FRAC_PI_2);
+
+                //if dot < 0.0 {
+                //    energy += sign_change_error;
+                //}
 
                 if energy < min_energy {
                     min_energy = energy;

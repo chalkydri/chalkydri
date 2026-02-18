@@ -14,7 +14,7 @@ members = [
   #"crates/minint",
   #"crates/subsystems/python",
   "crates/chalkydri_config",
-  "crates/whacknet", "crates/aaec",
+  "crates/whacknet", "crates/aaec", "crates/configurator",
 ]
 default-members = [
   "crates/chalkydri_core",

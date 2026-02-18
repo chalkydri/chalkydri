@@ -33,7 +33,7 @@ impl AprilTagFieldLayout {
             // Turn the field layout values into Rust datatypes
             let translation = na::Translation3::new(translation.x, translation.y, translation.z);
             let rotation =
-                na::Quaternion::new(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+                na::Quaternion::new(quaternion.w, quaternion.x, quaternion.y, quaternion.z);
             let rotation = na::UnitQuaternion::from_quaternion(rotation);
             let isometry = Iso3::from_parts(translation, rotation);
 

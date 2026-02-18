@@ -4,10 +4,10 @@
             id: "camera_DCX-240524--XH_SPCA2630_PC_Camera",
             type: "CamPipeline",
             config: {
-                "height": 1304,
-                "width": 1600,
                 "id": "DCX-240524--XH_SPCA2630_PC_Camera",
                 "name": "A",
+                "height": 1304,
+                "width": 1600,
             },
             resources: {
                 "v4l2": "cam_provider.v4l2",
@@ -18,8 +18,8 @@
             id: "gst_to_cu_DCX-240524--XH_SPCA2630_PC_Camera",
             type: "GstToCuImage",
             config: {
-                "width": 1600,
                 "height": 1304,
+                "width": 1600,
                 "fourcc": "GREY",
             },
             missions: None,
@@ -28,8 +28,8 @@
             id: "apriltags_DCX-240524--XH_SPCA2630_PC_Camera",
             type: "chalkydri_apriltags::AprilTags",
             config: {
-                "calib": "{\"OpenCVModel5\":{\"fx\":1121.6648441665402,\"fy\":1120.6840905829595,\"cx\":822.3866420997357,\"cy\":711.9941076744785,\"k1\":-0.44366364486873106,\"k2\":0.23978842898919886,\"p1\":0.001,\"p2\":-0.0003535951430134122,\"k3\":-0.07078650496339318,\"width\":1600,\"height\":1304}}",
                 "cam_id": 0,
+                "calib": "{\"OpenCVModel5\":{\"fx\":1121.6648441665402,\"fy\":1120.6840905829595,\"cx\":822.3866420997357,\"cy\":711.9941076744785,\"k1\":-0.44366364486873106,\"k2\":0.23978842898919886,\"p1\":0.001,\"p2\":-0.0003535951430134122,\"k3\":-0.07078650496339318,\"width\":1600,\"height\":1304}}",
             },
             resources: {
                 "comm": "comm.comm",
@@ -40,10 +40,10 @@
             id: "camera_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
             type: "CamPipeline",
             config: {
-                "id": "CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
-                "height": 720,
                 "name": "A",
+                "height": 720,
                 "width": 1280,
+                "id": "CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
             },
             resources: {
                 "v4l2": "cam_provider.v4l2",
@@ -54,9 +54,9 @@
             id: "gst_to_cu_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
             type: "GstToCuImage",
             config: {
+                "width": 1280,
                 "fourcc": "GREY",
                 "height": 720,
-                "width": 1280,
             },
             missions: None,
         ),
@@ -64,8 +64,8 @@
             id: "apriltags_CN0V976R8LG000CIBJ93A01_Integrated_Webcam_HD_200901010001",
             type: "chalkydri_apriltags::AprilTags",
             config: {
-                "calib": "{\"OpenCVModel5\":{\"fx\":914.8828838025846,\"fy\":915.5501301335254,\"cx\":625.8743238562367,\"cy\":351.8997724996189,\"k1\":-0.18968210543826952,\"k2\":0.5571080839978435,\"p1\":-0.001,\"p2\":-0.001,\"k3\":-0.5354208476409222,\"width\":1280,\"height\":720}}",
                 "cam_id": 0,
+                "calib": "{\"OpenCVModel5\":{\"fx\":914.8828838025846,\"fy\":915.5501301335254,\"cx\":625.8743238562367,\"cy\":351.8997724996189,\"k1\":-0.18968210543826952,\"k2\":0.5571080839978435,\"p1\":-0.001,\"p2\":-0.001,\"k3\":-0.5354208476409222,\"width\":1280,\"height\":720}}",
             },
             resources: {
                 "comm": "comm.comm",

@@ -3,7 +3,7 @@ compile_error!(
     "this does not work under windows. please use a unix system. only linux is supported."
 );
 
-const SIGN_FLIP_CONST: f64 = -50.0;
+const SIGN_FLIP_CONST: f64 = 50.0;
 
 #[macro_use]
 extern crate serde;
@@ -301,7 +301,7 @@ impl CuSinkTask for AprilTags {
                     let pose = RobotPose {
                         x: world_translation[0],
                         y: world_translation[1],
-                        rot: world_rotation.euler_angles().1,
+                        rot: world_rotation.euler_angles().2,
                     };
                     dbg!(pose);
 
