@@ -322,11 +322,11 @@ impl SqPnP {
                 
 
                 // Dot product of Robot Forward vector and Gyro vector
-                //let dot = (robot_fwd_x * f64::consts::FRAC_PI_2) + (robot_fwd_y * f64::consts::FRAC_PI_2);
+                let dot = (robot_fwd_x * gyro.cos()) + (robot_fwd_y * gyro.sin());
 
-                //if dot < 0.0 {
-                //    energy += sign_change_error;
-                //}
+                if dot < 0.0 {
+                    energy += sign_change_error;
+                }
 
                 if energy < min_energy {
                     min_energy = energy;
