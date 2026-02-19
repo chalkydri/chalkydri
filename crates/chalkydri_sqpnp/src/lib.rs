@@ -287,10 +287,10 @@ impl SqPnP {
         let s = self.corner_distance;
         isometry.iter().for_each(|iso: &Iso3| {
             let corners = [
-                Pnt3::new(-s, -s, 0.0),
-                Pnt3::new(s, -s, 0.0),
-                Pnt3::new(s, s, 0.0),
-                Pnt3::new(-s, s, 0.0),
+                Pnt3::new(0.0, -s, -s),
+                Pnt3::new(0.0, s, -s),
+                Pnt3::new(0.0, s, s),
+                Pnt3::new(0.0, -s, s),
             ];
 
             for c in corners {
