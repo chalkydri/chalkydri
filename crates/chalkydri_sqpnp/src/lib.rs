@@ -212,19 +212,27 @@ impl SqPnP {
             return None;
         }
 
-        let sys = build_linear_system(&points_3d, points_2d);
+        let n = points_3d.len() as f64;
+        let centroid: Vec3 = points_3d.iter().copied().fold(Vec3::zeros(), |acc, p| acc + p) / n;
+
+        let points_3d_local: Vec<Vec3> = points_3d.iter().map(|p| p - centroid).collect();
+
+        // Solve in the local frame (all values are now small, ~tag size)
+        let sys = build_linear_system(&points_3d_local, points_2d);
 
         let r_mat = self.solve_rotation(&sys.omega, gyro, sign_change_error);
 
-        // t = -q_tt^-1 * q_rt^T * r
+        // t_local = -q_tt^-1 * q_rt^T * r   (translation in centroid-local frame)
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
-        let t_vec = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
+        let t_local = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
 
-        //let result_t_vec = Vec3::new(-t_vec.y, t_vec.x, t_vec.z);
+        // Correct translation back to world frame:
+        //   t_world = t_local - R * centroid
+        let t_world = t_local - r_mat * centroid;
 
         let rot = Rot3::from_matrix(&r_mat);
 
-        Some((rot, t_vec))
+        Some((rot, t_world))
     }
 
     /// Solves for the Robot's Position in the World (Field Frame).
