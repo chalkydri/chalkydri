@@ -137,7 +137,7 @@ impl Comm {
             let client = WhacknetClient::new().expect("failed to initialize client");
             loop {
                 while let Ok(measurement) = rx.recv() {
-                    client.send(measurement).unwrap();
+                    client.send(measurement).ok();
                 }
             }
         });
