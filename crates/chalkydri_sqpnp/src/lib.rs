@@ -16,7 +16,7 @@ pub type Pnt3 = Point3<f64>;
 pub type Rot3 = Rotation3<f64>;
 
 // Increase these to trust vision LESS. Decrease to trust vision MORE.
-const XY_STD_DEV_SCALAR: f64 = 3.0;      // Start at 1.5x the theoretical limit
+const XY_STD_DEV_SCALAR: f64 = 5.0;      // Start at 1.5x the theoretical limit
 const THETA_STD_DEV_SCALAR: f64 = 2.0;   // Start at 2.0x 
 const MAX_TRUSTABLE_RMS: f64 = 0.1;     // At what RMS error (meters) do we completely reject the frame?
 
