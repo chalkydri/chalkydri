@@ -1,0 +1,26 @@
+[package]
+name = "chalkydri_configurator"
+license.workspace = true
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chalkydri = { version = "0.1.0", path = "../chalkydri" }
+color-eyre = "0.6.5"
+crossterm = "0.29.0"
+cu29.workspace = true
+cu29-helpers.workspace = true
+gstreamer.workspace = true
+ratatui = "0.30.0"
+serde_json.workspace = true
+serde.workspace = true
+cu-sensor-payloads.workspace = true
+cu-gstreamer.workspace = true
+rustix = { version = "1.1.2", features = ["all-apis"] }
+camera-intrinsic-model = "0.8.0"
+camera-intrinsic-calibration = { git = "https://github.com/frc4533-lincoln/camera-intrinsic-calibration-rs.git", branch = "main" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "signal"] }
+image = "0.25.5"
+chalkydri_core = { workspace = true }
+aprilgrid = "0.8.0"
+rerun = { version = "0.27", default-features = false, features = ["sdk", "server", "web_viewer"] }

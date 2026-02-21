@@ -8,7 +8,7 @@ edition.workspace = true
 [features]
 #default = ["python", "capriltags", "web"]
 #default = ["python", "web"]
-default = ["rerun"]
+default = []
 #default = []
 #apriltags = ["dep:chalkydri-apriltags"]
 
@@ -16,7 +16,6 @@ default = ["rerun"]
 #capriltags = ["dep:apriltag"]
 
 tokio-console = ["dep:console-subscriber"]
-rerun = ["dep:rerun"]
 
 #[[bin]]
 #name = "logread"
@@ -67,9 +66,9 @@ cu-sensor-payloads.workspace = true
 cu29-export.workspace = true
 cu-gstreamer.workspace = true
 whacknet = { version = "0.1.0", path = "../whacknet" }
-rerun = { version = "0.27", default-features = false, features = ["sdk", "server", "web_viewer"], optional = true }
 aprilgrid = "0.8.0"
 camera-intrinsic-model = "0.8.0"
+crossbeam-channel = "0.5.15"
 
 [build-dependencies]
 bindgen = { version = "*", default-features = false, features = ["runtime"] }
