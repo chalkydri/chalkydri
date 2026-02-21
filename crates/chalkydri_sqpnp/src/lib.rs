@@ -170,7 +170,7 @@ impl Default for SqPnP {
         Self {
             max_iter: 15,
             tol_sq: 1e-16,
-            corner_distance: 0.1651f64 / 2.0, //2026 in cm
+            corner_distance: 0.1651f64 / 2.0, // 2026 tag size in meters
         }
     }
 }
@@ -192,70 +192,110 @@ impl SqPnP {
         self
     }
 
+    /// Computes WPILib-compatible standard deviations (x, y, theta) from pure geometry.
+    /// This never returns None, so it won't interrupt your existing working code.
+    fn compute_std_devs(
+        &self,
+        pure_geometric_energy: f64,
+        distance: f64,
+        n_tags: usize,
+    ) -> Vec3 {
+        let n_points = (n_tags * 4) as f64;
+        let tag_size = self.corner_distance * 2.0;
+
+        let rms_error = (pure_geometric_energy / n_points).sqrt();
+
+        // If the energy is massive, return massive standard deviations. 
+        // This causes WPILib to effectively trust the measurement 0% 
+        // without throwing out the pose entirely on our end.
+        if rms_error > 0.20 {
+            return Vec3::new(100.0, 100.0, 9999999.0);
+        }
+
+        // Dilution of Precision (Distance vs Tag Size)
+        let distance_multiplier = 1.0 + (distance / tag_size);
+
+        // XY Standard Deviation (meters)
+        let base_xy_std = rms_error * distance_multiplier;
+        let xy_std = (base_xy_std / (n_tags as f64).sqrt()).clamp(0.01, 10.0);
+
+        // Theta Standard Deviation (radians)
+        let theta_std = if n_tags >= 2 {
+            // Multi-tag: rotation is well-constrained
+            let base_theta_std = rms_error / tag_size;
+            (base_theta_std * distance_multiplier / (n_tags as f64).sqrt())
+                .clamp(0.05, std::f64::consts::PI)
+        } else {
+            // Single-tag: highly ambiguous rotation. Set massive std dev so 
+            // WPILib relies completely on the gyro for heading.
+            9999999.0
+        };
+
+        Vec3::new(xy_std, xy_std, theta_std)
+    }
+
     /// Solves for the standard Computer Vision pose (World -> Camera).
-    /// Returns (Rotation, Translation) where P_cam = R * P_world + T
+    /// Returns (Rotation, Translation, Pure Geometric Energy) 
     pub fn solve(
-    &self,
-    points_isometry: &[Isometry3<f64>],
-    points_2d: &[Vec3],
-    gyro: f64,
-    sign_change_error: f64,
-    buffer: &mut Vec<Pnt3>,
-) -> Option<(Rot3, Vec3)> {
-    self.corner_points_from_center(points_isometry, buffer);
-    let mut points_3d: Vec<Vec3> = Vec::with_capacity(buffer.len());
-    for point in buffer {
-        points_3d.push(Vec3::new(point.x, point.y, point.z));
-    }
-
-    if points_3d.len() < 3 || points_3d.len() != points_2d.len() {
-        return None;
-    }
-
-    let n = points_3d.len() as f64;
-    let centroid: Vec3 =
-        points_3d.iter().copied().fold(Vec3::zeros(), |acc, p| acc + p) / n;
-    let points_3d_local: Vec<Vec3> = points_3d.iter().map(|p| p - centroid).collect();
-
-    let sys = build_linear_system(&points_3d_local, points_2d);
-
-    // --- Changed: get ALL candidate rotations instead of just one ---
-    let candidates = self.solve_rotation_candidates(&sys.omega, gyro, sign_change_error);
-
-    let mut best_result: Option<(Rot3, Vec3)> = None;
-    let mut best_score = f64::MAX;
-
-    for (r_mat, energy) in candidates {
-        let r_vec = Vec9::from_column_slice(r_mat.as_slice());
-        let t_local = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
-        // t here is the camera-frame translation: P_cam = R * P_world + t
-        let t = t_local - r_mat * centroid;
-
-        // ---- THE KEY FIX: Cheirality check ----
-        // Transform every world point into camera coords.
-        // If ANY point ends up with z <= 0, this solution has the
-        // tag behind the camera — physically impossible, so skip it.
-        let all_in_front = points_3d.iter().all(|p| {
-            let p_cam = r_mat * p + t;
-            p_cam.z > 0.0
-        });
-
-        if !all_in_front {
-            continue;
+        &self,
+        points_isometry: &[Isometry3<f64>],
+        points_2d: &[Vec3],
+        gyro: f64,
+        sign_change_error: f64,
+        buffer: &mut Vec<Pnt3>,
+    ) -> Option<(Rot3, Vec3, f64)> {
+        self.corner_points_from_center(points_isometry, buffer);
+        let mut points_3d: Vec<Vec3> = Vec::with_capacity(buffer.len());
+        for point in buffer {
+            points_3d.push(Vec3::new(point.x, point.y, point.z));
         }
 
-        if energy < best_score {
-            best_score = energy;
-            let rot = Rot3::from_matrix(&r_mat);
-            best_result = Some((rot, t));
+        if points_3d.len() < 3 || points_3d.len() != points_2d.len() {
+            return None;
         }
-    }
 
-    best_result
-}
+        let n = points_3d.len() as f64;
+        let centroid: Vec3 =
+            points_3d.iter().copied().fold(Vec3::zeros(), |acc, p| acc + p) / n;
+        let points_3d_local: Vec<Vec3> = points_3d.iter().map(|p| p - centroid).collect();
+
+        let sys = build_linear_system(&points_3d_local, points_2d);
+
+        let candidates = self.solve_rotation_candidates(&sys.omega, gyro, sign_change_error);
+
+        let mut best_result: Option<(Rot3, Vec3, f64)> = None;
+        let mut best_score = f64::MAX;
+
+        for (r_mat, penalized_energy) in candidates {
+            let r_vec = Vec9::from_column_slice(r_mat.as_slice());
+            let t_local = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
+            let t = t_local - r_mat * centroid;
+
+            let all_in_front = points_3d.iter().all(|p| {
+                let p_cam = r_mat * p + t;
+                p_cam.z > 0.0
+            });
+
+            if !all_in_front {
+                continue;
+            }
+
+            if penalized_energy < best_score {
+                best_score = penalized_energy;
+                
+                // Keep the pure geometric energy for std dev calculations
+                let pure_geometric_energy = r_vec.dot(&(sys.omega * r_vec));
+
+                let rot = Rot3::from_matrix(&r_mat);
+                best_result = Some((rot, t, pure_geometric_energy));
+            }
+        }
+
+        best_result
+    }
 
     /// Solves for the Robot's Position in the World (Field Frame).
-    /// Handles the coordinate system change (CV -> Robot) and the PnP Inversion.
+    /// Returns (Robot Rotation, Robot Position, WPILib Std Devs)
     pub fn solve_robot_pose(
         &self,
         points_isometry: &[Isometry3<f64>],
@@ -263,29 +303,21 @@ impl SqPnP {
         gyro: f64,
         sign_change_error: f64,
         buffer: &mut Vec<Pnt3>,
-    ) -> Option<(Rot3, Vec3)> {
-        // 1. Get raw World-to-Camera (CV Frame)
-        // Returns T_wc (Translation from World to Cam in Cam coords)
-        let (r_wc, t_wc) =
+    ) -> Option<(Rot3, Vec3, Vec3)> {
+        // 1. Get raw World-to-Camera
+        let (r_wc, t_wc, pure_energy) =
             self.solve(points_isometry, points_2d, gyro, sign_change_error, buffer)?;
 
-        // 2. Invert to get Camera-to-World (CV Frame)
-        // Position of Camera in World = -R^T * T
-        // NOTE: We apply negation to the vector because Rot3 cannot be negated directly
+        let distance = t_wc.norm();
+        let n_tags = points_isometry.len();
+
+        // 2. Compute Standard Deviations - this will never return None
+        let std_devs = self.compute_std_devs(pure_energy, distance, n_tags);
+
+        // 3. Invert to get Camera-to-World
         let cam_pos_world = r_wc.inverse() * (-t_wc);
 
-        // 3. Compute Robot Rotation
-        // R_wc contains the camera axes in World Frame (Rows of R_wc):
-        // Row 0 = Cam X (Right) in World
-        // Row 1 = Cam Y (Down) in World
-        // Row 2 = Cam Z (Forward) in World
-
-        // Robot Frame (NWU): X=Forward, Y=Left, Z=Up
-        // Mapping:
-        // Robot X (Forward) = Cam Z
-        // Robot Y (Left)    = -Cam X
-        // Robot Z (Up)      = -Cam Y
-
+        // 4. Compute Robot Rotation (NWU mapping)
         let r_wc_mat = r_wc.matrix();
         let cam_x_in_world = r_wc_mat.row(0).transpose(); // Right
         let cam_y_in_world = r_wc_mat.row(1).transpose(); // Down
@@ -298,7 +330,8 @@ impl SqPnP {
         let robot_rot_mat = Mat3::from_columns(&[robot_x, robot_y, robot_z]);
         let robot_rot = Rotation3::from_matrix(&robot_rot_mat);
 
-        Some((robot_rot, cam_pos_world))
+        // Return everything required by the user
+        Some((robot_rot, cam_pos_world, std_devs))
     }
 
     fn corner_points_from_center(&self, isometry: &[Iso3], buffer: &mut Vec<Pnt3>) -> () {
@@ -313,55 +346,52 @@ impl SqPnP {
             ];
 
             for c in corners {
-                // Apply the tag's field pose (isometry)
                 buffer.push(iso * c);
             }
         });
     }
 
-    /// Returns all candidate rotations with their gyro-penalized energies,
-/// sorted best-first. Previously `solve_rotation` collapsed this to one.
-fn solve_rotation_candidates(
-    &self,
-    omega: &Mat9,
-    gyro: f64,
-    sign_change_error: f64,
-) -> Vec<(Mat3, f64)> {
-    let eigen = omega.symmetric_eigen();
+    fn solve_rotation_candidates(
+        &self,
+        omega: &Mat9,
+        gyro: f64,
+        sign_change_error: f64,
+    ) -> Vec<(Mat3, f64)> {
+        let eigen = omega.symmetric_eigen();
 
-    let mut indices: Vec<usize> = (0..9).collect();
-    indices.sort_by(|&a, &b| {
-        eigen.eigenvalues[a]
-            .partial_cmp(&eigen.eigenvalues[b])
-            .unwrap()
-    });
+        let mut indices: Vec<usize> = (0..9).collect();
+        indices.sort_by(|&a, &b| {
+            eigen.eigenvalues[a]
+                .partial_cmp(&eigen.eigenvalues[b])
+                .unwrap()
+        });
 
-    let mut candidates: Vec<(Mat3, f64)> = Vec::with_capacity(6);
+        let mut candidates: Vec<(Mat3, f64)> = Vec::with_capacity(6);
 
-    // 3 smallest eigenvectors × 2 signs = 6 candidates
-    for &i in indices.iter().take(3) {
-        let e = eigen.eigenvectors.column(i);
-        for sign in [-1.0, 1.0] {
-            let guess = e.scale(sign);
-            let r_start = nearest_so3(&guess);
-            let (refined_r, mut energy) = self.optimization(r_start, omega);
+        for &i in indices.iter().take(3) {
+            let e = eigen.eigenvectors.column(i);
+            for sign in [-1.0, 1.0] {
+                let guess = e.scale(sign);
+                let r_start = nearest_so3(&guess);
+                let (refined_r, mut energy) = self.optimization(r_start, omega);
 
-            let r_mat = Mat3::from_column_slice(refined_r.as_slice());
+                let r_mat = Mat3::from_column_slice(refined_r.as_slice());
 
-            // Gyro heading penalty (same as before)
-            let robot_fwd_x = r_mat[(2, 0)];
-            let robot_fwd_y = r_mat[(2, 1)];
-            let dot = (robot_fwd_x * gyro.cos()) + (robot_fwd_y * gyro.sin());
-            let angle_error = (1.0 - dot).max(0.0);
-            energy += sign_change_error * angle_error;
+                let robot_fwd_x = r_mat[(2, 0)];
+                let robot_fwd_y = r_mat[(2, 1)];
+                let dot = (robot_fwd_x * gyro.cos()) + (robot_fwd_y * gyro.sin());
+                let angle_error = (1.0 - dot).max(0.0);
+                
+                // Add penalty to influence sorting ONLY
+                energy += sign_change_error * angle_error;
 
-            candidates.push((r_mat, energy));
+                candidates.push((r_mat, energy));
+            }
         }
-    }
 
-    candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-    candidates
-}
+        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        candidates
+    }
 
     fn optimization(&self, start_r: Vec9, omega: &Mat9) -> (Vec9, f64) {
         let mut r = start_r;
