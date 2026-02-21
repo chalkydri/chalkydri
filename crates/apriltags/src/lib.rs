@@ -165,11 +165,18 @@ impl<'r> ResourceBindings<'r> for Resources<'r> {
     }
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct AprilTags {
+    #[reflect(ignore)]
     detector: Detector,
+    #[reflect(ignore)]
     solver: SqPnP,
+    #[reflect(ignore)]
     tags: HashMap<usize, Iso3>,
+    #[reflect(ignore)]
     comm: Comm,
+    #[reflect(ignore)]
     cam_model: GenericModel<f64>,
     last_time: Option<u64>,
     cam_id: u8,
@@ -206,17 +213,17 @@ impl CuSinkTask for AprilTags {
         let comm = resources.comm.0.clone();
 
         if let Some(config) = _config {
-            let family_cfg: String = config.get("family").unwrap_or(FAMILY.to_string());
+            let family_cfg: String = config.get("family").unwrap().unwrap_or(FAMILY.to_string());
             let family: Family = family_cfg.parse().unwrap();
-            let bits_corrected: u32 = config.get("bits_corrected").unwrap_or(3);
-            let tagsize = config.get("tag_size").unwrap_or(TAG_SIZE);
-            let cam_id: u8 = config.get("cam_id").unwrap();
+            let bits_corrected: u32 = config.get("bits_corrected").unwrap().unwrap_or(3);
+            let tagsize = config.get("tag_size").unwrap().unwrap_or(TAG_SIZE);
+            let cam_id: u8 = config.get("cam_id").unwrap().unwrap();
             //let fx = config.get("fx").unwrap_or(FX);
             //let fy = config.get("fy").unwrap_or(FY);
             //let cx = config.get("cx").unwrap_or(CX);
             //let cy = config.get("cy").unwrap_or(CY);
             //let field_layout_path = config.get("field_json_path");
-            let calib = config.get::<String>("calib").unwrap();
+            let calib = config.get::<String>("calib").unwrap().unwrap();
 
             let cam_model: GenericModel<f64> = serde_json::from_str(&calib).unwrap();
 
@@ -335,6 +342,7 @@ impl CuSinkTask for AprilTags {
     }
 }
 
+#[derive(Reflect)]
 pub struct ApriltagsProcessor {}
 impl Freezable for ApriltagsProcessor {}
 impl CuSinkTask for ApriltagsProcessor {

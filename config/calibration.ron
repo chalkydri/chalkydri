@@ -1,6 +1,5 @@
 (
   resources: [
-    (id: "cam_provider", provider: "CamProviderBundle"),
   ],
   tasks: [
     (
@@ -9,7 +8,6 @@
       config: {
         "name": "Test",
       },
-      resources: { "v4l2": "cam_provider.v4l2" },
       logging: (enabled: false),
     ),
     (

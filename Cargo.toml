@@ -34,18 +34,18 @@ nt_client = { git = "https://github.com/DatAsianBoi123/nt_client.git", version =
 parking_lot = { version = "0.12.4", features = ["arc_lock", "nightly", "owning_ref", "send_guard"] }
 futures-core = "0.3.31"
 
-cu29 = { version = "0.12", features = ["textlogs"] }
-cu29-helpers = "0.12"
-cu-sensor-payloads = { version = "0.12", features = ["kornia"] }
-cu29-export = "0.12.0"
-cu-gstreamer = { version = "0.12.0", features = ["gst"] }
+cu29 = { version = "0.13", features = ["textlogs"] }
+cu29-helpers = "0.13"
+cu-sensor-payloads = { version = "0.13", features = ["kornia"] }
+cu29-export = "0.13.0"
+cu-gstreamer = { version = "0.13.0", features = ["gst"] }
 
 tokio = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-gstreamer = { version = "0.24.2", features = ["v1_22"] }
-gstreamer-app = { version = "0.24.2", features = ["v1_22"] }
+gstreamer = { version = "0.24", features = ["v1_22"] }
+gstreamer-app = { version = "0.24", features = ["v1_22"] }
 
 chalkydri_core = { version = "0.1.0", path = "crates/chalkydri_core" }
 chalkydri_subsys_capriltags = { version = "0.1.0", path = "crates/subsystems/capriltags" }

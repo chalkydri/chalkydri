@@ -14,7 +14,8 @@ use gstreamer::{
 };
 use gstreamer_app::AppSink;
 
-use crate::cameras::providers::{CamProvider, CamProviderBundleId, V4l2Provider};
+use crate::cameras::providers::PROVIDER;
+use crate::cameras::providers::{CamProvider, V4l2Provider};
 use chalkydri_core::prelude::*;
 
 /// A camera pipeline
@@ -268,72 +269,51 @@ impl CamPipelineImpl {
     }
 }
 
-pub struct Resources<'r> {
-    pub v4l2: Borrowed<'r, V4l2Provider>,
-}
-impl<'r> ResourceBindings<'r> for Resources<'r> {
-    type Binding = CamProviderBundleId;
-    fn from_bindings(
-        mgr: &'r mut ResourceManager,
-        map: Option<&ResourceBindingMap<Self::Binding>>,
-    ) -> CuResult<Self> {
-        let key = map
-            .expect("v4l2 binding")
-            .get(Self::Binding::V4L2)
-            .expect("v4l2")
-            .typed();
-        Ok(Self {
-            v4l2: mgr.borrow(key)?,
-        })
-    }
-}
-
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct CamPipeline {
+    #[reflect(ignore)]
     inner: Option<CamPipelineImpl>,
     was_present: bool,
-    provider: V4l2Provider,
+    #[reflect(ignore)]
     cfgg: crate::config::Camera,
 }
 impl Freezable for CamPipeline {}
 impl CuSrcTask for CamPipeline {
-    type Resources<'r> = Resources<'r>;
+    type Resources<'r> = ();
     type Output<'m> = output_msg!((CuGstBuffer, CuDuration));
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let cam_provider = resources.v4l2.0;
-
         let rc = _config.unwrap();
         let cfgg = crate::config::Camera {
-            id: rc.get("id").unwrap(),
-            name: rc.get("name").unwrap(),
+            id: rc.get("id").unwrap().unwrap(),
+            name: rc.get("name").unwrap().unwrap(),
             settings: Some(CameraSettings {
-                width: rc.get("width").unwrap_or(1280),
-                height: rc.get("height").unwrap_or(720),
+                width: rc.get("width").unwrap_or(Some(1280)).unwrap(),
+                height: rc.get("height").unwrap_or(Some(720)).unwrap(),
                 ..Default::default()
             }),
-            auto_exposure: rc.get("auto_exposure").unwrap_or(true),
-            manual_exposure: rc.get("manual_exposure"),
+            auto_exposure: rc.get("auto_exposure").unwrap().unwrap_or(true),
+            //manual_exposure: rc.get("manual_exposure"),
             ..Default::default()
         };
-        if !cam_provider.inner().is_started() {
-            cam_provider.start();
+        let provider = PROVIDER.lock();
+        if !provider.inner().is_started() {
+            provider.start();
         }
-
-        let provider = cam_provider.clone();
 
         Ok(Self {
             inner: None,
             was_present: false,
-            provider,
             cfgg,
         })
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        if let Some(dev) = self.provider.get_by_id(self.cfgg.id.clone()) {
+        if let Some(dev) = PROVIDER.lock().get_by_id(self.cfgg.id.clone()) {
             let pipeline = CamPipelineImpl::new(dev, self.cfgg.clone());
             self.inner = Some(pipeline);
         }

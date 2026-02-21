@@ -22,8 +22,11 @@ impl<'r> ResourceBindings<'r> for Resources<'r> {
     }
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct AprilAdapter {
     cam_id: u8,
+    #[reflect(ignore)]
     comm: Comm,
     last_time: Option<u64>,
 }
@@ -39,7 +42,7 @@ impl CuSinkTask for AprilAdapter {
         let cam_id = config
             .expect("config must be present")
             .get::<u8>("cam_id")
-            .expect("cam_id must be set");
+            .expect("cam_id must be set").unwrap();
         let comm = resources.comm.0.clone();
 
         Ok(Self {

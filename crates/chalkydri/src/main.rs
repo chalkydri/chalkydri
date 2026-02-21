@@ -23,7 +23,7 @@ extern crate serde;
 
 use chalkydri::cameras::GstToCuImage;
 use chalkydri::cameras::pipeline::CamPipeline;
-use chalkydri::cameras::providers::{CamProvider, CamProviderBundle, V4l2Provider};
+use chalkydri::cameras::providers::{CamProvider, V4l2Provider};
 use chalkydri::subsystems::apriltags::AprilAdapter;
 
 use chalkydri_core::{

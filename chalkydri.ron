@@ -9,9 +9,6 @@
                 "name": "A",
                 "width": 1600,
             },
-            resources: {
-                "v4l2": "cam_provider.v4l2",
-            },
             missions: None,
         ),
         (
@@ -45,9 +42,6 @@
                 "width": 1280,
                 "name": "A",
             },
-            resources: {
-                "v4l2": "cam_provider.v4l2",
-            },
             missions: None,
         ),
         (
@@ -74,10 +68,6 @@
         ),
     ],
     resources: [
-        (
-            id: "cam_provider",
-            provider: "CamProviderBundle",
-        ),
         (
             id: "comm",
             provider: "whacknet::CommBundle",

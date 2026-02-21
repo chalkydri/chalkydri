@@ -13,8 +13,12 @@ use crossbeam_channel::{Receiver, Sender, bounded};
 pub static CALIB: LazyLock<RwLock<Option<Receiver<(DynamicImage, Duration)>>>> = LazyLock::new(|| RwLock::new(None));
 
 /// A camera calibrator
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct Calibrator {
+    #[reflect(ignore)]
     start: Instant,
+    #[reflect(ignore)]
     tx: Sender<(DynamicImage, Duration)>,
 }
 impl Freezable for Calibrator {}

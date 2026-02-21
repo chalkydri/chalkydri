@@ -2,13 +2,12 @@ extern crate cu_bincode as bincode;
 
 use bincode::{Decode, Encode};
 use bytemuck::{Pod, Zeroable};
-use chalkydri_core::parking_lot;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::{io, net::UdpSocket, sync::Arc};
 
-use chalkydri_core::prelude::{Mutex, RwLock};
+use chalkydri_core::prelude::RwLock;
 use cu29::prelude::*;
 
 const BIND_ADDR: &str = "0.0.0.0:0";
@@ -137,7 +136,7 @@ impl Comm {
             let client = WhacknetClient::new().expect("failed to initialize client");
             loop {
                 while let Ok(measurement) = rx.recv() {
-                    client.send(measurement).unwrap();
+                    client.send(measurement).ok();
                 }
             }
         });

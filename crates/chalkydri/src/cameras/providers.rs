@@ -13,10 +13,10 @@ use gstreamer::{
     Structure, prelude::*,
 };
 
-pub static PROVIDER: LazyLock<V4l2Provider> = LazyLock::new(|| {
+pub static PROVIDER: LazyLock<Arc<Mutex<V4l2Provider>>> = LazyLock::new(|| {
     let prov = V4l2Provider::init();
     prov.register_handler();
-    prov
+    Arc::new(Mutex::new(prov))
 });
 
 /// An event from a camera provider
@@ -200,19 +200,19 @@ impl V4l2Provider {
 //    }
 //}
 
-pub struct CamProviderBundle;
-bundle_resources!(CamProviderBundle: V4L2);
-
-impl ResourceBundle for CamProviderBundle {
-    fn build(
-        bundle: cu29::prelude::BundleContext<Self>,
-        _config: Option<&cu29::prelude::ComponentConfig>,
-        manager: &mut cu29::prelude::ResourceManager,
-    ) -> cu29::CuResult<()> {
-        let v4l2_key = bundle.key(CamProviderBundleId::V4L2);
-
-        manager.add_owned(v4l2_key, PROVIDER.clone())?;
-
-        Ok(())
-    }
-}
+//pub struct CamProviderBundle;
+//bundle_resources!(CamProviderBundle: V4L2);
+//
+//impl ResourceBundle for CamProviderBundle {
+//    fn build(
+//        bundle: cu29::prelude::BundleContext<Self>,
+//        _config: Option<&cu29::prelude::ComponentConfig>,
+//        manager: &mut cu29::prelude::ResourceManager,
+//    ) -> cu29::CuResult<()> {
+//        let v4l2_key = bundle.key(CamProviderBundleId::V4L2);
+//
+//        manager.add_owned(v4l2_key, PROVIDER.clone())?;
+//
+//        Ok(())
+//    }
+//}

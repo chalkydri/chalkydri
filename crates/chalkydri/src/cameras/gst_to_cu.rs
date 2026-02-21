@@ -12,11 +12,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static GST_LOG_COUNT: AtomicUsize = AtomicUsize::new(0);
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct GstToCuImage {
     width: u32,
     height: u32,
     stride: u32,
     pixel_format: [u8; 4],
+    #[reflect(ignore)]
     pool: Arc<CuHostMemoryPool<Vec<u8>>>,
     last_payload_ns: Option<u64>,
     last_warn_ns: u64,
@@ -37,13 +40,15 @@ impl CuTask for GstToCuImage {
 
         let width = config
             .get::<u32>("width")
+            .unwrap()
             .ok_or_else(|| CuError::from("GstToCuImage requires width"))?;
         let height = config
             .get::<u32>("height")
+            .unwrap()
             .ok_or_else(|| CuError::from("GstToCuImage requires height"))?;
-        let fourcc = if let Some(fourcc) = config.get::<String>("fourcc") {
+        let fourcc = if let Some(fourcc) = config.get::<String>("fourcc").unwrap() {
             fourcc
-        } else if let Some(pixel_format) = config.get::<String>("pixel_format") {
+        } else if let Some(pixel_format) = config.get::<String>("pixel_format").unwrap() {
             pixel_format
         } else {
             return Err(CuError::from(
@@ -53,13 +58,15 @@ impl CuTask for GstToCuImage {
         let pixel_format = fourcc_to_bytes(&fourcc)?;
         let stride = config
             .get::<u32>("stride")
+            .unwrap()
             .unwrap_or_else(|| default_stride(width, pixel_format));
 
         // Calculate buffer size based on pixel format
         let buffer_size = compute_buffer_size(height, stride, pixel_format);
-        let pool_size = config.get::<u32>("pool_size").unwrap_or(4) as usize;
+        let pool_size = config.get::<u32>("pool_size").unwrap().unwrap_or(4) as usize;
         let pool_id = config
             .get::<String>("pool_id")
+            .unwrap()
             .unwrap_or_else(|| "gst_image_pool".to_string());
 
         let pool = CuHostMemoryPool::new(&pool_id, pool_size, || vec![0u8; buffer_size])?;

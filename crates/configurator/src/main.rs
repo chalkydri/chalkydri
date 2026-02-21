@@ -6,10 +6,9 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use chalkydri::cameras::pipeline::CamPipeline;
-use chalkydri::cameras::providers::{CamProvider, CamProviderBundle, PROVIDER, V4l2Provider};
+use chalkydri::cameras::providers::{CamProvider, PROVIDER, V4l2Provider};
 use chalkydri::cameras::GstToCuImage;
-use cu29::bincode::config::Config;
-use cu29::config::{ComponentConfig, CuConfig, CuGraph, Node};
+use cu29::config::{CuConfig, Node};
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use gstreamer::prelude::{DeviceExt, ElementExt, PadExt};
@@ -51,7 +50,6 @@ pub struct Configurator {
     caps: Option<Vec<Structure>>,
     list_index: usize,
     list_len: usize,
-    provider: Option<V4l2Provider>,
     calibrator: Option<Calibrator>,
     calib_frames: usize,
 }
@@ -91,8 +89,6 @@ impl Configurator {
             });
         }
 
-        let provider = Some(PROVIDER.clone());
-
         Self {
             has_run: false,
             c,
@@ -100,7 +96,6 @@ impl Configurator {
             cameras: Vec::new(),
             current_cam: None,
             list_index: 0,
-            provider,
             caps: None,
             list_len: 0,
             calibrator: None,
@@ -109,9 +104,7 @@ impl Configurator {
     }
 
     pub fn find_cameras(&mut self) {
-        if let Some(ref mut provider) = self.provider {
-            provider.start();
-        }
+        PROVIDER.lock().start();
         std::thread::sleep(Duration::from_secs(2));
     }
 
@@ -176,7 +169,7 @@ impl Configurator {
             apriltags.set_resources(Some([("comm".to_owned(), "comm.comm".to_owned())]));
 
             // Due to GStreamer being GStreamer, can only do one camera calibration per run
-            if apriltags.get_param::<String>("calib").is_none() && !self.has_run {
+            if apriltags.get_param::<String>("calib").unwrap().is_none() && !self.has_run {
                 if let Some(ref calib) = curr_cam.calib {
                     let model = calib.inner_model().clone();
                     let calib_json = serde_json::to_string(&model).unwrap();
@@ -218,12 +211,10 @@ impl Configurator {
         self.camera_configs.clear();
         self.cameras.clear();
 
-        if let Some(ref provider) = self.provider {
-            for device in provider.devices() {
-                self.camera_configs
-                    .insert(device.clone(), Default::default());
-                self.cameras.push(device);
-            }
+        for device in PROVIDER.lock().devices() {
+            self.camera_configs
+                .insert(device.clone(), Default::default());
+            self.cameras.push(device);
         }
     }
 
@@ -326,9 +317,6 @@ impl Configurator {
 
         // Initialize on first call
         if self.calibrator.is_none() {
-            if let Some(ref mut provider) = self.provider.take() {
-                provider.stop();
-            }
             let calibrator = Calibrator::new();
 
             let pathbuf = PathBuf::from_str("chalkydri.copper").unwrap();
@@ -399,7 +387,6 @@ impl Configurator {
             self.calibrator = None;
             self.calib_frames = 0;
 
-            self.provider = Some(V4l2Provider::init());
             return true;
         }
 
@@ -413,7 +400,7 @@ impl Configurator {
         let caps = if let Some(ref caps) = self.caps {
             caps.to_owned()
         } else {
-            if let Some(ref provider) = self.provider {
+            let provider = PROVIDER.lock();
                 let devices = provider.devices();
                 let dev_id = devices.get(camera_index).unwrap();
                 let dev = provider.get_by_id(dev_id.clone()).unwrap();
@@ -429,9 +416,6 @@ impl Configurator {
                 let _ = input.set_state(gstreamer::State::Null);
                 self.caps = Some(caps.clone());
                 caps
-            } else {
-                panic!("oopsie");
-            }
         };
 
         let list = List::new(
@@ -487,7 +471,7 @@ impl Configurator {
             .truncate(true)
             .open("chalkydri.ron")
             .unwrap();
-        f.write_all(serialized_config.as_bytes()).unwrap();
+        f.write_all(serialized_config.unwrap().as_bytes()).unwrap();
     }
 }
 
