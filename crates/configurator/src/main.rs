@@ -369,6 +369,7 @@ impl Configurator {
 
         // Run one iteration and process frame
         std::thread::sleep(Duration::from_millis(10));
+        println!("Processing...");
         self.calib_frames = self.calibrator.as_mut().unwrap().process();
 
         // Check if done
@@ -562,7 +563,6 @@ fn app<T: ratatui::backend::Backend>(t: &mut Terminal<T>) -> Result<()> {
 use color_eyre::Result;
 use crossterm::event::{self, KeyCode};
 use ratatui::layout::{Layout, Rect};
-use ratatui::prelude::CrosstermBackend;
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Bar, List, ListItem, Padding};

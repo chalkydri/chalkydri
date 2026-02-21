@@ -72,6 +72,8 @@ impl Calibrator {
             {
                 self.frame_feats.push(frame_feat);
             }
+        } else {
+            println!("did not get frame :(");
         }
         std::thread::sleep(Duration::from_millis(10));
 
