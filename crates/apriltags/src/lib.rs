@@ -296,19 +296,22 @@ impl CuSinkTask for AprilTags {
                     }
                 }
 
-                if let Some(state) = self.solver.solve_robot_pose(
+                if let Some((world_rotation, world_translation, std_dev)) = self.solver.solve_robot_pose(
                     &world_pts,
                     &camera_pts,
                     self.comm.gyro_angle().unwrap_or(0.0),
                     SIGN_FLIP_CONST,
                     &mut sqpnp_buffer,
                 ) {
-                    let world_rotation: Rot3 = state.0;
-                    let world_translation = state.1;
                     let pose = RobotPose {
                         x: world_translation[0],
                         y: world_translation[1],
                         rot: world_rotation.euler_angles().2,
+                    };
+                    let uncertainty = VisionUncertainty {
+                        x: std_dev[0],
+                        y: std_dev[1],
+                        rot: std_dev[2],
                     };
                     dbg!(pose);
 
@@ -318,7 +321,7 @@ impl CuSinkTask for AprilTags {
                         detections.len().try_into().unwrap_or(u8::MAX),
                         ts,
                         pose.clone(),
-                        VisionUncertainty::default(),
+                        uncertainty.clone(),
                     );
                 }
             } else {
