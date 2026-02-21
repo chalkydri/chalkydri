@@ -300,20 +300,16 @@ impl SqPnP {
         sign_change_error: f64,
         buffer: &mut Vec<Pnt3>,
     ) -> Option<(Rot3, Vec3, Vec3)> {
-        // 1. Get raw World-to-Camera
         let (r_wc, t_wc, pure_energy) =
             self.solve(points_isometry, points_2d, gyro, sign_change_error, buffer)?;
 
         let distance = t_wc.norm();
         let n_tags = points_isometry.len();
 
-        // 2. Compute Standard Deviations - this will never return None
         let std_devs = self.compute_std_devs(pure_energy, distance, n_tags);
 
-        // 3. Invert to get Camera-to-World
         let cam_pos_world = r_wc.inverse() * (-t_wc);
 
-        // 4. Compute Robot Rotation (NWU mapping)
         let r_wc_mat = r_wc.matrix();
         let cam_x_in_world = r_wc_mat.row(0).transpose(); // Right
         let cam_y_in_world = r_wc_mat.row(1).transpose(); // Down
@@ -326,10 +322,46 @@ impl SqPnP {
         let robot_rot_mat = Mat3::from_columns(&[robot_x, robot_y, robot_z]);
         let robot_rot = Rotation3::from_matrix(&robot_rot_mat);
 
-        // Return everything required by the user
-        Some((robot_rot, cam_pos_world, std_devs))
-    }
+        // ==========================================================
+        // === THE FIX: PIVOT IN WORLD-SPACE AROUND THE TAG(S)    ===
+        // ==========================================================
 
+        // 1. Find the centroid (center point) of the tags we are looking at
+        let mut tag_centroid = Vec3::zeros();
+        for iso in points_isometry {
+            tag_centroid += iso.translation.vector;
+        }
+        tag_centroid /= n_tags as f64;
+
+        // 2. Get the Vision's calculated Yaw
+        // robot_rot_mat column 0 is the Robot's Forward (X) axis in the world
+        let vision_fwd_x = robot_rot_mat[(0, 0)];
+        let vision_fwd_y = robot_rot_mat[(1, 0)];
+        let vision_yaw = vision_fwd_y.atan2(vision_fwd_x);
+
+        // 3. Find the difference between the Gyro and the Vision Yaw
+        let delta_yaw = gyro - vision_yaw;
+
+        // 4. Create a Z-axis rotation matrix for this difference
+        let cos_dt = delta_yaw.cos();
+        let sin_dt = delta_yaw.sin();
+        let rot_z = Mat3::new(
+            cos_dt, -sin_dt, 0.0,
+            sin_dt,  cos_dt, 0.0,
+            0.0,     0.0,    1.0,
+        );
+        let rot_z_rot3 = Rotation3::from_matrix(&rot_z);
+
+        // 5. Pivot the camera's position around the tag centroid
+        let pos_relative_to_tag = cam_pos_world - tag_centroid;
+        let pivoted_cam_pos = tag_centroid + (rot_z * pos_relative_to_tag);
+
+        // 6. Rotate the robot's heading so it matches the gyro perfectly
+        let pivoted_robot_rot = rot_z_rot3 * robot_rot;
+
+        // Return the pivoted pose instead!
+        Some((pivoted_robot_rot, pivoted_cam_pos, std_devs))
+    }
     fn corner_points_from_center(&self, isometry: &[Iso3], buffer: &mut Vec<Pnt3>) -> () {
         buffer.clear();
         let s = self.corner_distance;
