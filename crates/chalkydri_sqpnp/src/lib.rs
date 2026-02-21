@@ -195,45 +195,64 @@ impl SqPnP {
     /// Solves for the standard Computer Vision pose (World -> Camera).
     /// Returns (Rotation, Translation) where P_cam = R * P_world + T
     pub fn solve(
-        &self,
-        points_isometry: &[Isometry3<f64>],
-        points_2d: &[Vec3],
-        gyro: f64,
-        sign_change_error: f64,
-        buffer: &mut Vec<Pnt3>,
-    ) -> Option<(Rot3, Vec3)> {
-        self.corner_points_from_center(points_isometry, buffer);
-        let mut points_3d: Vec<Vec3> = Vec::with_capacity(buffer.len());
-        for point in buffer {
-            points_3d.push(Vec3::new(point.x, point.y, point.z));
-        }
+    &self,
+    points_isometry: &[Isometry3<f64>],
+    points_2d: &[Vec3],
+    gyro: f64,
+    sign_change_error: f64,
+    buffer: &mut Vec<Pnt3>,
+) -> Option<(Rot3, Vec3)> {
+    self.corner_points_from_center(points_isometry, buffer);
+    let mut points_3d: Vec<Vec3> = Vec::with_capacity(buffer.len());
+    for point in buffer {
+        points_3d.push(Vec3::new(point.x, point.y, point.z));
+    }
 
-        if points_3d.len() < 3 || points_3d.len() != points_2d.len() {
-            return None;
-        }
+    if points_3d.len() < 3 || points_3d.len() != points_2d.len() {
+        return None;
+    }
 
-        let n = points_3d.len() as f64;
-        let centroid: Vec3 = points_3d.iter().copied().fold(Vec3::zeros(), |acc, p| acc + p) / n;
+    let n = points_3d.len() as f64;
+    let centroid: Vec3 =
+        points_3d.iter().copied().fold(Vec3::zeros(), |acc, p| acc + p) / n;
+    let points_3d_local: Vec<Vec3> = points_3d.iter().map(|p| p - centroid).collect();
 
-        let points_3d_local: Vec<Vec3> = points_3d.iter().map(|p| p - centroid).collect();
+    let sys = build_linear_system(&points_3d_local, points_2d);
 
-        // Solve in the local frame (all values are now small, ~tag size)
-        let sys = build_linear_system(&points_3d_local, points_2d);
+    // --- Changed: get ALL candidate rotations instead of just one ---
+    let candidates = self.solve_rotation_candidates(&sys.omega, gyro, sign_change_error);
 
-        let r_mat = self.solve_rotation(&sys.omega, gyro, sign_change_error);
+    let mut best_result: Option<(Rot3, Vec3)> = None;
+    let mut best_score = f64::MAX;
 
-        // t_local = -q_tt^-1 * q_rt^T * r   (translation in centroid-local frame)
+    for (r_mat, energy) in candidates {
         let r_vec = Vec9::from_column_slice(r_mat.as_slice());
         let t_local = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
+        // t here is the camera-frame translation: P_cam = R * P_world + t
+        let t = t_local - r_mat * centroid;
 
-        // Correct translation back to world frame:
-        //   t_world = t_local - R * centroid
-        let t_world = t_local - r_mat * centroid;
+        // ---- THE KEY FIX: Cheirality check ----
+        // Transform every world point into camera coords.
+        // If ANY point ends up with z <= 0, this solution has the
+        // tag behind the camera — physically impossible, so skip it.
+        let all_in_front = points_3d.iter().all(|p| {
+            let p_cam = r_mat * p + t;
+            p_cam.z > 0.0
+        });
 
-        let rot = Rot3::from_matrix(&r_mat);
+        if !all_in_front {
+            continue;
+        }
 
-        Some((rot, t_world))
+        if energy < best_score {
+            best_score = energy;
+            let rot = Rot3::from_matrix(&r_mat);
+            best_result = Some((rot, t));
+        }
     }
+
+    best_result
+}
 
     /// Solves for the Robot's Position in the World (Field Frame).
     /// Handles the coordinate system change (CV -> Robot) and the PnP Inversion.
@@ -300,52 +319,49 @@ impl SqPnP {
         });
     }
 
-    fn solve_rotation(&self, omega: &Mat9, gyro: f64, sign_change_error: f64) -> Mat3 {
-        let eigen = omega.symmetric_eigen();
+    /// Returns all candidate rotations with their gyro-penalized energies,
+/// sorted best-first. Previously `solve_rotation` collapsed this to one.
+fn solve_rotation_candidates(
+    &self,
+    omega: &Mat9,
+    gyro: f64,
+    sign_change_error: f64,
+) -> Vec<(Mat3, f64)> {
+    let eigen = omega.symmetric_eigen();
 
-        let mut best_r = Vec9::zeros();
-        let mut min_energy = f64::MAX;
+    let mut indices: Vec<usize> = (0..9).collect();
+    indices.sort_by(|&a, &b| {
+        eigen.eigenvalues[a]
+            .partial_cmp(&eigen.eigenvalues[b])
+            .unwrap()
+    });
 
-        let mut indices: Vec<usize> = (0..9).collect();
-        indices.sort_by(|&a, &b| {
-            eigen.eigenvalues[a].partial_cmp(&eigen.eigenvalues[b]).unwrap()
-        });
+    let mut candidates: Vec<(Mat3, f64)> = Vec::with_capacity(6);
 
-        for &i in indices.iter().take(3) {
-            let e = eigen.eigenvectors.column(i);
-            for sign in [-1.0, 1.0] {
-                let guess = e.scale(sign);
-                let r_start = nearest_so3(&guess);
-                let (refined_r, mut energy) = self.optimization(r_start, omega);
+    // 3 smallest eigenvectors × 2 signs = 6 candidates
+    for &i in indices.iter().take(3) {
+        let e = eigen.eigenvectors.column(i);
+        for sign in [-1.0, 1.0] {
+            let guess = e.scale(sign);
+            let r_start = nearest_so3(&guess);
+            let (refined_r, mut energy) = self.optimization(r_start, omega);
 
-                let test_r_mat = Mat3::from_column_slice(refined_r.as_slice());
+            let r_mat = Mat3::from_column_slice(refined_r.as_slice());
 
-                // Gyro Check:
-                // Compare the Robot's Forward Vector (derived from solution)
-                // with the Gyro's Heading Vector.
-                // Robot Forward in World = Cam Z in World = Row 2 of R_wc
-                let robot_fwd_x = test_r_mat[(2, 0)];
-                let robot_fwd_y = test_r_mat[(2, 1)];
+            // Gyro heading penalty (same as before)
+            let robot_fwd_x = r_mat[(2, 0)];
+            let robot_fwd_y = r_mat[(2, 1)];
+            let dot = (robot_fwd_x * gyro.cos()) + (robot_fwd_y * gyro.sin());
+            let angle_error = (1.0 - dot).max(0.0);
+            energy += sign_change_error * angle_error;
 
-                
-
-                // Dot product of Robot Forward vector and Gyro vector
-                let dot = (robot_fwd_x * gyro.cos()) + (robot_fwd_y * gyro.sin());
-                let angle_error = (1.0 - dot).max(0.0);
-
-                energy += sign_change_error * angle_error;
-
-                if energy < min_energy {
-                    min_energy = energy;
-                    best_r = refined_r;
-                }
-                if min_energy < 1e-12 {
-                    break;
-                }
-            }
+            candidates.push((r_mat, energy));
         }
-        Mat3::from_column_slice(best_r.as_slice())
     }
+
+    candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    candidates
+}
 
     fn optimization(&self, start_r: Vec9, omega: &Mat9) -> (Vec9, f64) {
         let mut r = start_r;
