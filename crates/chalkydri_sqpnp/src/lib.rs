@@ -19,7 +19,7 @@ pub type Rot3 = Rotation3<f64>;
 const XY_STD_DEV_SCALAR: f64 = 5.0;      // Start at 1.5x the theoretical limit
 const THETA_STD_DEV_SCALAR: f64 = 2.0;   // Start at 2.0x 
 const MAX_TRUSTABLE_RMS: f64 = 0.1;     // At what RMS error (meters) do we completely reject the frame?
-const MAX_GYRO_DELTA: f64 = 15.0;       //How many degrees of rotation from the gyro until we just use gyro?
+const MAX_GYRO_DELTA: f64 = 80.0;       //How many degrees of rotation from the gyro until we just use gyro?
 
 #[inline(always)]
 fn nearest_so3(r_vec: &Vec9) -> Vec9 {
