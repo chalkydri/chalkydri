@@ -15,9 +15,10 @@ pub type Iso3 = Isometry3<f64>;
 pub type Pnt3 = Point3<f64>;
 pub type Rot3 = Rotation3<f64>;
 
-// Standard Computer Vision to Robot (NWU: X-Forward, Y-Left, Z-Up) Rotation Matrix
-// Maps: Cam Z(Fwd) -> Rob X(Fwd), Cam X(Right) -> Rob Y(Left), Cam Y(Down) -> Rob Z(Up)
-const CAM_TO_ROBOT_ROT: Mat3 = Mat3::new(0.0, 0.0, 1.0, -1.0, 0.0, 0.0, 0.0, -1.0, 0.0);
+// Increase these to trust vision LESS. Decrease to trust vision MORE.
+const XY_STD_DEV_SCALAR: f64 = 1.5;      // Start at 1.5x the theoretical limit
+const THETA_STD_DEV_SCALAR: f64 = 2.0;   // Start at 2.0x 
+const MAX_TRUSTABLE_RMS: f64 = 0.20;     // At what RMS error (meters) do we completely reject the frame?
 
 #[inline(always)]
 fn nearest_so3(r_vec: &Vec9) -> Vec9 {
@@ -205,29 +206,24 @@ impl SqPnP {
 
         let rms_error = (pure_geometric_energy / n_points).sqrt();
 
-        // If the energy is massive, return massive standard deviations. 
-        // This causes WPILib to effectively trust the measurement 0% 
-        // without throwing out the pose entirely on our end.
-        if rms_error > 0.20 {
+        // 1. Rejection threshold
+        if rms_error > MAX_TRUSTABLE_RMS {
             return Vec3::new(100.0, 100.0, 9999999.0);
         }
 
-        // Dilution of Precision (Distance vs Tag Size)
         let distance_multiplier = 1.0 + (distance / tag_size);
 
-        // XY Standard Deviation (meters)
+        // 2. Apply XY error Scalar 
         let base_xy_std = rms_error * distance_multiplier;
-        let xy_std = (base_xy_std / (n_tags as f64).sqrt()).clamp(0.01, 10.0);
+        let xy_std = (base_xy_std / (n_tags as f64).sqrt()) * XY_STD_DEV_SCALAR; 
+        let xy_std = xy_std.clamp(0.01, 10.0);
 
-        // Theta Standard Deviation (radians)
+        // 3. Apply Theta error Scalar
         let theta_std = if n_tags >= 2 {
-            // Multi-tag: rotation is well-constrained
             let base_theta_std = rms_error / tag_size;
-            (base_theta_std * distance_multiplier / (n_tags as f64).sqrt())
-                .clamp(0.05, std::f64::consts::PI)
+            let val = (base_theta_std * distance_multiplier / (n_tags as f64).sqrt()) * THETA_STD_DEV_SCALAR; 
+            val.clamp(0.05, std::f64::consts::PI)
         } else {
-            // Single-tag: highly ambiguous rotation. Set massive std dev so 
-            // WPILib relies completely on the gyro for heading.
             9999999.0
         };
 
