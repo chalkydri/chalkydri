@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use chalkydri::cameras::pipeline::CamPipeline;
-use chalkydri::cameras::providers::{CamProvider, CamProviderBundle, V4l2Provider};
+use chalkydri::cameras::providers::{CamProvider, CamProviderBundle, PROVIDER, V4l2Provider};
 use chalkydri::cameras::GstToCuImage;
 use cu29::bincode::config::Config;
 use cu29::config::{ComponentConfig, CuConfig, CuGraph, Node};
@@ -91,7 +91,7 @@ impl Configurator {
             });
         }
 
-        let provider = Some(V4l2Provider::init());
+        let provider = Some(PROVIDER.clone());
 
         Self {
             has_run: false,

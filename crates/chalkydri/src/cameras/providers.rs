@@ -13,7 +13,7 @@ use gstreamer::{
     Structure, prelude::*,
 };
 
-pub(crate) static PROVIDER: LazyLock<V4l2Provider> = LazyLock::new(|| {
+pub static PROVIDER: LazyLock<V4l2Provider> = LazyLock::new(|| {
     let prov = V4l2Provider::init();
     prov.register_handler();
     prov
@@ -211,7 +211,7 @@ impl ResourceBundle for CamProviderBundle {
     ) -> cu29::CuResult<()> {
         let v4l2_key = bundle.key(CamProviderBundleId::V4L2);
 
-        manager.add_owned(v4l2_key, V4l2Provider::init())?;
+        manager.add_owned(v4l2_key, PROVIDER.clone())?;
 
         Ok(())
     }
