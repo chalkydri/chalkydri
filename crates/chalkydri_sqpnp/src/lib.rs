@@ -19,6 +19,7 @@ pub type Rot3 = Rotation3<f64>;
 const XY_STD_DEV_SCALAR: f64 = 5.0;      // Start at 1.5x the theoretical limit
 const THETA_STD_DEV_SCALAR: f64 = 2.0;   // Start at 2.0x 
 const MAX_TRUSTABLE_RMS: f64 = 0.1;     // At what RMS error (meters) do we completely reject the frame?
+const MAX_GYRO_DELTA: f64 = 15.0;       //How many degrees of rotation from the gyro until we just use gyro?
 
 #[inline(always)]
 fn nearest_so3(r_vec: &Vec9) -> Vec9 {
@@ -219,13 +220,13 @@ impl SqPnP {
         let xy_std = xy_std.clamp(0.01, 10.0);
 
         // 3. Apply Theta error Scalar
-        let theta_std = if n_tags >= 2 {
+        let theta_std = /*if n_tags >= 2 */{
             let base_theta_std = rms_error / tag_size;
             let val = (base_theta_std * distance_multiplier / (n_tags as f64).sqrt()) * THETA_STD_DEV_SCALAR; 
             val.clamp(0.05, std::f64::consts::PI)
-        } else {
+        }; /*else {
             9999999.0
-        };
+        };*/
 
         Vec3::new(xy_std, xy_std, theta_std)
     }
@@ -341,6 +342,10 @@ impl SqPnP {
 
         // 3. Find the difference between the Gyro and the Vision Yaw
         let delta_yaw = gyro - vision_yaw;
+
+        if delta_yaw.abs().to_degrees() < MAX_GYRO_DELTA{
+            return Some((robot_rot, cam_pos_world, std_devs));
+        }
 
         // 4. Create a Z-axis rotation matrix for this difference
         let cos_dt = delta_yaw.cos();
