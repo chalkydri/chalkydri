@@ -10,7 +10,8 @@ use tokio::time::Instant;
 
 use crossbeam_channel::{Receiver, Sender, bounded};
 
-pub static CALIB: LazyLock<RwLock<Option<Receiver<(DynamicImage, Duration)>>>> = LazyLock::new(|| RwLock::new(None));
+pub static CALIB: LazyLock<RwLock<Option<Receiver<(DynamicImage, Duration)>>>> =
+    LazyLock::new(|| RwLock::new(None));
 
 /// A camera calibrator
 #[derive(Reflect)]
@@ -63,4 +64,3 @@ impl CuSinkTask for Calibrator {
         Ok(())
     }
 }
-

@@ -16,10 +16,10 @@ pub type Pnt3 = Point3<f64>;
 pub type Rot3 = Rotation3<f64>;
 
 // Increase these to trust vision LESS. Decrease to trust vision MORE.
-const XY_STD_DEV_SCALAR: f64 = 5.0;      // Start at 1.5x the theoretical limit
-const THETA_STD_DEV_SCALAR: f64 = 2.0;   // Start at 2.0x 
-const MAX_TRUSTABLE_RMS: f64 = 0.1;     // At what RMS error (meters) do we completely reject the frame?
-const MAX_GYRO_DELTA: f64 = 80.0;       //How many degrees of rotation from the gyro until we just use gyro?
+const XY_STD_DEV_SCALAR: f64 = 5.0; // Start at 1.5x the theoretical limit
+const THETA_STD_DEV_SCALAR: f64 = 2.0; // Start at 2.0x 
+const MAX_TRUSTABLE_RMS: f64 = 0.1; // At what RMS error (meters) do we completely reject the frame?
+const MAX_GYRO_DELTA: f64 = 80.0; //How many degrees of rotation from the gyro until we just use gyro?
 
 #[inline(always)]
 fn nearest_so3(r_vec: &Vec9) -> Vec9 {
@@ -196,12 +196,7 @@ impl SqPnP {
 
     /// Computes WPILib-compatible standard deviations (x, y, theta) from pure geometry.
     /// This never returns None, so it won't interrupt your existing working code.
-    fn compute_std_devs(
-        &self,
-        pure_geometric_energy: f64,
-        distance: f64,
-        n_tags: usize,
-    ) -> Vec3 {
+    fn compute_std_devs(&self, pure_geometric_energy: f64, distance: f64, n_tags: usize) -> Vec3 {
         let n_points = (n_tags * 4) as f64;
         let tag_size = self.corner_distance * 2.0;
 
@@ -214,9 +209,9 @@ impl SqPnP {
 
         let distance_multiplier = 1.0 + (distance / tag_size);
 
-        // 2. Apply XY error Scalar 
+        // 2. Apply XY error Scalar
         let base_xy_std = rms_error * distance_multiplier;
-        let xy_std = (base_xy_std / (n_tags as f64).sqrt()) * XY_STD_DEV_SCALAR; 
+        let xy_std = (base_xy_std / (n_tags as f64).sqrt()) * XY_STD_DEV_SCALAR;
         let xy_std = xy_std.clamp(0.01, 10.0);
 
         // 3. Apply Theta error Scalar
@@ -225,14 +220,14 @@ impl SqPnP {
             let val = (base_theta_std * distance_multiplier / (n_tags as f64).sqrt()) * THETA_STD_DEV_SCALAR; 
             val.clamp(0.05, std::f64::consts::PI)
         }; /*else {
-            9999999.0
+        9999999.0
         };*/
 
         Vec3::new(xy_std, xy_std, theta_std)
     }
 
     /// Solves for the standard Computer Vision pose (World -> Camera).
-    /// Returns (Rotation, Translation, Pure Geometric Energy) 
+    /// Returns (Rotation, Translation, Pure Geometric Energy)
     pub fn solve(
         &self,
         points_isometry: &[Isometry3<f64>],
@@ -252,8 +247,11 @@ impl SqPnP {
         }
 
         let n = points_3d.len() as f64;
-        let centroid: Vec3 =
-            points_3d.iter().copied().fold(Vec3::zeros(), |acc, p| acc + p) / n;
+        let centroid: Vec3 = points_3d
+            .iter()
+            .copied()
+            .fold(Vec3::zeros(), |acc, p| acc + p)
+            / n;
         let points_3d_local: Vec<Vec3> = points_3d.iter().map(|p| p - centroid).collect();
 
         let sys = build_linear_system(&points_3d_local, points_2d);
@@ -279,7 +277,7 @@ impl SqPnP {
 
             if penalized_energy < best_score {
                 best_score = penalized_energy;
-                
+
                 // Keep the pure geometric energy for std dev calculations
                 let pure_geometric_energy = r_vec.dot(&(sys.omega * r_vec));
 
@@ -343,18 +341,14 @@ impl SqPnP {
         // 3. Find the difference between the Gyro and the Vision Yaw
         let delta_yaw = gyro - vision_yaw;
 
-        if delta_yaw.abs().to_degrees() < MAX_GYRO_DELTA{
+        if delta_yaw.abs().to_degrees() < MAX_GYRO_DELTA {
             return Some((robot_rot, cam_pos_world, std_devs));
         }
 
         // 4. Create a Z-axis rotation matrix for this difference
         let cos_dt = delta_yaw.cos();
         let sin_dt = delta_yaw.sin();
-        let rot_z = Mat3::new(
-            cos_dt, -sin_dt, 0.0,
-            sin_dt,  cos_dt, 0.0,
-            0.0,     0.0,    1.0,
-        );
+        let rot_z = Mat3::new(cos_dt, -sin_dt, 0.0, sin_dt, cos_dt, 0.0, 0.0, 0.0, 1.0);
         let rot_z_rot3 = Rotation3::from_matrix(&rot_z);
 
         // 5. Pivot the camera's position around the tag centroid
@@ -414,7 +408,7 @@ impl SqPnP {
                 let robot_fwd_y = r_mat[(2, 1)];
                 let dot = (robot_fwd_x * gyro.cos()) + (robot_fwd_y * gyro.sin());
                 let angle_error = (1.0 - dot).max(0.0);
-                
+
                 // Add penalty to influence sorting ONLY
                 energy += sign_change_error * angle_error;
 

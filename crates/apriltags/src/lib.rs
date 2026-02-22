@@ -24,7 +24,7 @@ use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use camera_intrinsic_model::{GenericModel, OpenCVModel5};
-use chalkydri_sqpnp::{Rot3, SqPnP};
+use chalkydri_sqpnp::{Rot3, SqPnP, Vec3};
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
 use cu29::prelude::*;
@@ -165,6 +165,19 @@ impl<'r> ResourceBindings<'r> for Resources<'r> {
     }
 }
 
+#[inline(always)]
+pub fn calculate_cam_to_robot(
+    cam_to_world_rotation: &Rot3,
+    cam_to_world_translation: &Vec3,
+    robot_to_cam_rotation: &Rot3,
+    robot_to_cam_translation: &Vec3,
+) -> (Rot3, Vec3) {
+    (
+        cam_to_world_rotation * robot_to_cam_rotation,
+        cam_to_world_translation - robot_to_cam_translation,
+    )
+}
+
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
 pub struct AprilTags {
@@ -180,6 +193,15 @@ pub struct AprilTags {
     cam_model: GenericModel<f64>,
     last_time: Option<u64>,
     cam_id: u8,
+}
+
+pub struct RobotToCamOffset {
+    pub rot_yaw: f64,
+    pub rot_pitch: f64,
+    pub rot_roll: f64,
+    pub trans_x: f64,
+    pub trans_y: f64,
+    pub trans_z: f64,
 }
 
 fn image_from_cuimage<A>(cu_image: &CuImage<A>) -> ManuallyDrop<Image>
@@ -218,6 +240,7 @@ impl CuSinkTask for AprilTags {
             let bits_corrected: u32 = config.get("bits_corrected").unwrap().unwrap_or(3);
             let tagsize = config.get("tag_size").unwrap().unwrap_or(TAG_SIZE);
             let cam_id: u8 = config.get("cam_id").unwrap().unwrap();
+            let robot_to_cam_str = config.get::<String>().unwrap().unwrap();
             //let fx = config.get("fx").unwrap_or(FX);
             //let fy = config.get("fy").unwrap_or(FY);
             //let cx = config.get("cx").unwrap_or(CX);
@@ -225,6 +248,7 @@ impl CuSinkTask for AprilTags {
             //let field_layout_path = config.get("field_json_path");
             let calib = config.get::<String>("calib").unwrap().unwrap();
 
+            let robot_to_cam: RobotToCamOffset = serde_json::from_str(&robot_to_cam_str).unwrap9);
             let cam_model: GenericModel<f64> = serde_json::from_str(&calib).unwrap();
 
             let detector = DetectorBuilder::default()
@@ -296,17 +320,18 @@ impl CuSinkTask for AprilTags {
                     }
                 }
 
-                if let Some((world_rotation, world_translation, std_dev)) = self.solver.solve_robot_pose(
+                if let Some((cam_to_world_rotation, cam_to_world_translation, std_dev)) = self.solver.solve_robot_pose(
                     &world_pts,
                     &camera_pts,
                     self.comm.gyro_angle().unwrap_or(0.0),
                     SIGN_FLIP_CONST,
                     &mut sqpnp_buffer,
                 ) {
+                    let (robot_to_world_rotation, robot_to_world_translation) = calculate_cam_to_robot(&cam_to_world_rotation, &cam_to_world_translation, robot_to_cam_rotation, robot_to_cam_translation);
                     let pose = RobotPose {
-                        x: world_translation[0],
-                        y: world_translation[1],
-                        rot: world_rotation.euler_angles().2,
+                        x: cam_to_world_translation[0],
+                        y: cam_to_world_translation[1],
+                        rot: cam_to_world_rotation.euler_angles().2,
                     };
                     let uncertainty = VisionUncertainty {
                         x: std_dev[0],

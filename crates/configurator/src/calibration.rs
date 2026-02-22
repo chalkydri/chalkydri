@@ -1,9 +1,9 @@
 use chalkydri::subsystems::calibration::CALIB;
 use std::time::Duration;
 
-use aprilgrid::{detector::TagDetector, TagFamily};
+use aprilgrid::{TagFamily, detector::TagDetector};
 use camera_intrinsic_calibration::{
-    board::{create_default_6x6_board, Board},
+    board::{Board, create_default_6x6_board},
     detected_points::FrameFeature,
     types::CalibParams,
     util::*,
@@ -60,7 +60,11 @@ impl Calibrator {
     ///
     /// Returns `true` until enough frames have been processed to run calibration.
     pub fn process(&mut self) -> usize {
-        if let Some(img) = CALIB.read().clone().map_or(None, |c| c.recv_timeout(Duration::from_millis(10)).ok()) {
+        if let Some(img) = CALIB
+            .read()
+            .clone()
+            .map_or(None, |c| c.recv_timeout(Duration::from_millis(10)).ok())
+        {
             if let Some(frame_feat) =
                 camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(
                     &self.det,
@@ -115,5 +119,4 @@ impl Calibrator {
             Some(calib_res.unwrap().0)
         }
     }
-
 }

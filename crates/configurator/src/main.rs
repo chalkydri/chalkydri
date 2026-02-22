@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
+use chalkydri::cameras::GstToCuImage;
 use chalkydri::cameras::pipeline::CamPipeline;
 use chalkydri::cameras::providers::{CamProvider, PROVIDER, V4l2Provider};
-use chalkydri::cameras::GstToCuImage;
 use cu29::config::{CuConfig, Node};
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
@@ -402,21 +402,21 @@ impl Configurator {
             caps.to_owned()
         } else {
             let provider = PROVIDER.lock();
-                let devices = provider.devices();
-                let dev_id = devices.get(camera_index).unwrap();
-                let dev = provider.get_by_id(dev_id.clone()).unwrap();
-                let input = dev.create_element(Some("camera")).unwrap();
+            let devices = provider.devices();
+            let dev_id = devices.get(camera_index).unwrap();
+            let dev = provider.get_by_id(dev_id.clone()).unwrap();
+            let input = dev.create_element(Some("camera")).unwrap();
 
-                input.set_state(State::Ready).unwrap();
-                let pad = input.static_pad("src").unwrap();
-                let query_caps = pad.query_caps(None);
-                let mut caps = Vec::new();
-                for structure in query_caps.iter() {
-                    caps.push(structure.to_owned());
-                }
-                let _ = input.set_state(gstreamer::State::Null);
-                self.caps = Some(caps.clone());
-                caps
+            input.set_state(State::Ready).unwrap();
+            let pad = input.static_pad("src").unwrap();
+            let query_caps = pad.query_caps(None);
+            let mut caps = Vec::new();
+            for structure in query_caps.iter() {
+                caps.push(structure.to_owned());
+            }
+            let _ = input.set_state(gstreamer::State::Null);
+            self.caps = Some(caps.clone());
+            caps
         };
 
         let list = List::new(
@@ -562,15 +562,15 @@ fn app<T: ratatui::backend::Backend>(t: &mut Terminal<T>) -> Result<()> {
 
 use color_eyre::Result;
 use crossterm::event::{self, KeyCode};
+use ratatui::Terminal;
 use ratatui::layout::{Layout, Rect};
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Bar, List, ListItem, Padding};
-use ratatui::Terminal;
+use ratatui::widgets::{Bar, List, ListItem, ListState, Padding};
 use ratatui::{
+    Frame,
     layout::Constraint,
     widgets::{Block, Clear, Paragraph},
-    Frame,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]

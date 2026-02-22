@@ -42,7 +42,8 @@ impl CuSinkTask for AprilAdapter {
         let cam_id = config
             .expect("config must be present")
             .get::<u8>("cam_id")
-            .expect("cam_id must be set").unwrap();
+            .expect("cam_id must be set")
+            .unwrap();
         let comm = resources.comm.0.clone();
 
         Ok(Self {
