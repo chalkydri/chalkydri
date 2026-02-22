@@ -18,8 +18,8 @@ pub type Rot3 = Rotation3<f64>;
 // Increase these to trust vision LESS. Decrease to trust vision MORE.
 const XY_STD_DEV_SCALAR: f64 = 5.0;      // Start at 1.5x the theoretical limit
 const THETA_STD_DEV_SCALAR: f64 = 2.0;   // Start at 2.0x 
-const MAX_TRUSTABLE_RMS: f64 = 0.1;     // At what RMS error (meters) do we completely reject the frame?
-const MAX_GYRO_DELTA: f64 = 80.0;       //How many degrees of rotation from the gyro until we just use gyro?
+const MAX_TRUSTABLE_RMS: f64 = 0.1;      // At what RMS error (meters) do we completely reject the frame?
+const MAX_GYRO_DELTA: f64 = 80.0;        // How many degrees of rotation from the gyro until we completely reject the vision pose?
 
 #[inline(always)]
 fn nearest_so3(r_vec: &Vec9) -> Vec9 {
@@ -194,8 +194,7 @@ impl SqPnP {
         self
     }
 
-    /// Computes WPILib-compatible standard deviations (x, y, theta) from pure geometry.
-    /// This never returns None, so it won't interrupt your existing working code.
+    /// Computes WPILib-compatible base standard deviations (x, y, theta) from pure geometry.
     fn compute_std_devs(
         &self,
         pure_geometric_energy: f64,
@@ -207,38 +206,35 @@ impl SqPnP {
 
         let rms_error = (pure_geometric_energy / n_points).sqrt();
 
-        // 1. Rejection threshold
+        // Rejection threshold
         if rms_error > MAX_TRUSTABLE_RMS {
             return Vec3::new(std::f64::MAX, std::f64::MAX, std::f64::MAX);
         }
 
         let distance_multiplier = 1.0 + (distance / tag_size);
 
-        // 2. Apply XY error Scalar 
+        // pply XY error Scalar 
         let base_xy_std = rms_error * distance_multiplier;
         let xy_std = (base_xy_std / (n_tags as f64).sqrt()) * XY_STD_DEV_SCALAR; 
         let xy_std = xy_std.clamp(0.01, 10.0);
 
-        // 3. Apply Theta error Scalar
-        let theta_std = /*if n_tags >= 2 */{
+        // Apply Theta error Scalar
+        let theta_std = {
             let base_theta_std = rms_error / tag_size;
             let val = (base_theta_std * distance_multiplier / (n_tags as f64).sqrt()) * THETA_STD_DEV_SCALAR; 
             val.clamp(0.05, std::f64::consts::PI)
-        }; /*else {
-            9999999.0
-        };*/
+        };
 
         Vec3::new(xy_std, xy_std, theta_std)
     }
 
     /// Solves for the standard Computer Vision pose (World -> Camera).
-    /// Returns (Rotation, Translation, Pure Geometric Energy) 
+    /// Resolves planar ambiguity internally. Returns (Rotation, Translation, Pure Geometric Energy).
     pub fn solve(
         &self,
         points_isometry: &[Isometry3<f64>],
         points_2d: &[Vec3],
         gyro: f64,
-        sign_change_error: f64,
         buffer: &mut Vec<Pnt3>,
     ) -> Option<(Rot3, Vec3, f64)> {
         self.corner_points_from_center(points_isometry, buffer);
@@ -258,12 +254,12 @@ impl SqPnP {
 
         let sys = build_linear_system(&points_3d_local, points_2d);
 
-        let candidates = self.solve_rotation_candidates(&sys.omega, gyro, sign_change_error);
+        let candidates = self.solve_rotation_candidates(&sys.omega);
 
-        let mut best_result: Option<(Rot3, Vec3, f64)> = None;
-        let mut best_score = f64::MAX;
+        // Store up to all valid poses (Rotation, Translation, Geometric Energy, Gyro Yaw Error)
+        let mut valid_poses: Vec<(Rot3, Vec3, f64, f64)> = Vec::with_capacity(6);
 
-        for (r_mat, penalized_energy) in candidates {
+        for (r_mat, pure_energy) in candidates {
             let r_vec = Vec9::from_column_slice(r_mat.as_slice());
             let t_local = -sys.q_tt_inv * sys.q_rt.transpose() * r_vec;
             let t = t_local - r_mat * centroid;
@@ -273,22 +269,58 @@ impl SqPnP {
                 p_cam.z > 0.0
             });
 
-            if !all_in_front {
-                continue;
-            }
+            if all_in_front {
+                // Calculate what this candidate thinks the robot yaw is (WPILib NWU coordinates)
+                let robot_fwd_x = r_mat[(2, 0)];
+                let robot_fwd_y = r_mat[(2, 1)];
+                let vision_yaw = robot_fwd_y.atan2(robot_fwd_x);
 
-            if penalized_energy < best_score {
-                best_score = penalized_energy;
-                
-                // Keep the pure geometric energy for std dev calculations
-                let pure_geometric_energy = r_vec.dot(&(sys.omega * r_vec));
+                // Find the shortest angular distance to the gyro
+                let mut delta_yaw = (gyro - vision_yaw) % (2.0 * std::f64::consts::PI);
+                if delta_yaw > std::f64::consts::PI { delta_yaw -= 2.0 * std::f64::consts::PI; }
+                if delta_yaw < -std::f64::consts::PI { delta_yaw += 2.0 * std::f64::consts::PI; }
 
                 let rot = Rot3::from_matrix(&r_mat);
-                best_result = Some((rot, t, pure_geometric_energy));
+                valid_poses.push((rot, t, pure_energy, delta_yaw.abs()));
             }
         }
 
-        best_result
+        if valid_poses.is_empty() {
+            return None;
+        }
+
+        // Sort poses purely by how well the math fits the pixels
+        valid_poses.sort_by(|a, b| a.2.total_cmp(&b.2).unwrap());
+
+        // Resolve the ambiguity
+        let n_tags = points_isometry.len();
+
+        // If we see multiple tags, or there's only 1 valid mathematical solution, 
+        // trust the best geometric pose implicitly.
+        if n_tags > 1 || valid_poses.len() == 1 {
+            let best = &valid_poses[0];
+            return Some((best.0, best.1, best.2));
+        }
+
+        // We have 1 tag and multiple solutions. Compare the Top 2.
+        let best = &valid_poses[0];
+        let alt = &valid_poses[1];
+
+        // Ambiguity is the ratio of their geometric errors. 
+        // Best is always smaller, so ratio is between 0.0 and 1.0.
+        let ambiguity_ratio = best.2 / alt.2; 
+
+        // 0.2 is the standard threshold for planar ambiguity.
+        // If the ratio is > 0.2, the 2D pixel error is too similar. The camera is "confused".
+        if ambiguity_ratio > 0.2 {
+            // Tie-Breaker: Pick whichever pose aligns best with the Gyro!
+            if alt.3 < best.3 {
+                return Some((alt.0, alt.1, alt.2)); // Flipped pose was the real one!
+            }
+        }
+
+        // Otherwise, trust the mathematically best pose.
+        Some((best.0, best.1, best.2))
     }
 
     /// Solves for the Robot's Position in the World (Field Frame).
@@ -298,11 +330,10 @@ impl SqPnP {
         points_isometry: &[Isometry3<f64>],
         points_2d: &[Vec3],
         gyro: f64,
-        sign_change_error: f64,
         buffer: &mut Vec<Pnt3>,
     ) -> Option<(Rot3, Vec3, Vec3)> {
         let (r_wc, t_wc, pure_energy) =
-            self.solve(points_isometry, points_2d, gyro, sign_change_error, buffer)?;
+            self.solve(points_isometry, points_2d, gyro, buffer)?;
 
         let distance = t_wc.norm();
         let n_tags = points_isometry.len();
@@ -323,50 +354,39 @@ impl SqPnP {
         let robot_rot_mat = Mat3::from_columns(&[robot_x, robot_y, robot_z]);
         let robot_rot = Rotation3::from_matrix(&robot_rot_mat);
 
-        // ==========================================================
-        // === THE FIX: PIVOT IN WORLD-SPACE AROUND THE TAG(S)    ===
-        // ==========================================================
-
-        // 1. Find the centroid (center point) of the tags we are looking at
-        let mut tag_centroid = Vec3::zeros();
-        for iso in points_isometry {
-            tag_centroid += iso.translation.vector;
-        }
-        tag_centroid /= n_tags as f64;
-
-        // 2. Get the Vision's calculated Yaw
-        // robot_rot_mat column 0 is the Robot's Forward (X) axis in the world
+        // Dynamic trust scaling
+        // Get the Vision's calculated Yaw
         let vision_fwd_x = robot_rot_mat[(0, 0)];
         let vision_fwd_y = robot_rot_mat[(1, 0)];
         let vision_yaw = vision_fwd_y.atan2(vision_fwd_x);
 
-        // 3. Find the difference between the Gyro and the Vision Yaw
-        let delta_yaw = gyro - vision_yaw;
+        // Find the shortest angular difference
+        let mut delta_yaw = (gyro - vision_yaw) % (2.0 * f64::consts::PI);
+        if delta_yaw > f64::consts::PI { delta_yaw -= 2.0 * f64::consts::PI; }
+        if delta_yaw < -f64::consts::PI { delta_yaw += 2.0 * f64::consts::PI; }
+        
+        let delta_degrees = delta_yaw.abs().to_degrees();
 
-        if delta_yaw.abs().to_degrees() < MAX_GYRO_DELTA{
-            return Some((robot_rot, cam_pos_world, std_devs));
+        // If the divergence is massive, reject the frame completely
+        if delta_degrees > MAX_GYRO_DELTA {
+            return None; 
         }
 
-        // 4. Create a Z-axis rotation matrix for this difference
-        let cos_dt = delta_yaw.cos();
-        let sin_dt = delta_yaw.sin();
-        let rot_z = Mat3::new(
-            cos_dt, -sin_dt, 0.0,
-            sin_dt,  cos_dt, 0.0,
-            0.0,     0.0,    1.0,
-        );
-        let rot_z_rot3 = Rotation3::from_matrix(&rot_z);
+        // Dynamic Scaling Gradient
+        // If difference is 0°, multiplier is 1.0. 
+        // If difference is 40°, multiplier is 2.0.
+        // It exponentially increases Std Devs as the pose drifts from Gyro.
+        let trust_penalty = 1.0 + (delta_degrees / 40.0).powi(2); 
 
-        // 5. Pivot the camera's position around the tag centroid
-        let pos_relative_to_tag = cam_pos_world - tag_centroid;
-        let pivoted_cam_pos = tag_centroid + (rot_z * pos_relative_to_tag);
+        // Apply penalty to the base standard deviations
+        let mut dynamic_std_devs = std_devs;
+        dynamic_std_devs.x *= trust_penalty;
+        dynamic_std_devs.y *= trust_penalty;
+        dynamic_std_devs.z *= trust_penalty * 2.0; // Heavily penalize vision theta
 
-        // 6. Rotate the robot's heading so it matches the gyro perfectly
-        let pivoted_robot_rot = rot_z_rot3 * robot_rot;
-
-        // Return the pivoted pose instead!
-        Some((pivoted_robot_rot, pivoted_cam_pos, std_devs))
+        Some((robot_rot, cam_pos_world, dynamic_std_devs))
     }
+
     fn corner_points_from_center(&self, isometry: &[Iso3], buffer: &mut Vec<Pnt3>) -> () {
         buffer.clear();
         let s = self.corner_distance;
@@ -387,8 +407,6 @@ impl SqPnP {
     fn solve_rotation_candidates(
         &self,
         omega: &Mat9,
-        gyro: f64,
-        sign_change_error: f64,
     ) -> Vec<(Mat3, f64)> {
         let eigen = omega.symmetric_eigen();
 
@@ -406,22 +424,14 @@ impl SqPnP {
             for sign in [-1.0, 1.0] {
                 let guess = e.scale(sign);
                 let r_start = nearest_so3(&guess);
-                let (refined_r, mut energy) = self.optimization(r_start, omega);
+                let (refined_r, energy) = self.optimization(r_start, omega);
 
                 let r_mat = Mat3::from_column_slice(refined_r.as_slice());
-
-                let robot_fwd_x = r_mat[(2, 0)];
-                let robot_fwd_y = r_mat[(2, 1)];
-                let dot = (robot_fwd_x * gyro.cos()) + (robot_fwd_y * gyro.sin());
-                let angle_error = (1.0 - dot).max(0.0);
-                
-                // Add penalty to influence sorting ONLY
-                energy += sign_change_error * angle_error;
-
                 candidates.push((r_mat, energy));
             }
         }
 
+        // Sort candidates by pure geometric energy
         candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         candidates
     }
