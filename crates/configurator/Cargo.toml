@@ -11,7 +11,6 @@ crossterm = "0.29.0"
 cu29.workspace = true
 cu29-helpers.workspace = true
 gstreamer.workspace = true
-ratatui = "0.30.0"
 serde_json.workspace = true
 serde.workspace = true
 cu-sensor-payloads.workspace = true
@@ -24,3 +23,5 @@ image = "0.25.5"
 chalkydri_core = { workspace = true }
 aprilgrid = "0.8.0"
 rerun = { version = "0.27", default-features = false, features = ["sdk", "server", "web_viewer"] }
+dialoguer = { version = "0.12.0", features = ["completion"] }
+clap = { version = "4.5.60", features = ["derive"] }

@@ -169,12 +169,15 @@ impl<'r> ResourceBindings<'r> for Resources<'r> {
 pub fn calculate_cam_to_robot(
     cam_to_world_rotation: &Rot3,
     cam_to_world_translation: &Vec3,
-    robot_to_cam_rotation: &Rot3,
-    robot_to_cam_translation: &Vec3,
+    robot_to_cam: &Iso3,
 ) -> (Rot3, Vec3) {
+    let mut robot_to_world = robot_to_cam.clone();
+    robot_to_world.append_rotation_mut(cam_to_world_rotation);
+    robot_to_world.append_translation_mut(cam_to_world_translation);
+
     (
-        cam_to_world_rotation * robot_to_cam_rotation,
-        cam_to_world_translation - robot_to_cam_translation,
+        robot_to_world.rotation.to_rotation_matrix() as Rot3,
+        robot_to_world.translation.vector as Vec3,
     )
 }
 
@@ -193,12 +196,16 @@ pub struct AprilTags {
     cam_model: GenericModel<f64>,
     last_time: Option<u64>,
     cam_id: u8,
+    #[reflect(ignore)]
+    robot_to_cam: Option<Iso3>,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct RobotToCamOffset {
-    pub rot_yaw: f64,
-    pub rot_pitch: f64,
-    pub rot_roll: f64,
+    pub rot_w: f64,
+    pub rot_x: f64,
+    pub rot_y: f64,
+    pub rot_z: f64,
     pub trans_x: f64,
     pub trans_y: f64,
     pub trans_z: f64,
@@ -240,7 +247,7 @@ impl CuSinkTask for AprilTags {
             let bits_corrected: u32 = config.get("bits_corrected").unwrap().unwrap_or(3);
             let tagsize = config.get("tag_size").unwrap().unwrap_or(TAG_SIZE);
             let cam_id: u8 = config.get("cam_id").unwrap().unwrap();
-            let robot_to_cam_str = config.get::<String>().unwrap().unwrap();
+            let robot_to_cam_str: String = config.get("robot_to_cam").unwrap().unwrap();
             //let fx = config.get("fx").unwrap_or(FX);
             //let fy = config.get("fy").unwrap_or(FY);
             //let cx = config.get("cx").unwrap_or(CX);
@@ -248,7 +255,13 @@ impl CuSinkTask for AprilTags {
             //let field_layout_path = config.get("field_json_path");
             let calib = config.get::<String>("calib").unwrap().unwrap();
 
-            let robot_to_cam: RobotToCamOffset = serde_json::from_str(&robot_to_cam_str).unwrap9);
+            let robot_to_cam_offsets: RobotToCamOffset = serde_json::from_str(&robot_to_cam_str).unwrap();
+            let translation = nalgebra::Translation3::new(robot_to_cam_offsets.trans_x, robot_to_cam_offsets.trans_y, robot_to_cam_offsets.trans_z);
+            let rotation =
+                nalgebra::Quaternion::new(robot_to_cam_offsets.rot_w, robot_to_cam_offsets.rot_x, robot_to_cam_offsets.rot_y, robot_to_cam_offsets.rot_z);
+            let rotation = nalgebra::UnitQuaternion::from_quaternion(rotation);
+            let robot_to_cam = Iso3::from_parts(translation, rotation);
+
             let cam_model: GenericModel<f64> = serde_json::from_str(&calib).unwrap();
 
             let detector = DetectorBuilder::default()
@@ -266,6 +279,7 @@ impl CuSinkTask for AprilTags {
                 comm,
                 cam_model,
                 last_time: None,
+                robot_to_cam: Some(robot_to_cam),
             });
         }
         Ok(Self {
@@ -279,6 +293,7 @@ impl CuSinkTask for AprilTags {
             comm,
             cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
             last_time: None,
+            robot_to_cam: None,
         })
     }
 

@@ -562,16 +562,6 @@ fn app<T: ratatui::backend::Backend>(t: &mut Terminal<T>) -> Result<()> {
 
 use color_eyre::Result;
 use crossterm::event::{self, KeyCode};
-use ratatui::Terminal;
-use ratatui::layout::{Layout, Rect};
-use ratatui::style::Stylize;
-use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Bar, List, ListItem, ListState, Padding};
-use ratatui::{
-    Frame,
-    layout::Constraint,
-    widgets::{Block, Clear, Paragraph},
-};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum View {
@@ -581,8 +571,22 @@ enum View {
     Calibrator,
 }
 
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+enum Command {
+    Configure,
+    Calibrate(CmdCalibrate),
+}
+
+#[derive(clap::Args)]
+#[command(version, about, long_about = None)]
+pub struct CmdCalibrate {
+}
+
 fn main() -> Result<()> {
     color_eyre::install()?;
+
+    let cmd = Command::parse();
 
     ratatui::run(|t| {
         t.draw(|fr| loader_screen(fr, "Initializing...")).unwrap();
