@@ -1,4 +1,5 @@
 use chalkydri::subsystems::calibration::CALIB;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 use aprilgrid::{TagFamily, detector::TagDetector};
@@ -12,8 +13,9 @@ use camera_intrinsic_model::{GenericModel, OpenCVModel5};
 
 use tokio::time::Instant;
 
+#[derive(Default, Deserialize, Serialize)]
 pub struct CalibratedModel {
-    model: GenericModel<f64>,
+    model: Option<GenericModel<f64>>,
 }
 impl CalibratedModel {
     pub fn from_str(calib: String) -> Self {
@@ -21,8 +23,8 @@ impl CalibratedModel {
         Self { model }
     }
 
-    pub const fn inner_model(&self) -> GenericModel<f64> {
-        self.model
+    pub fn inner_model(&self) -> GenericModel<f64> {
+        self.model.unwrap()
     }
 }
 

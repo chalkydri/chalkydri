@@ -184,7 +184,7 @@ pub struct AprilTags {
     robot_to_cam: Option<Iso3>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct RobotToCamOffset {
     pub rot_w: f64,
     pub rot_x: f64,

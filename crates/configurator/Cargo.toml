@@ -25,3 +25,4 @@ aprilgrid = "0.8.0"
 rerun = { version = "0.27", default-features = false, features = ["sdk", "server", "web_viewer"] }
 dialoguer = { version = "0.12.0", features = ["completion"] }
 clap = { version = "4.5.60", features = ["derive"] }
+chalkydri_apriltags = { version = "0.1.0", path = "../apriltags" }
