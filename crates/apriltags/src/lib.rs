@@ -165,22 +165,6 @@ impl<'r> ResourceBindings<'r> for Resources<'r> {
     }
 }
 
-#[inline(always)]
-pub fn calculate_cam_to_robot(
-    cam_to_world_rotation: &Rot3,
-    cam_to_world_translation: &Vec3,
-    robot_to_cam: &Iso3,
-) -> (Rot3, Vec3) {
-    let mut robot_to_world = robot_to_cam.clone();
-    robot_to_world.append_rotation_mut(cam_to_world_rotation);
-    robot_to_world.append_translation_mut(cam_to_world_translation);
-
-    (
-        robot_to_world.rotation.to_rotation_matrix() as Rot3,
-        robot_to_world.translation.vector as Vec3,
-    )
-}
-
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
 pub struct AprilTags {
@@ -342,7 +326,6 @@ impl CuSinkTask for AprilTags {
                     SIGN_FLIP_CONST,
                     &mut sqpnp_buffer,
                 ) {
-                    let (robot_to_world_rotation, robot_to_world_translation) = calculate_cam_to_robot(&cam_to_world_rotation, &cam_to_world_translation, robot_to_cam_rotation, robot_to_cam_translation);
                     let pose = RobotPose {
                         x: cam_to_world_translation[0],
                         y: cam_to_world_translation[1],
