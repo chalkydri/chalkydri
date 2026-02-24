@@ -325,7 +325,6 @@ impl CuSinkTask for AprilTags {
                         &camera_pts,
                         self.comm.gyro_angle().unwrap_or(0.0),
                         SIGN_FLIP_CONST,
-                        &mut sqpnp_buffer,
                     )
                 {
                     let pose = RobotPose {
