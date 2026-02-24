@@ -180,8 +180,8 @@ pub struct AprilTags {
     cam_model: GenericModel<f64>,
     last_time: Option<u64>,
     cam_id: u8,
-    #[reflect(ignore)]
-    robot_to_cam: Option<Iso3>,
+    //#[reflect(ignore)]
+    //robot_to_cam: Option<Iso3>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -231,7 +231,7 @@ impl CuSinkTask for AprilTags {
             let bits_corrected: u32 = config.get("bits_corrected").unwrap().unwrap_or(3);
             let tagsize = config.get("tag_size").unwrap().unwrap_or(TAG_SIZE);
             let cam_id: u8 = config.get("cam_id").unwrap().unwrap();
-            let robot_to_cam_str: String = config.get("robot_to_cam").unwrap().unwrap();
+            //let robot_to_cam_str: String = config.get("robot_to_cam").unwrap().unwrap();
             //let fx = config.get("fx").unwrap_or(FX);
             //let fy = config.get("fy").unwrap_or(FY);
             //let cx = config.get("cx").unwrap_or(CX);
@@ -239,12 +239,12 @@ impl CuSinkTask for AprilTags {
             //let field_layout_path = config.get("field_json_path");
             let calib = config.get::<String>("calib").unwrap().unwrap();
 
-            let robot_to_cam_offsets: RobotToCamOffset = serde_json::from_str(&robot_to_cam_str).unwrap();
-            let translation = nalgebra::Translation3::new(robot_to_cam_offsets.trans_x, robot_to_cam_offsets.trans_y, robot_to_cam_offsets.trans_z);
-            let rotation =
-                nalgebra::Quaternion::new(robot_to_cam_offsets.rot_w, robot_to_cam_offsets.rot_x, robot_to_cam_offsets.rot_y, robot_to_cam_offsets.rot_z);
-            let rotation = nalgebra::UnitQuaternion::from_quaternion(rotation);
-            let robot_to_cam = Iso3::from_parts(translation, rotation);
+            //let robot_to_cam_offsets: RobotToCamOffset = serde_json::from_str(&robot_to_cam_str).unwrap();
+            //let translation = nalgebra::Translation3::new(robot_to_cam_offsets.trans_x, robot_to_cam_offsets.trans_y, robot_to_cam_offsets.trans_z);
+            //let rotation =
+            //    nalgebra::Quaternion::new(robot_to_cam_offsets.rot_w, robot_to_cam_offsets.rot_x, robot_to_cam_offsets.rot_y, robot_to_cam_offsets.rot_z);
+            //let rotation = nalgebra::UnitQuaternion::from_quaternion(rotation);
+            //let robot_to_cam = Iso3::from_parts(translation, rotation);
 
             let cam_model: GenericModel<f64> = serde_json::from_str(&calib).unwrap();
 
@@ -263,7 +263,7 @@ impl CuSinkTask for AprilTags {
                 comm,
                 cam_model,
                 last_time: None,
-                robot_to_cam: Some(robot_to_cam),
+                //robot_to_cam: Some(robot_to_cam),
             });
         }
         Ok(Self {
@@ -277,7 +277,7 @@ impl CuSinkTask for AprilTags {
             comm,
             cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
             last_time: None,
-            robot_to_cam: None,
+            //robot_to_cam: None,
         })
     }
 
