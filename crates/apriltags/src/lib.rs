@@ -319,13 +319,15 @@ impl CuSinkTask for AprilTags {
                     }
                 }
 
-                if let Some((cam_to_world_rotation, cam_to_world_translation, std_dev)) = self.solver.solve_robot_pose(
-                    &world_pts,
-                    &camera_pts,
-                    self.comm.gyro_angle().unwrap_or(0.0),
-                    SIGN_FLIP_CONST,
-                    &mut sqpnp_buffer,
-                ) {
+                if let Some((cam_to_world_rotation, cam_to_world_translation, std_dev)) =
+                    self.solver.solve_robot_pose(
+                        &world_pts,
+                        &camera_pts,
+                        self.comm.gyro_angle().unwrap_or(0.0),
+                        SIGN_FLIP_CONST,
+                        &mut sqpnp_buffer,
+                    )
+                {
                     let pose = RobotPose {
                         x: cam_to_world_translation[0],
                         y: cam_to_world_translation[1],

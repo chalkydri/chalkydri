@@ -199,7 +199,8 @@ impl Configurator {
                 .items(&self.cameras)
                 .item("Save configuration")
                 .default(0)
-                .interact().ok() 
+                .interact()
+                .ok()
             {
                 if cam_id == self.cameras.len() {
                     self.save();
@@ -274,112 +275,132 @@ impl Configurator {
     //    let model = calibrator.calibrate();
     //}
 
-
     /*
-    pub fn build_cam_calib_view(&mut self) -> bool {
-        let dev_id = self.current_cam.clone().unwrap();
-        let cam = self.camera_configs.get_mut(&dev_id).unwrap();
-        let width = cam.width.unwrap();
-        let height = cam.height.unwrap();
-        let cam = Select::new()
-                .with_prompt("Select a camera to configure")
-                .items(&self.cameras)
-                .item("Save configuration")
-                .default(0)
-                .interact().ok(); 
+        pub fn build_cam_calib_view(&mut self) -> bool {
+            let dev_id = self.current_cam.clone().unwrap();
+            let cam = self.camera_configs.get_mut(&dev_id).unwrap();
+            let width = cam.width.unwrap();
+            let height = cam.height.unwrap();
+            let cam = Select::new()
+                    .with_prompt("Select a camera to configure")
+                    .items(&self.cameras)
+                    .item("Save configuration")
+                    .default(0)
+                    .interact().ok();
 
 
-        // Initialize on first call
-        if self.calibrator.is_none() {
-            let calibrator = Calibrator::new();
+            // Initialize on first call
+            if self.calibrator.is_none() {
+                let calibrator = Calibrator::new();
 
-            let pathbuf = PathBuf::from_str("chalkydri.copper").unwrap();
-            let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
+                let pathbuf = PathBuf::from_str("chalkydri.copper").unwrap();
+                let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
 
-            let mut config: CuConfig = read_configuration_str(
-                include_str!("../../../config/calibration.ron").to_owned(),
-                None,
-            )
-            .unwrap();
-
-            let g = config.get_graph_mut(None).unwrap();
-
-            let cam_node = g
-                .get_node_mut(g.get_node_id_by_name("camera").unwrap())
-                .unwrap();
-            cam_node.set_param("id", dev_id.to_owned());
-            cam_node.set_param("width", width);
-            cam_node.set_param("height", height);
-
-            let gst_to_cu = g
-                .get_node_mut(g.get_node_id_by_name("gst_to_cu").unwrap())
-                .unwrap();
-            gst_to_cu.set_param("width", width);
-            gst_to_cu.set_param("height", height);
-
-            let calib_node = g
-                .get_node_mut(g.get_node_id_by_name("calibrator").unwrap())
-                .unwrap();
-            calib_node.set_param("width", width);
-            calib_node.set_param("height", height);
-
-            let mut app = AppBuilder::new()
-                .with_context(&copper_ctx)
-                .with_config(config)
-                .build()
+                let mut config: CuConfig = read_configuration_str(
+                    include_str!("../../../config/calibration.ron").to_owned(),
+                    None,
+                )
                 .unwrap();
 
-            app.start_all_tasks().unwrap();
-            println!("   > running calibration...");
+                let g = config.get_graph_mut(None).unwrap();
 
-            self.calibrator = Some(calibrator);
-            self.calib_frames = 0;
-        }
+                let cam_node = g
+                    .get_node_mut(g.get_node_id_by_name("camera").unwrap())
+                    .unwrap();
+                cam_node.set_param("id", dev_id.to_owned());
+                cam_node.set_param("width", width);
+                cam_node.set_param("height", height);
 
-        // Render progress
-        let progress = Paragraph::new(format!("{}/200", self.calib_frames)).centered();
-        let block = Block::bordered().title("Calibrating...");
-        frame.render_widget(progress.block(block), area);
+                let gst_to_cu = g
+                    .get_node_mut(g.get_node_id_by_name("gst_to_cu").unwrap())
+                    .unwrap();
+                gst_to_cu.set_param("width", width);
+                gst_to_cu.set_param("height", height);
 
-        // Run one iteration and process frame
-        std::thread::sleep(Duration::from_millis(10));
-        println!("Processing...");
-        self.calib_frames = self.calibrator.as_mut().unwrap().process();
+                let calib_node = g
+                    .get_node_mut(g.get_node_id_by_name("calibrator").unwrap())
+                    .unwrap();
+                calib_node.set_param("width", width);
+                calib_node.set_param("height", height);
 
-        // Check if done
-        if self.calib_frames >= 200 {
-            let model = self.calibrator.as_mut().unwrap().calibrate();
+                let mut app = AppBuilder::new()
+                    .with_context(&copper_ctx)
+                    .with_config(config)
+                    .build()
+                    .unwrap();
 
-            if let Some(model) = model {
-                if let Some(cam) = self.camera_configs.get_mut(&dev_id) {
-                    cam.calib = Some(CalibratedModel::from_str(
-                        serde_json::to_string(&model).unwrap(),
-                    ));
-                }
+                app.start_all_tasks().unwrap();
+                println!("   > running calibration...");
+
+                self.calibrator = Some(calibrator);
+                self.calib_frames = 0;
             }
 
-            // Cleanup
-            self.calibrator = None;
-            self.calib_frames = 0;
+            // Render progress
+            let progress = Paragraph::new(format!("{}/200", self.calib_frames)).centered();
+            let block = Block::bordered().title("Calibrating...");
+            frame.render_widget(progress.block(block), area);
 
-            return true;
+            // Run one iteration and process frame
+            std::thread::sleep(Duration::from_millis(10));
+            println!("Processing...");
+            self.calib_frames = self.calibrator.as_mut().unwrap().process();
+
+            // Check if done
+            if self.calib_frames >= 200 {
+                let model = self.calibrator.as_mut().unwrap().calibrate();
+
+                if let Some(model) = model {
+                    if let Some(cam) = self.camera_configs.get_mut(&dev_id) {
+                        cam.calib = Some(CalibratedModel::from_str(
+                            serde_json::to_string(&model).unwrap(),
+                        ));
+                    }
+                }
+
+                // Cleanup
+                self.calibrator = None;
+                self.calib_frames = 0;
+
+                return true;
+            }
+
+            false
         }
-
-        false
-    }
-*/
+    */
 
     pub fn configure_cam_offsets(&mut self, camera_index: usize) -> Result<()> {
         let dev_id = self.cameras.get(camera_index).unwrap();
 
         println!("Camera offsets");
-        let trans_x: String = dialoguer::Input::new().with_prompt(" |- Translation X").interact_text().unwrap();
-        let trans_y: String = dialoguer::Input::new().with_prompt(" |- Translation Y").interact_text().unwrap();
-        let trans_z: String = dialoguer::Input::new().with_prompt(" |- Translation Z").interact_text().unwrap();
-        let rot_w: String = dialoguer::Input::new().with_prompt(" |- Rotation W").interact_text().unwrap();
-        let rot_x: String = dialoguer::Input::new().with_prompt(" |- Rotation X").interact_text().unwrap();
-        let rot_y: String = dialoguer::Input::new().with_prompt(" |- Rotation Y").interact_text().unwrap();
-        let rot_z: String = dialoguer::Input::new().with_prompt(" '- Rotation Z").interact_text().unwrap();
+        let trans_x: String = dialoguer::Input::new()
+            .with_prompt(" |- Translation X")
+            .interact_text()
+            .unwrap();
+        let trans_y: String = dialoguer::Input::new()
+            .with_prompt(" |- Translation Y")
+            .interact_text()
+            .unwrap();
+        let trans_z: String = dialoguer::Input::new()
+            .with_prompt(" |- Translation Z")
+            .interact_text()
+            .unwrap();
+        let rot_w: String = dialoguer::Input::new()
+            .with_prompt(" |- Rotation W")
+            .interact_text()
+            .unwrap();
+        let rot_x: String = dialoguer::Input::new()
+            .with_prompt(" |- Rotation X")
+            .interact_text()
+            .unwrap();
+        let rot_y: String = dialoguer::Input::new()
+            .with_prompt(" |- Rotation Y")
+            .interact_text()
+            .unwrap();
+        let rot_z: String = dialoguer::Input::new()
+            .with_prompt(" '- Rotation Z")
+            .interact_text()
+            .unwrap();
 
         let offsets = RobotToCamOffset {
             trans_x: trans_x.parse()?,
@@ -413,34 +434,34 @@ impl Configurator {
         let _ = input.set_state(gstreamer::State::Null);
 
         let cap_index = Select::new()
-            .items(
-            caps.iter()
-                .filter_map(|structure| {
-                    let structure_name = structure.name();
+            .items(caps.iter().filter_map(|structure| {
+                let structure_name = structure.name();
 
-                    // Determine pixel format (handle both raw video and compressed formats)
-                    let pixel_format = match structure_name.as_str() {
-                        "image/jpeg" => "MJPEG".to_string(),
-                        "video/x-h264" => "H264".to_string(),
-                        "video/x-raw" => structure
-                            .get::<String>("format")
-                            .unwrap_or_else(|_| "RAW".to_string()),
-                        // Skip audio or other non-video streams
-                        _ => {
-                            return None;
-                        }
-                    };
-
-                    // Extract resolution (skip if reported as ranges rather than fixed values)
-                    if let Some(width) = structure.get::<i32>("width").ok() {
-                        if let Some(height) = structure.get::<i32>("height").ok() {
-                            return Some(format!("{width}x{height} {pixel_format}"));
-                        }
+                // Determine pixel format (handle both raw video and compressed formats)
+                let pixel_format = match structure_name.as_str() {
+                    "image/jpeg" => "MJPEG".to_string(),
+                    "video/x-h264" => "H264".to_string(),
+                    "video/x-raw" => structure
+                        .get::<String>("format")
+                        .unwrap_or_else(|_| "RAW".to_string()),
+                    // Skip audio or other non-video streams
+                    _ => {
+                        return None;
                     }
+                };
 
-                    None
-                })
-        ).default(0).interact().unwrap();
+                // Extract resolution (skip if reported as ranges rather than fixed values)
+                if let Some(width) = structure.get::<i32>("width").ok() {
+                    if let Some(height) = structure.get::<i32>("height").ok() {
+                        return Some(format!("{width}x{height} {pixel_format}"));
+                    }
+                }
+
+                None
+            }))
+            .default(0)
+            .interact()
+            .unwrap();
 
         let structure = caps.get(cap_index).unwrap().clone();
         let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
@@ -525,95 +546,93 @@ fn main() -> Result<()> {
 
             config.configure_cameras();
         }
-        Command::Calibrate(CmdCalibrate { cam_id: dev_id }) => {
-        }
+        Command::Calibrate(CmdCalibrate { cam_id: dev_id }) => {}
     }
-/*
-            for (keycode, description) in [
-                ("c", "Calibrate camera"),
-                ("Up/Down", "Select camera"),
-                ("Enter", "Configure camera"),
-                ("q", "Quit"),
-            ] {
-                keybind_text.push_span(Span::raw(keycode).bold());
-                keybind_text.push_span([" ", description, "   "].concat());
-            }
+    /*
+                for (keycode, description) in [
+                    ("c", "Calibrate camera"),
+                    ("Up/Down", "Select camera"),
+                    ("Enter", "Configure camera"),
+                    ("q", "Quit"),
+                ] {
+                    keybind_text.push_span(Span::raw(keycode).bold());
+                    keybind_text.push_span([" ", description, "   "].concat());
+                }
 
-            let keybind_text = Paragraph::new(keybind_text).block(keybind_block);
+                let keybind_text = Paragraph::new(keybind_text).block(keybind_block);
 
-            match view {
-                View::Home => {
-                    let camera_list = config.build_cam_list().block(main_block);
-                    fr.render_widget(camera_list, main);
-                }
-                View::Config => {
-                    let config_list = config.build_cam_config_list().block(main_block);
-                    fr.render_widget(config_list, main);
-                }
-                View::Caps => {
-                    let caps_list = config.build_cam_cap_list(current_cam).block(main_block);
-                    fr.render_widget(caps_list, main);
-                }
-                View::Calibrator => {
-                    let done = config.build_cam_calib_view(fr, main);
-                    if done {
-                        view = View::Config;
-                    }
-                }
-            }
-            fr.render_widget(keybind_text, keybinds);
-        })?;
-
-        if let Some(key) = event::read()?.as_key_press_event() {
-            match key.code {
-                KeyCode::Char('q') => {
-                    break 'main_frame_loop;
-                }
-                KeyCode::Char('c') => {
-                    let cam_id = config.cameras.get(current_cam).unwrap();
-                    config.current_cam = Some(cam_id.clone());
-                    view = View::Calibrator;
-                }
-                KeyCode::Up => {
-                    config.list_index = config.list_index.saturating_sub(1);
-                    config.clamp_list_index();
-                }
-                KeyCode::Down => {
-                    config.list_index += 1;
-                    config.clamp_list_index();
-                }
-                KeyCode::Enter => match view {
+                match view {
                     View::Home => {
-                        current_cam = config.list_index;
-                        config.list_index = 0;
-                        config.list_len = CAM_CONFIG_OPTS.len();
-                        view = View::Config;
+                        let camera_list = config.build_cam_list().block(main_block);
+                        fr.render_widget(camera_list, main);
                     }
                     View::Config => {
-                        view = CAM_CONFIG_OPTS[config.list_index].1;
-                        config.list_index = 0;
+                        let config_list = config.build_cam_config_list().block(main_block);
+                        fr.render_widget(config_list, main);
                     }
-                    View::Calibrator => {}
                     View::Caps => {
-                        let cam_id = config.cameras.get(current_cam).unwrap();
-                        if let Some(ref caps) = config.caps {
-                            let cap = caps.get(config.list_index).unwrap();
-                            if let Some(cam) = config.camera_configs.get_mut(cam_id) {
-                                cam.width = Some(cap.get::<i32>("width").unwrap() as u32);
-                                cam.height = Some(cap.get::<i32>("height").unwrap() as u32);
-                            }
-                        }
-                        config.list_index = 0;
-                        config.caps = None;
-                        view = View::Config;
+                        let caps_list = config.build_cam_cap_list(current_cam).block(main_block);
+                        fr.render_widget(caps_list, main);
                     }
-                },
-                _ => {}
+                    View::Calibrator => {
+                        let done = config.build_cam_calib_view(fr, main);
+                        if done {
+                            view = View::Config;
+                        }
+                    }
+                }
+                fr.render_widget(keybind_text, keybinds);
+            })?;
+
+            if let Some(key) = event::read()?.as_key_press_event() {
+                match key.code {
+                    KeyCode::Char('q') => {
+                        break 'main_frame_loop;
+                    }
+                    KeyCode::Char('c') => {
+                        let cam_id = config.cameras.get(current_cam).unwrap();
+                        config.current_cam = Some(cam_id.clone());
+                        view = View::Calibrator;
+                    }
+                    KeyCode::Up => {
+                        config.list_index = config.list_index.saturating_sub(1);
+                        config.clamp_list_index();
+                    }
+                    KeyCode::Down => {
+                        config.list_index += 1;
+                        config.clamp_list_index();
+                    }
+                    KeyCode::Enter => match view {
+                        View::Home => {
+                            current_cam = config.list_index;
+                            config.list_index = 0;
+                            config.list_len = CAM_CONFIG_OPTS.len();
+                            view = View::Config;
+                        }
+                        View::Config => {
+                            view = CAM_CONFIG_OPTS[config.list_index].1;
+                            config.list_index = 0;
+                        }
+                        View::Calibrator => {}
+                        View::Caps => {
+                            let cam_id = config.cameras.get(current_cam).unwrap();
+                            if let Some(ref caps) = config.caps {
+                                let cap = caps.get(config.list_index).unwrap();
+                                if let Some(cam) = config.camera_configs.get_mut(cam_id) {
+                                    cam.width = Some(cap.get::<i32>("width").unwrap() as u32);
+                                    cam.height = Some(cap.get::<i32>("height").unwrap() as u32);
+                                }
+                            }
+                            config.list_index = 0;
+                            config.caps = None;
+                            view = View::Config;
+                        }
+                    },
+                    _ => {}
+                }
             }
         }
-    }
-*/
+    */
 
     Ok(())
 }
-
