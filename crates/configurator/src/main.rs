@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
 use chalkydri::cameras::GstToCuImage;
 use chalkydri::cameras::pipeline::CamPipeline;
-use chalkydri::cameras::providers::{CamProvider, PROVIDER, V4l2Provider};
+use chalkydri::cameras::providers::{CamProvider, PROVIDER};
 use chalkydri_apriltags::RobotToCamOffset;
 use clap::Parser;
 use cu29::config::{CuConfig, Node};
@@ -15,7 +15,9 @@ use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use dialoguer::Select;
 use gstreamer::prelude::{DeviceExt, ElementExt, PadExt};
-use gstreamer::{State, Structure};
+use gstreamer::State;
+use color_eyre::Result;
+use indicatif::ProgressBar;
 
 mod calibration;
 use calibration::*;
@@ -47,12 +49,10 @@ pub struct Configurator {
     c: CuConfig,
     cameras: Vec<String>,
     camera_configs: HashMap<String, CamSettings>,
-    current_cam: Option<String>,
 }
 impl Configurator {
     pub fn new() -> Self {
         let config: ConfiguratorConfig = {
-            let mut buf = String::new();
             if let Some(mut f) = File::open("configurator.json").ok() {
                 Some(serde_json::from_reader(&mut f).unwrap())
             } else {
@@ -83,24 +83,22 @@ impl Configurator {
             c,
             camera_configs: config.cameras,
             cameras,
-            current_cam: None,
         }
     }
 
+    /// Find the cameras initially
     pub fn find_cameras(&mut self) {
         PROVIDER.lock().start();
         std::thread::sleep(Duration::from_secs(2));
+        self.refresh_cameras();
     }
 
+    /// Save the Copper configuration
     pub fn save_cuconfig(&mut self) {
         for (dev_id, curr_cam) in self.camera_configs.iter() {
             let width = curr_cam.width.unwrap();
             let height = curr_cam.height.unwrap();
 
-            //{
-            //    let _ = self.c.graphs.add_mission(dev_id).unwrap();
-            //}
-            //let g = self.c.get_graph_mut(Some(dev_id)).unwrap();
             let g = self.c.get_graph_mut(None).unwrap();
 
             // The camera itself
@@ -182,7 +180,10 @@ impl Configurator {
         }
     }
 
-    pub fn refresh_cameras(&mut self) {
+    /// Refresh the camera list
+    ///
+    /// [`Self::find_cameras`] MUST be called before this method.
+    fn refresh_cameras(&mut self) {
         self.camera_configs.clear();
         self.cameras.clear();
 
@@ -193,6 +194,7 @@ impl Configurator {
         }
     }
 
+    /// Run the entire camera configuration procedure
     pub fn configure_cameras(mut self) -> bool {
         loop {
             if let Some(cam_id) = Select::new()
@@ -215,70 +217,12 @@ impl Configurator {
         }
     }
 
-    //pub fn build_cam_calib_view(&mut self, frame: &mut Frame, area: Rect) {
-    //    let mut calibrator = Calibrator::new();
-    //    let dev_id = self.current_cam.clone().unwrap();
-    //    let cam = self.camera_configs.get_mut(&dev_id).unwrap();
-
-    //    let width = cam.width.unwrap();
-    //    let height = cam.height.unwrap();
-
-    //    let pathbuf = PathBuf::from_str("chalkydri.copper".into()).unwrap();
-    //    let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
-
-    //    let mut config: CuConfig = read_configuration_str(
-    //        include_str!("../../../config/calibration.ron").to_owned(),
-    //        None,
-    //    )
-    //    .unwrap();
-
-    //    let g = config.get_graph_mut(None).unwrap();
-
-    //    let cam = g
-    //        .get_node_mut(g.get_node_id_by_name("camera").unwrap())
-    //        .unwrap();
-    //    cam.set_param("id", dev_id.to_owned());
-    //    cam.set_param("width", width);
-    //    cam.set_param("height", height);
-
-    //    let gst_to_cu = g
-    //        .get_node_mut(g.get_node_id_by_name("gst_to_cu").unwrap())
-    //        .unwrap();
-    //    gst_to_cu.set_param("width", width);
-    //    gst_to_cu.set_param("height", height);
-
-    //    let calib = g
-    //        .get_node_mut(g.get_node_id_by_name("calibrator").unwrap())
-    //        .unwrap();
-    //    calib.set_param("width", width);
-    //    calib.set_param("height", height);
-    //    let mut app = AppBuilder::new()
-    //        .with_context(&copper_ctx)
-    //        .with_config(config)
-    //        .build()
-    //        .unwrap();
-
-    //    app.start_all_tasks().unwrap();
-    //    println!("   > running calibration...");
-
-    //    let mut frames = 0usize;
-    //    while frames < 200 {
-    //        let block = Block::new();
-    //        let progress = Paragraph::new(format!("{frames}/200"));
-    //        frame.render_widget(progress, area);
-    //        app.run_one_iteration().unwrap();
-    //        frames = calibrator.process();
-    //    }
-
-    //    app.stop_all_tasks().unwrap();
-
-    //    let screen = loader_screen(frame, "Calibrating...");
-
-    //    let model = calibrator.calibrate();
-    //}
-
-    pub fn build_cam_calib_view(&mut self, calibration_frames: u64) -> bool {
+    /// Run the camera calibration procedure
+    ///
+    /// This MUST be run separately from [`Self::configure_cameras`] due to some GStreamer BS.
+    pub fn configure_cam_calib(&mut self, calibration_frames: u64) -> bool {
         let cam_id = Select::new()
+            .with_prompt("Select a camera to calibrate")
             .items(self.camera_configs.keys())
             .default(0)
             .interact()
@@ -466,15 +410,6 @@ impl Configurator {
 
     /// Save the configuration to disk
     pub fn save(self) {
-        //self.c.validate_logging_config().unwrap();
-        //let serialized_config = self.c.serialize_ron();
-        //let mut f = OpenOptions::new()
-        //    .create(true)
-        //    .write(true)
-        //    .truncate(true)
-        //    .open("chalkydri.ron")
-        //    .unwrap();
-        //f.write_all(serialized_config.unwrap().as_bytes()).unwrap();
         let config = ConfiguratorConfig {
             cameras: self.camera_configs,
         };
@@ -489,18 +424,7 @@ impl Configurator {
     }
 }
 
-use color_eyre::Result;
-use indicatif::ProgressBar;
-use serde::Deserialize;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum View {
-    Home,
-    Config,
-    Caps,
-    Calibrator,
-}
-
+/// Chalkydri configurator
 #[derive(clap::Parser)]
 #[command(version, about, long_about = None)]
 pub enum Command {
@@ -541,96 +465,11 @@ fn main() -> Result<()> {
             config.configure_cameras();
         }
         Command::Calibrate(CmdCalibrate { calibration_frames }) => {
-            config.build_cam_calib_view(calibration_frames);
+            config.configure_cam_calib(calibration_frames);
             config.save_cuconfig();
             config.save();
         }
     }
-    /*
-                for (keycode, description) in [
-                    ("c", "Calibrate camera"),
-                    ("Up/Down", "Select camera"),
-                    ("Enter", "Configure camera"),
-                    ("q", "Quit"),
-                ] {
-                    keybind_text.push_span(Span::raw(keycode).bold());
-                    keybind_text.push_span([" ", description, "   "].concat());
-                }
-
-                let keybind_text = Paragraph::new(keybind_text).block(keybind_block);
-
-                match view {
-                    View::Home => {
-                        let camera_list = config.build_cam_list().block(main_block);
-                        fr.render_widget(camera_list, main);
-                    }
-                    View::Config => {
-                        let config_list = config.build_cam_config_list().block(main_block);
-                        fr.render_widget(config_list, main);
-                    }
-                    View::Caps => {
-                        let caps_list = config.build_cam_cap_list(current_cam).block(main_block);
-                        fr.render_widget(caps_list, main);
-                    }
-                    View::Calibrator => {
-                        let done = config.build_cam_calib_view(fr, main);
-                        if done {
-                            view = View::Config;
-                        }
-                    }
-                }
-                fr.render_widget(keybind_text, keybinds);
-            })?;
-
-            if let Some(key) = event::read()?.as_key_press_event() {
-                match key.code {
-                    KeyCode::Char('q') => {
-                        break 'main_frame_loop;
-                    }
-                    KeyCode::Char('c') => {
-                        let cam_id = config.cameras.get(current_cam).unwrap();
-                        config.current_cam = Some(cam_id.clone());
-                        view = View::Calibrator;
-                    }
-                    KeyCode::Up => {
-                        config.list_index = config.list_index.saturating_sub(1);
-                        config.clamp_list_index();
-                    }
-                    KeyCode::Down => {
-                        config.list_index += 1;
-                        config.clamp_list_index();
-                    }
-                    KeyCode::Enter => match view {
-                        View::Home => {
-                            current_cam = config.list_index;
-                            config.list_index = 0;
-                            config.list_len = CAM_CONFIG_OPTS.len();
-                            view = View::Config;
-                        }
-                        View::Config => {
-                            view = CAM_CONFIG_OPTS[config.list_index].1;
-                            config.list_index = 0;
-                        }
-                        View::Calibrator => {}
-                        View::Caps => {
-                            let cam_id = config.cameras.get(current_cam).unwrap();
-                            if let Some(ref caps) = config.caps {
-                                let cap = caps.get(config.list_index).unwrap();
-                                if let Some(cam) = config.camera_configs.get_mut(cam_id) {
-                                    cam.width = Some(cap.get::<i32>("width").unwrap() as u32);
-                                    cam.height = Some(cap.get::<i32>("height").unwrap() as u32);
-                                }
-                            }
-                            config.list_index = 0;
-                            config.caps = None;
-                            view = View::Config;
-                        }
-                    },
-                    _ => {}
-                }
-            }
-        }
-    */
 
     Ok(())
 }
