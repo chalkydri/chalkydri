@@ -277,92 +277,92 @@ impl Configurator {
     //    let model = calibrator.calibrate();
     //}
 
-        pub fn build_cam_calib_view(&mut self, calibration_frames: u64) -> bool {
-            let cam_id = Select::new()
-                .items(self.camera_configs.keys())
-                .default(0)
-                .interact()
-                .unwrap();
-            let dev_id = self.cameras.get(cam_id).unwrap();
-            let cam = self.camera_configs.get_mut(dev_id).unwrap();
-            let width = cam.width.unwrap();
-            let height = cam.height.unwrap();
+    pub fn build_cam_calib_view(&mut self, calibration_frames: u64) -> bool {
+        let cam_id = Select::new()
+            .items(self.camera_configs.keys())
+            .default(0)
+            .interact()
+            .unwrap();
+        let dev_id = self.cameras.get(cam_id).unwrap();
+        let cam = self.camera_configs.get_mut(dev_id).unwrap();
+        let width = cam.width.unwrap();
+        let height = cam.height.unwrap();
 
-            // Initialize on first call
-                let mut calibrator = Calibrator::new();
+        // Initialize on first call
+        let mut calibrator = Calibrator::new();
 
-                let pathbuf = PathBuf::from_str("config/calibration.ron").unwrap();
-                let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
+        let pathbuf = PathBuf::from_str("config/calibration.ron").unwrap();
+        let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
 
-                let mut config: CuConfig = read_configuration_str(
-                    include_str!("../../../config/calibration.ron").to_owned(),
-                    None,
-                )
-                .unwrap();
+        let mut config: CuConfig = read_configuration_str(
+            include_str!("../../../config/calibration.ron").to_owned(),
+            None,
+        )
+        .unwrap();
 
-                let g = config.get_graph_mut(None).unwrap();
+        let g = config.get_graph_mut(None).unwrap();
 
-                let cam_node = g
-                    .get_node_mut(g.get_node_id_by_name("camera").unwrap())
-                    .unwrap();
-                cam_node.set_param("id", dev_id.to_owned());
-                cam_node.set_param("width", width);
-                cam_node.set_param("height", height);
+        let cam_node = g
+            .get_node_mut(g.get_node_id_by_name("camera").unwrap())
+            .unwrap();
+        cam_node.set_param("id", dev_id.to_owned());
+        cam_node.set_param("width", width);
+        cam_node.set_param("height", height);
 
-                let gst_to_cu = g
-                    .get_node_mut(g.get_node_id_by_name("gst_to_cu").unwrap())
-                    .unwrap();
-                gst_to_cu.set_param("width", width);
-                gst_to_cu.set_param("height", height);
+        let gst_to_cu = g
+            .get_node_mut(g.get_node_id_by_name("gst_to_cu").unwrap())
+            .unwrap();
+        gst_to_cu.set_param("width", width);
+        gst_to_cu.set_param("height", height);
 
-                let calib_node = g
-                    .get_node_mut(g.get_node_id_by_name("calibrator").unwrap())
-                    .unwrap();
-                calib_node.set_param("width", width);
-                calib_node.set_param("height", height);
+        let calib_node = g
+            .get_node_mut(g.get_node_id_by_name("calibrator").unwrap())
+            .unwrap();
+        calib_node.set_param("width", width);
+        calib_node.set_param("height", height);
 
-                let mut app = AppBuilder::new()
-                    .with_context(&copper_ctx)
-                    .with_config(config)
-                    .build()
-                    .unwrap();
+        let mut app = AppBuilder::new()
+            .with_context(&copper_ctx)
+            .with_config(config)
+            .build()
+            .unwrap();
 
-                app.start_all_tasks().unwrap();
-                println!("   > running calibration...");
+        app.start_all_tasks().unwrap();
+        println!("   > running calibration...");
 
-            let progress = ProgressBar::new(calibration_frames);
-            // Run until done
-            while progress.position() < calibration_frames {
-                progress.set_position(calibrator.process() as u64);
-                app.run_one_iteration().unwrap();
-            }
-
-            let model = calibrator.calibrate();
-
-            if let Some(model) = model {
-                if let Some(cam) = self.camera_configs.get_mut(dev_id) {
-                    cam.calib = Some(CalibratedModel::from_str(
-                        serde_json::to_string(&model).unwrap(),
-                    ));
-                }
-            }
-
-            true
+        let progress = ProgressBar::new(calibration_frames);
+        // Run until done
+        while progress.position() < calibration_frames {
+            progress.set_position(calibrator.process() as u64);
+            app.run_one_iteration().unwrap();
         }
 
-        pub fn configure_cam_id(&mut self, camera_index: usize) -> Result<()> {
-            let dev_id = self.cameras.get(camera_index).unwrap();
+        let model = calibrator.calibrate();
 
-            let cam_id: String = dialoguer::Input::new()
-                .with_prompt("Cam ID")
-                .interact_text()
-                .unwrap();
+        if let Some(model) = model {
+            if let Some(cam) = self.camera_configs.get_mut(dev_id) {
+                cam.calib = Some(CalibratedModel::from_str(
+                    serde_json::to_string(&model).unwrap(),
+                ));
+            }
+        }
+
+        true
+    }
+
+    pub fn configure_cam_id(&mut self, camera_index: usize) -> Result<()> {
+        let dev_id = self.cameras.get(camera_index).unwrap();
+
+        let cam_id: String = dialoguer::Input::new()
+            .with_prompt("Cam ID")
+            .interact_text()
+            .unwrap();
 
         let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
         cam_config.cam_id = Some(cam_id.parse()?);
 
-            Ok(())
-        }
+        Ok(())
+    }
 
     pub fn configure_cam_offsets(&mut self, camera_index: usize) -> Result<()> {
         let dev_id = self.cameras.get(camera_index).unwrap();

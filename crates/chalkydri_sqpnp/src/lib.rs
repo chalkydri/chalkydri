@@ -254,10 +254,8 @@ impl SqPnP {
             return None;
         }
 
-        let centroid: Vec3 = self.buffer
-            .iter()
-            .fold(Vec3::zeros(), |acc, p| acc + p)
-            / self.buffer.len() as f64;
+        let centroid: Vec3 =
+            self.buffer.iter().fold(Vec3::zeros(), |acc, p| acc + p) / self.buffer.len() as f64;
         let points_3d_local: Vec<Vec3> = self.buffer.iter().map(|p| p - centroid).collect();
 
         let sys = build_linear_system(&points_3d_local, points_2d);
@@ -404,14 +402,12 @@ impl SqPnP {
 
         self.buffer.clear();
         isometry.iter().for_each(|iso: &Iso3| {
-            self.buffer.extend(CORNER_POINTS_MAT.iter().map(|c| iso * c));
+            self.buffer
+                .extend(CORNER_POINTS_MAT.iter().map(|c| iso * c));
         });
     }
 
-    fn solve_rotation_candidates(
-        &mut self,
-        omega: &Mat9,
-    ) {
+    fn solve_rotation_candidates(&mut self, omega: &Mat9) {
         self.candidates.clear();
         let eigen = omega.symmetric_eigen();
 
