@@ -1,17 +1,15 @@
 use chalkydri_core::prelude::{Mutex, RwLock};
 use cu_sensor_payloads::CuImage;
 use cu29::prelude::*;
-use std::sync::{LazyLock, OnceLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 use std::time::Duration;
 
 use image::{DynamicImage, GrayImage, Luma};
 
 use tokio::time::Instant;
 
-use crossbeam_channel::{Receiver, Sender, bounded};
-
-pub static CALIB: LazyLock<RwLock<Option<Receiver<(DynamicImage, Duration)>>>> =
-    LazyLock::new(|| RwLock::new(None));
+pub static CALIB: LazyLock<Arc<Mutex<Option<(DynamicImage, Duration)>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 /// A camera calibrator
 #[derive(Reflect)]
@@ -19,8 +17,6 @@ pub static CALIB: LazyLock<RwLock<Option<Receiver<(DynamicImage, Duration)>>>> =
 pub struct Calibrator {
     #[reflect(ignore)]
     start: Instant,
-    #[reflect(ignore)]
-    tx: Sender<(DynamicImage, Duration)>,
 }
 impl Freezable for Calibrator {}
 impl CuSinkTask for Calibrator {
@@ -31,13 +27,8 @@ impl CuSinkTask for Calibrator {
     where
         Self: Sized,
     {
-        let (tx, rx) = bounded(1);
-
-        *CALIB.write() = Some(rx);
-
         Ok(Self {
             start: Instant::now(),
-            tx,
         })
     }
 
@@ -58,7 +49,7 @@ impl CuSinkTask for Calibrator {
                 GrayImage::from_vec(buf.width(), buf.height(), buf.to_vec()).unwrap(),
             );
 
-            let _ = self.tx.try_send((img, ts));
+            *CALIB.lock() = Some((img, ts));
         }
 
         Ok(())

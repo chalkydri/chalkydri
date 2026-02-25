@@ -62,11 +62,9 @@ impl Calibrator {
     ///
     /// Returns `true` until enough frames have been processed to run calibration.
     pub fn process(&mut self) -> usize {
-        if let Some(img) = CALIB
-            .read()
-            .clone()
-            .map_or(None, |c| c.recv_timeout(Duration::from_millis(10)).ok())
-        {
+        let img = CALIB.lock().take();
+
+        if let Some(img) = img {
             if let Some(frame_feat) =
                 camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(
                     &self.det,
@@ -78,10 +76,7 @@ impl Calibrator {
             {
                 self.frame_feats.push(frame_feat);
             }
-        } else {
-            println!("did not get frame :(");
         }
-        std::thread::sleep(Duration::from_millis(10));
 
         self.frame_feats.len()
     }

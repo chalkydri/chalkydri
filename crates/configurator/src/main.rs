@@ -76,12 +76,13 @@ impl Configurator {
                 missions: None,
             });
         }
+        let cameras = config.cameras.keys().cloned().collect();
 
         Self {
             has_run: false,
             c,
             camera_configs: config.cameras,
-            cameras: Vec::new(),
+            cameras,
             current_cam: None,
         }
     }
@@ -207,6 +208,7 @@ impl Configurator {
                     return false;
                 }
 
+                self.configure_cam_id(cam_id).unwrap();
                 self.configure_cam_cap(cam_id);
                 self.configure_cam_offsets(cam_id).unwrap();
             }
@@ -275,25 +277,21 @@ impl Configurator {
     //    let model = calibrator.calibrate();
     //}
 
-    /*
-        pub fn build_cam_calib_view(&mut self) -> bool {
-            let dev_id = self.current_cam.clone().unwrap();
-            let cam = self.camera_configs.get_mut(&dev_id).unwrap();
+        pub fn build_cam_calib_view(&mut self, calibration_frames: u64) -> bool {
+            let cam_id = Select::new()
+                .items(self.camera_configs.keys())
+                .default(0)
+                .interact()
+                .unwrap();
+            let dev_id = self.cameras.get(cam_id).unwrap();
+            let cam = self.camera_configs.get_mut(dev_id).unwrap();
             let width = cam.width.unwrap();
             let height = cam.height.unwrap();
-            let cam = Select::new()
-                    .with_prompt("Select a camera to configure")
-                    .items(&self.cameras)
-                    .item("Save configuration")
-                    .default(0)
-                    .interact().ok();
-
 
             // Initialize on first call
-            if self.calibrator.is_none() {
-                let calibrator = Calibrator::new();
+                let mut calibrator = Calibrator::new();
 
-                let pathbuf = PathBuf::from_str("chalkydri.copper").unwrap();
+                let pathbuf = PathBuf::from_str("config/calibration.ron").unwrap();
                 let copper_ctx = basic_copper_setup(pathbuf.as_path(), None, true, None).unwrap();
 
                 let mut config: CuConfig = read_configuration_str(
@@ -332,42 +330,39 @@ impl Configurator {
                 app.start_all_tasks().unwrap();
                 println!("   > running calibration...");
 
-                self.calibrator = Some(calibrator);
-                self.calib_frames = 0;
+            let progress = ProgressBar::new(calibration_frames);
+            // Run until done
+            while progress.position() < calibration_frames {
+                progress.set_position(calibrator.process() as u64);
+                app.run_one_iteration().unwrap();
             }
 
-            // Render progress
-            let progress = Paragraph::new(format!("{}/200", self.calib_frames)).centered();
-            let block = Block::bordered().title("Calibrating...");
-            frame.render_widget(progress.block(block), area);
+            let model = calibrator.calibrate();
 
-            // Run one iteration and process frame
-            std::thread::sleep(Duration::from_millis(10));
-            println!("Processing...");
-            self.calib_frames = self.calibrator.as_mut().unwrap().process();
-
-            // Check if done
-            if self.calib_frames >= 200 {
-                let model = self.calibrator.as_mut().unwrap().calibrate();
-
-                if let Some(model) = model {
-                    if let Some(cam) = self.camera_configs.get_mut(&dev_id) {
-                        cam.calib = Some(CalibratedModel::from_str(
-                            serde_json::to_string(&model).unwrap(),
-                        ));
-                    }
+            if let Some(model) = model {
+                if let Some(cam) = self.camera_configs.get_mut(dev_id) {
+                    cam.calib = Some(CalibratedModel::from_str(
+                        serde_json::to_string(&model).unwrap(),
+                    ));
                 }
-
-                // Cleanup
-                self.calibrator = None;
-                self.calib_frames = 0;
-
-                return true;
             }
 
-            false
+            true
         }
-    */
+
+        pub fn configure_cam_id(&mut self, camera_index: usize) -> Result<()> {
+            let dev_id = self.cameras.get(camera_index).unwrap();
+
+            let cam_id: String = dialoguer::Input::new()
+                .with_prompt("Cam ID")
+                .interact_text()
+                .unwrap();
+
+        let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
+        cam_config.cam_id = Some(cam_id.parse()?);
+
+            Ok(())
+        }
 
     pub fn configure_cam_offsets(&mut self, camera_index: usize) -> Result<()> {
         let dev_id = self.cameras.get(camera_index).unwrap();
@@ -495,6 +490,7 @@ impl Configurator {
 }
 
 use color_eyre::Result;
+use indicatif::ProgressBar;
 use serde::Deserialize;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -509,7 +505,7 @@ enum View {
 #[command(version, about, long_about = None)]
 pub enum Command {
     Configure,
-    Calibrate(CmdCalibrate),
+    Calibrate,
 }
 
 #[derive(clap::Args)]
@@ -535,8 +531,6 @@ fn main() -> Result<()> {
     }
 
     let mut config = Configurator::new();
-    let mut current_cam = 0usize;
-    let mut view = View::Home;
 
     match cmd {
         Command::Configure => {
@@ -546,7 +540,11 @@ fn main() -> Result<()> {
 
             config.configure_cameras();
         }
-        Command::Calibrate(CmdCalibrate { cam_id: dev_id }) => {}
+        Command::Calibrate => {
+            config.build_cam_calib_view(200);
+            config.save_cuconfig();
+            config.save();
+        }
     }
     /*
                 for (keycode, description) in [
