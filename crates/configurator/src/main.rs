@@ -505,14 +505,14 @@ enum View {
 #[command(version, about, long_about = None)]
 pub enum Command {
     Configure,
-    Calibrate,
+    Calibrate(CmdCalibrate),
 }
 
 #[derive(clap::Args)]
 #[command(version, about, long_about = None)]
 pub struct CmdCalibrate {
     #[arg()]
-    pub cam_id: String,
+    pub calibration_frames: u64,
 }
 
 fn main() -> Result<()> {
@@ -540,8 +540,8 @@ fn main() -> Result<()> {
 
             config.configure_cameras();
         }
-        Command::Calibrate => {
-            config.build_cam_calib_view(200);
+        Command::Calibrate(CmdCalibrate { calibration_frames }) => {
+            config.build_cam_calib_view(calibration_frames);
             config.save_cuconfig();
             config.save();
         }
