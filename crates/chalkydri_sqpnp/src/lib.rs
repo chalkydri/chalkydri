@@ -44,11 +44,9 @@ fn nearest_so3(r_vec: &Vec9) -> Option<Vec9> {
                 u_prime.column_mut(2).scale_mut(-1.0);
                 rot = u_prime * vt;
             }
-
             return Some(Vec9::from_column_slice(rot.as_slice()));
         }
     }
-
     None
 }
 
@@ -182,6 +180,7 @@ pub struct SqPnP {
     gyro_cos: f64,
     gyro_sin: f64,
     sign_change_error: f64,
+    fwd_in_cam: Vec3,
 }
 
 impl Default for SqPnP {
@@ -191,7 +190,7 @@ impl Default for SqPnP {
 }
 
 impl SqPnP {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             max_iter: 15,
             tol_sq: 1e-16,
@@ -200,37 +199,34 @@ impl SqPnP {
             gyro_cos: 0.0,
             gyro_sin: 0.0,
             sign_change_error: 0.0,
+            fwd_in_cam: Vec3::new(0.0, 0.0, 1.0),
         }
     }
+
     pub const fn max_iter(mut self, max_iter: usize) -> Self {
         self.max_iter = max_iter;
         self
     }
+
     pub const fn tolerance(mut self, tol: f64) -> Self {
         self.tol_sq = tol * tol;
         self
     }
 
-    /// Computes WPILib-compatible standard deviations (x, y, theta) from pure geometry.
-    /// This never returns None, so it won't interrupt your existing working code.
     fn compute_std_devs(&self, pure_geometric_energy: f64, distance: f64, n_tags: usize) -> Vec3 {
         let n_points = (n_tags * 4) as f64;
-
         let rms_error = (pure_geometric_energy / n_points).sqrt();
 
-        // 1. Rejection threshold
         if rms_error > MAX_TRUSTABLE_RMS {
             return Vec3::new(f64::MAX, f64::MAX, f64::MAX);
         }
 
         let distance_multiplier = 1.0 + (distance / TAG_SIZE);
 
-        // 2. Apply XY error Scalar
         let base_xy_std = rms_error * distance_multiplier;
         let xy_std = (base_xy_std / (n_tags as f64).sqrt()) * XY_STD_DEV_SCALAR;
         let xy_std = xy_std.clamp(0.01, 10.0);
 
-        // 3. Apply Theta error Scalar
         let theta_std = {
             let base_theta_std = rms_error / TAG_SIZE;
             let val = (base_theta_std * distance_multiplier / (n_tags as f64).sqrt())
@@ -241,8 +237,6 @@ impl SqPnP {
         Vec3::new(xy_std, xy_std, theta_std)
     }
 
-    /// Solves for the standard Computer Vision pose (World -> Camera).
-    /// Returns (Rotation, Translation, Pure Geometric Energy)
     fn solve(
         &mut self,
         points_isometry: &[Isometry3<f64>],
@@ -282,7 +276,6 @@ impl SqPnP {
             if *penalized_energy < best_score {
                 best_score = *penalized_energy;
 
-                // Keep the pure geometric energy for std dev calculations
                 let pure_geometric_energy = r_vec.dot(&(sys.omega * r_vec));
 
                 let rot = Rot3::from_matrix(&r_mat);
@@ -293,18 +286,24 @@ impl SqPnP {
         best_result
     }
 
-    /// Solves for the Robot's Position in the World (Field Frame).
-    /// Returns (Robot Rotation, Robot Position, WPILib Std Devs)
     pub fn solve_robot_pose(
         &mut self,
         points_isometry: &[Isometry3<f64>],
         points_2d: &[Vec3],
+        robot_to_cam: &Isometry3<f64>,
         gyro: f64,
         sign_change_error: f64,
     ) -> Option<(Rot3, Vec3, Vec3)> {
         self.gyro_cos = gyro.cos();
         self.gyro_sin = gyro.sin();
         self.sign_change_error = sign_change_error;
+
+        self.fwd_in_cam = robot_to_cam
+            .rotation
+            .to_rotation_matrix()
+            .matrix()
+            .column(0)
+            .into_owned();
 
         let (rot_world_to_cam, trans_world_to_cam, pure_energy) =
             self.solve(points_isometry, points_2d)?;
@@ -314,39 +313,26 @@ impl SqPnP {
 
         let std_devs = self.compute_std_devs(pure_energy, distance, n_tags);
 
-        let cam_pos_world = rot_world_to_cam.inverse() * (-trans_world_to_cam);
+        let t_cw = Isometry3::from_parts(
+            nalgebra::Translation3::from(trans_world_to_cam),
+            nalgebra::UnitQuaternion::from_rotation_matrix(&rot_world_to_cam),
+        );
 
-        let rot_world_to_cam_mat = rot_world_to_cam.matrix();
-        let cam_x_in_world = rot_world_to_cam_mat.row(0).transpose(); // Right
-        let cam_y_in_world = rot_world_to_cam_mat.row(1).transpose(); // Down
-        let cam_z_in_world = rot_world_to_cam_mat.row(2).transpose(); // Forward
+        let t_world_robot = t_cw.inverse() * *robot_to_cam;
 
-        let robot_x = cam_z_in_world;
-        let robot_y = -cam_x_in_world;
-        let robot_z = -cam_y_in_world;
+        let robot_pos = t_world_robot.translation.vector;
+        let robot_rot = t_world_robot.rotation.to_rotation_matrix();
+        let robot_rot_mat = robot_rot.matrix();
 
-        let robot_rot_mat = Mat3::from_columns(&[robot_x, robot_y, robot_z]);
-        let robot_rot = Rotation3::from_matrix(&robot_rot_mat);
-
-        // ==========================================================
-        // === GRADIENT PIVOT IN WORLD-SPACE AROUND THE TAG(S)    ===
-        // ==========================================================
-
-        // 1. Find the centroid (center point) of the tags we are looking at
         let tag_centroid = points_isometry
             .iter()
             .fold(Vec3::zeros(), |acc, iso| acc + iso.translation.vector)
             / n_tags as f64;
 
-        // 2. Get the Vision's calculated Yaw
-        // (0, 0)
-        let vision_fwd_x = robot_rot_mat[0];
-        // (1, 0)
-        let vision_fwd_y = robot_rot_mat[1];
+        let vision_fwd_x = robot_rot_mat[(0, 0)];
+        let vision_fwd_y = robot_rot_mat[(1, 0)];
         let vision_yaw = vision_fwd_y.simd_atan2(vision_fwd_x);
 
-        // 3. Find the normalized difference between the Gyro and the Vision Yaw
-        //    (Normalization prevents full 360° wraps from causing false massive errors)
         let mut delta_yaw = (gyro - vision_yaw) % (2.0 * PI);
         if delta_yaw > PI {
             delta_yaw -= 2.0 * PI;
@@ -356,37 +342,22 @@ impl SqPnP {
         }
 
         let delta_deg = delta_yaw.abs().to_degrees();
-
-        // 4. Calculate Gradient Weight (0.0 = 100% Vision, 1.0 = 100% Gyro)
         let mut weight = (delta_deg / MAX_GYRO_DELTA).clamp(0.0, 1.0);
-
-        // Smoothstep function makes the transition an "S" curve, avoiding sudden jumps.
-        // Tiny errors barely pivot. Large errors ramp up into a full pivot.
         weight = weight * weight * (3.0 - 2.0 * weight);
 
-        // Calculate the actual angle we are going to pivot by
         let applied_delta_yaw = delta_yaw * weight;
 
-        // 5. Create a Z-axis rotation matrix for this blended difference
         let cos_dt = applied_delta_yaw.cos();
         let sin_dt = applied_delta_yaw.sin();
-        #[rustfmt::skip]
-        let rot_z = Mat3::new(
-            cos_dt, -sin_dt, 0.0,
-            sin_dt,  cos_dt, 0.0,
-               0.0,     0.0, 1.0,
-        );
+
+        let rot_z = Mat3::new(cos_dt, -sin_dt, 0.0, sin_dt, cos_dt, 0.0, 0.0, 0.0, 1.0);
         let rot_z_rot3 = Rotation3::from_matrix(&rot_z);
 
-        // 6. Pivot the camera's position around the tag centroid
-        let pos_relative_to_tag = cam_pos_world - tag_centroid;
-        let pivoted_cam_pos = tag_centroid + (rot_z * pos_relative_to_tag);
-
-        // 7. Rotate the robot's heading by the gradient amount
+        let pos_relative_to_tag = robot_pos - tag_centroid;
+        let pivoted_pos = tag_centroid + (rot_z * pos_relative_to_tag);
         let pivoted_robot_rot = rot_z_rot3 * robot_rot;
 
-        // Return the smoothly pivoted pose!
-        Some((pivoted_robot_rot, pivoted_cam_pos, std_devs))
+        Some((pivoted_robot_rot, pivoted_pos, std_devs))
     }
 
     fn corner_points_from_center(&mut self, isometry: &[Iso3]) -> () {
@@ -421,14 +392,16 @@ impl SqPnP {
                 if let Some(r_start) = nearest_so3(&guess) {
                     let (refined_r, mut energy) = self.optimization(r_start, omega);
 
-                    // (2, 0)
-                    let robot_fwd_x = refined_r[2];
-                    // (2, 1)
-                    let robot_fwd_y = refined_r[5];
+                    let d = &self.fwd_in_cam;
+
+                    let robot_fwd_x =
+                        refined_r[0] * d[0] + refined_r[1] * d[1] + refined_r[2] * d[2];
+                    let robot_fwd_y =
+                        refined_r[3] * d[0] + refined_r[4] * d[1] + refined_r[5] * d[2];
+
                     let dot = (robot_fwd_x * self.gyro_cos) + (robot_fwd_y * self.gyro_sin);
                     let angle_error = (1.0 - dot).max(0.0);
 
-                    // Add penalty to influence sorting ONLY
                     energy += self.sign_change_error * angle_error;
 
                     self.candidates.push((refined_r, energy));
