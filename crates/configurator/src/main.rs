@@ -10,13 +10,13 @@ use chalkydri::cameras::pipeline::CamPipeline;
 use chalkydri::cameras::providers::{CamProvider, PROVIDER};
 use chalkydri_apriltags::RobotToCamOffset;
 use clap::Parser;
+use color_eyre::Result;
 use cu29::config::{CuConfig, Node};
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use dialoguer::Select;
-use gstreamer::prelude::{DeviceExt, ElementExt, PadExt};
 use gstreamer::State;
-use color_eyre::Result;
+use gstreamer::prelude::{DeviceExt, ElementExt, PadExt};
 use indicatif::ProgressBar;
 
 mod calibration;
