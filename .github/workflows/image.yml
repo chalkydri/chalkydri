@@ -60,7 +60,7 @@ jobs:
           stage-list: stage0 stage1 ./build/custom-pi-stage
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pi5-build-${{ steps.build_info.outputs.branch }}-${{ steps.build_info.outputs.commit_sha }}
           path: pi5-build/
