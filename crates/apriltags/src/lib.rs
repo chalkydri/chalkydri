@@ -44,15 +44,7 @@ const MAX_DETECTIONS: usize = 16;
 
 // Defaults
 const TAG_SIZE: f64 = 0.14;
-const FX: f64 = 2600.0;
-const FY: f64 = 2600.0;
-const CX: f64 = 900.0;
-const CY: f64 = 520.0;
 const FAMILY: &str = "tag36h11";
-
-static ROBOT_TO_CAM: LazyLock<Iso3> = LazyLock::new(|| {
-    Iso3::new(Vec3::new(1.0, 0.0, 0.0), Vec3::z())
-});
 
 #[derive(Default, Debug, Clone, Encode)]
 pub struct AprilTagDetections {
@@ -186,11 +178,11 @@ pub struct AprilTags {
     cam_model: GenericModel<f64>,
     last_time: Option<u64>,
     cam_id: u8,
-    //#[reflect(ignore)]
-    //robot_to_cam: Option<Iso3>,
+    #[reflect(ignore)]
+    robot_to_cam: Option<Iso3>,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
 pub struct RobotToCamOffset {
     pub rot_w: f64,
     pub rot_x: f64,
@@ -235,9 +227,8 @@ impl CuSinkTask for AprilTags {
             let family_cfg: String = config.get("family").unwrap().unwrap_or(FAMILY.to_string());
             let family: Family = family_cfg.parse().unwrap();
             let bits_corrected: u32 = config.get("bits_corrected").unwrap().unwrap_or(3);
-            let tagsize = config.get("tag_size").unwrap().unwrap_or(TAG_SIZE);
             let cam_id: u8 = config.get("cam_id").unwrap().unwrap();
-            //let robot_to_cam_str: String = config.get("robot_to_cam").unwrap().unwrap();
+            let robot_to_cam_str: String = config.get("robot_to_cam").unwrap().unwrap();
             //let fx = config.get("fx").unwrap_or(FX);
             //let fy = config.get("fy").unwrap_or(FY);
             //let cx = config.get("cx").unwrap_or(CX);
@@ -245,12 +236,12 @@ impl CuSinkTask for AprilTags {
             //let field_layout_path = config.get("field_json_path");
             let calib = config.get::<String>("calib").unwrap().unwrap();
 
-            //let robot_to_cam_offsets: RobotToCamOffset = serde_json::from_str(&robot_to_cam_str).unwrap();
-            //let translation = nalgebra::Translation3::new(robot_to_cam_offsets.trans_x, robot_to_cam_offsets.trans_y, robot_to_cam_offsets.trans_z);
-            //let rotation =
-            //    nalgebra::Quaternion::new(robot_to_cam_offsets.rot_w, robot_to_cam_offsets.rot_x, robot_to_cam_offsets.rot_y, robot_to_cam_offsets.rot_z);
-            //let rotation = nalgebra::UnitQuaternion::from_quaternion(rotation);
-            //let robot_to_cam = Iso3::from_parts(translation, rotation);
+            let robot_to_cam_offsets: RobotToCamOffset = serde_json::from_str(&robot_to_cam_str).unwrap();
+            let translation = nalgebra::Translation3::new(robot_to_cam_offsets.trans_x, robot_to_cam_offsets.trans_y, robot_to_cam_offsets.trans_z);
+            let rotation =
+                nalgebra::Quaternion::new(robot_to_cam_offsets.rot_w, robot_to_cam_offsets.rot_x, robot_to_cam_offsets.rot_y, robot_to_cam_offsets.rot_z);
+            let rotation = nalgebra::UnitQuaternion::from_quaternion(rotation);
+            let robot_to_cam = Iso3::from_parts(translation, rotation);
 
             let cam_model: GenericModel<f64> = serde_json::from_str(&calib).unwrap();
 
@@ -269,7 +260,7 @@ impl CuSinkTask for AprilTags {
                 comm,
                 cam_model,
                 last_time: None,
-                //robot_to_cam: Some(robot_to_cam),
+                robot_to_cam: Some(robot_to_cam),
             });
         }
         Ok(Self {
@@ -283,7 +274,7 @@ impl CuSinkTask for AprilTags {
             comm,
             cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
             last_time: None,
-            //robot_to_cam: None,
+            robot_to_cam: None,
         })
     }
 
@@ -299,7 +290,6 @@ impl CuSinkTask for AprilTags {
             if detections.len() > 0 {
                 let mut camera_pts: Vec<Vec3> = Vec::new();
                 let mut world_pts: Vec<Iso3> = Vec::new();
-                let mut sqpnp_buffer: Vec<Pnt3> = Vec::new(); //doing this kinda defeats the point, fix later
                 'det_proc: for detection in detections.iter() {
                     let Some(tag) = self.tags.get(&detection.id()) else {
                         continue 'det_proc;
@@ -329,7 +319,7 @@ impl CuSinkTask for AprilTags {
                     self.solver.solve_robot_pose(
                         &world_pts,
                         &camera_pts,
-                        &ROBOT_TO_CAM,
+                        &self.robot_to_cam.unwrap_or_else(|| Default::default()),
                         self.comm.gyro_angle().unwrap_or(0.0),
                         SIGN_FLIP_CONST,
                     )
@@ -344,7 +334,6 @@ impl CuSinkTask for AprilTags {
                         y: std_dev[1],
                         rot: std_dev[2],
                     };
-                    dbg!(pose);
 
                     let ts = clock.now().as_micros() - time.as_micros();
                     self.comm.publish(
@@ -369,102 +358,9 @@ impl CuSinkTask for AprilTags {
                     self.last_time = Some(timey_time);
                 }
             }
-            println!("{time:?}");
         }
 
         Ok(())
     }
 }
 
-#[derive(Reflect)]
-pub struct ApriltagsProcessor {}
-impl Freezable for ApriltagsProcessor {}
-impl CuSinkTask for ApriltagsProcessor {
-    type Input<'m> = input_msg!('m, AprilTagDetections);
-    type Resources<'r> = ();
-
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self {})
-    }
-
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        Ok(())
-    }
-
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
-        let input: &AprilTagDetections = input.payload().unwrap();
-
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[allow(unused_imports)]
-    use super::*;
-    use anyhow::Context;
-    use anyhow::Result;
-    use image::{ImageBuffer, ImageReader};
-    use image::{Luma, imageops::FilterType, imageops::crop, imageops::resize};
-
-    use cu_sensor_payloads::CuImageBufferFormat;
-
-    #[allow(dead_code)]
-    fn process_image(path: &str) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
-        let reader = ImageReader::open(path).with_context(|| "Failed to open image")?;
-        let mut img = reader
-            .decode()
-            .context("Failed to decode image")?
-            .into_luma8();
-        let (orig_w, orig_h) = img.dimensions();
-
-        let new_h = (orig_w as f32 * 9.0 / 16.0) as u32;
-        let crop_y = (orig_h - new_h) / 2; // Center crop
-
-        let cropped = crop(&mut img, 0, crop_y, orig_w, new_h).to_image();
-        Ok(resize(&cropped, 1920, 1080, FilterType::Lanczos3))
-    }
-
-    #[test]
-    fn test_end2end_apriltag() -> Result<()> {
-        let img = process_image("tests/data/simple.png")?;
-        let format = CuImageBufferFormat {
-            width: img.width(),
-            height: img.height(),
-            stride: img.width(),
-            pixel_format: "GRAY".as_bytes().try_into()?,
-        };
-        let buffer_handle = CuHandle::new_detached(img.into_raw());
-        let cuimage = CuImage::new(format, buffer_handle);
-
-        let mut config = ComponentConfig::default();
-        config.set("tag_size", 0.14);
-        config.set("fx", 2600.0);
-        config.set("fy", 2600.0);
-        config.set("cx", 900.0);
-        config.set("cy", 520.0);
-        config.set("family", "tag16h5".to_string());
-
-        let mut task = AprilTags::new(Some(&config), ())?;
-        let input = CuMsg::<CuImage<Vec<u8>>>::new(Some(cuimage));
-        let mut output = CuMsg::<AprilTagDetections>::default();
-
-        let clock = RobotClock::new();
-        let result = task.process(&clock, &input, &mut output);
-        assert!(result.is_ok());
-
-        if let Some(detections) = output.payload() {
-            let detections = detections
-                .filtered_by_decision_margin(150.0)
-                .collect::<Vec<_>>();
-
-            assert_eq!(detections.len(), 1);
-            assert_eq!(detections[0].0, 4);
-            return Ok(());
-        }
-        Err(anyhow::anyhow!("No output"))
-    }
-}

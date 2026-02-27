@@ -156,6 +156,9 @@ impl Configurator {
                     self.has_run = true;
                 }
 
+                let robot_to_cam_json = serde_json::to_string(&curr_cam.cam_offsets.unwrap()).unwrap();
+                apriltags.set_param::<String>("robot_to_cam", robot_to_cam_json);
+
                 apriltags.set_param("cam_id", curr_cam.cam_id.unwrap());
 
                 apriltags_id
@@ -178,6 +181,15 @@ impl Configurator {
 
             g.0.shrink_to_fit();
         }
+
+        let serialized_config = self.c.serialize_ron();
+        let mut f = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open("chalkydri.ron")
+            .unwrap();
+        f.write_all(serialized_config.unwrap().as_bytes()).unwrap();
     }
 
     /// Refresh the camera list
@@ -429,6 +441,7 @@ impl Configurator {
 #[command(version, about, long_about = None)]
 pub enum Command {
     Configure,
+    Generate,
     Calibrate(CmdCalibrate),
 }
 
@@ -468,6 +481,9 @@ fn main() -> Result<()> {
             config.configure_cam_calib(calibration_frames);
             config.save_cuconfig();
             config.save();
+        }
+        Command::Generate => {
+            config.save_cuconfig();
         }
     }
 
