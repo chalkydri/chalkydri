@@ -21,17 +21,11 @@ tokio-console = ["dep:console-subscriber"]
 #name = "logread"
 #path = "src/bin/logread.rs"
 
-[[bin]]
-name = "calibrate"
-path = "src/bin/calibrate.rs"
-required-features = ["rerun"]
-
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "signal"] }
 serde.workspace = true
 serde_json.workspace = true
 mimalloc = { version = "0.1.43", features = ["override"] }
-camera-intrinsic-calibration = { git = "https://github.com/frc4533-lincoln/camera-intrinsic-calibration-rs.git", branch = "main" }
 #camera-intrinsic-model = { git = "https://github.com/powei-lin/camera-intrinsic-model-rs.git", branch = "main" }
 #aprilgrid = { git = "https://github.com/powei-lin/aprilgrid-rs.git", branch = "master" }
 gstreamer.workspace = true
@@ -66,7 +60,6 @@ cu-sensor-payloads.workspace = true
 cu29-export.workspace = true
 cu-gstreamer.workspace = true
 whacknet = { version = "0.1.0", path = "../whacknet" }
-aprilgrid = "0.8.0"
 camera-intrinsic-model = "0.8.0"
 crossbeam-channel = "0.5.15"
 

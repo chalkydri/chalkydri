@@ -45,7 +45,6 @@ impl CamSettings {
 }
 
 pub struct Configurator {
-    has_run: bool,
     c: CuConfig,
     cameras: Vec<String>,
     camera_configs: HashMap<String, CamSettings>,
@@ -79,7 +78,6 @@ impl Configurator {
         let cameras = config.cameras.keys().cloned().collect();
 
         Self {
-            has_run: false,
             c,
             camera_configs: config.cameras,
             cameras,
@@ -147,19 +145,18 @@ impl Configurator {
                 apriltags.set_resources(Some([("comm".to_owned(), "comm.comm".to_owned())]));
 
                 // Due to GStreamer being GStreamer, can only do one camera calibration per run
-                if apriltags.get_param::<String>("calib").unwrap().is_none() && !self.has_run {
-                    if let Some(ref calib) = curr_cam.calib {
-                        let model = calib.inner_model().clone();
-                        let calib_json = serde_json::to_string(&model).unwrap();
-                        apriltags.set_param("calib", calib_json);
-                    }
-                    self.has_run = true;
+                if let Some(ref calib) = curr_cam.calib {
+                    let model = calib.inner_model().clone();
+                    let calib_json = serde_json::to_string(&model).unwrap();
+                    apriltags.set_param("calib", calib_json);
                 }
 
                 let robot_to_cam_json = serde_json::to_string(&curr_cam.cam_offsets.unwrap()).unwrap();
                 apriltags.set_param::<String>("robot_to_cam", robot_to_cam_json);
 
-                apriltags.set_param("cam_id", curr_cam.cam_id.unwrap());
+                if let Some(cam_id) = curr_cam.cam_id {
+                    apriltags.set_param("cam_id", cam_id);
+                }
 
                 apriltags_id
             };
@@ -308,13 +305,14 @@ impl Configurator {
 
     pub fn configure_cam_id(&mut self, camera_index: usize) -> Result<()> {
         let dev_id = self.cameras.get(camera_index).unwrap();
+        let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
 
         let cam_id: String = dialoguer::Input::new()
             .with_prompt("Cam ID")
+            .default(cam_config.cam_id.map(|cam_id| cam_id.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
 
-        let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
         cam_config.cam_id = Some(cam_id.parse()?);
 
         Ok(())
@@ -322,34 +320,42 @@ impl Configurator {
 
     pub fn configure_cam_offsets(&mut self, camera_index: usize) -> Result<()> {
         let dev_id = self.cameras.get(camera_index).unwrap();
+        let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
 
         println!("Camera offsets");
         let trans_x: String = dialoguer::Input::new()
             .with_prompt(" |- Translation X")
+            .default(cam_config.cam_offsets.map(|o| o.trans_x.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
         let trans_y: String = dialoguer::Input::new()
             .with_prompt(" |- Translation Y")
+            .default(cam_config.cam_offsets.map(|o| o.trans_y.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
         let trans_z: String = dialoguer::Input::new()
             .with_prompt(" |- Translation Z")
+            .default(cam_config.cam_offsets.map(|o| o.trans_z.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
         let rot_w: String = dialoguer::Input::new()
             .with_prompt(" |- Rotation W")
+            .default(cam_config.cam_offsets.map(|o| o.rot_w.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
         let rot_x: String = dialoguer::Input::new()
             .with_prompt(" |- Rotation X")
+            .default(cam_config.cam_offsets.map(|o| o.rot_x.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
         let rot_y: String = dialoguer::Input::new()
             .with_prompt(" |- Rotation Y")
+            .default(cam_config.cam_offsets.map(|o| o.rot_y.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
         let rot_z: String = dialoguer::Input::new()
             .with_prompt(" '- Rotation Z")
+            .default(cam_config.cam_offsets.map(|o| o.rot_z.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
 
@@ -362,7 +368,6 @@ impl Configurator {
             rot_y: rot_y.parse()?,
             rot_z: rot_z.parse()?,
         };
-        let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
         cam_config.cam_offsets = Some(offsets);
 
         Ok(())

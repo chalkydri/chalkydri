@@ -118,7 +118,7 @@ impl CamProvider for V4l2Provider {
     }
     fn get_id(dev: &Device) -> String {
         dev.property::<Structure>("properties")
-            .get::<String>("device.serial")
+            .get::<String>("device.bus_path")
             .unwrap()
     }
     fn get_by_id(&self, id: String) -> Option<Device> {
