@@ -37,6 +37,8 @@ use whacknet::{Comm, CommBundleId, RobotPose, VisionUncertainty};
 
 use crate::field_layout::AprilTagFieldLayout;
 
+use std::sync::LazyLock;
+
 // the maximum number of detections that can be returned by the detector
 const MAX_DETECTIONS: usize = 16;
 
@@ -47,6 +49,10 @@ const FY: f64 = 2600.0;
 const CX: f64 = 900.0;
 const CY: f64 = 520.0;
 const FAMILY: &str = "tag36h11";
+
+static ROBOT_TO_CAM: LazyLock<Iso3> = LazyLock::new(|| {
+    Iso3::new(Vec3::new(1.0, 0.0, 0.0), Vec3::z())
+});
 
 #[derive(Default, Debug, Clone, Encode)]
 pub struct AprilTagDetections {
@@ -323,6 +329,7 @@ impl CuSinkTask for AprilTags {
                     self.solver.solve_robot_pose(
                         &world_pts,
                         &camera_pts,
+                        &ROBOT_TO_CAM,
                         self.comm.gyro_angle().unwrap_or(0.0),
                         SIGN_FLIP_CONST,
                     )
