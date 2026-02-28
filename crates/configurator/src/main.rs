@@ -25,9 +25,10 @@ use calibration::*;
 #[copper_runtime(config = "../../config/calibration.ron")]
 struct App {}
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct ConfiguratorConfig {
     cameras: HashMap<String, CamSettings>,
+    mappings: HashMap<String, String>,
 }
 
 #[derive(Default, serde::Deserialize, serde::Serialize)]
@@ -45,42 +46,65 @@ impl CamSettings {
 }
 
 pub struct Configurator {
-    c: CuConfig,
-    cameras: Vec<String>,
-    camera_configs: HashMap<String, CamSettings>,
+    c: ConfiguratorConfig,
+    cu: CuConfig,
+    /// IDs of cameras connected to the system
+    discovered_cams: HashMap<String, Option<String>>,
 }
 impl Configurator {
     pub fn new() -> Self {
-        let config: ConfiguratorConfig = {
+        let c: ConfiguratorConfig = {
             if let Some(mut f) = File::open("configurator.json").ok() {
                 Some(serde_json::from_reader(&mut f).unwrap())
             } else {
                 None
             }
         }
-        .unwrap();
+        .unwrap_or_default();
 
-        let mut c = CuConfig::default();
+        let mut cu = CuConfig::default();
 
-        c.logging = Some(LoggingConfig {
+        cu.logging = Some(LoggingConfig {
             enable_task_logging: false,
             ..Default::default()
         });
 
-        if c.resources.len() == 0 {
-            c.resources.push(ResourceBundleConfig {
+        if cu.resources.len() == 0 {
+            cu.resources.push(ResourceBundleConfig {
                 id: "comm".to_owned(),
                 provider: "whacknet::CommBundle".to_owned(),
                 config: None,
                 missions: None,
             });
         }
-        let cameras = config.cameras.keys().cloned().collect();
 
         Self {
             c,
-            camera_configs: config.cameras,
-            cameras,
+            cu,
+            discovered_cams: HashMap::new(),
+        }
+    }
+
+    /// Get a camera by its device ID
+    fn cam_id_by_dev_id(&self, dev_id: impl Into<String>) -> Option<String> {
+        self.c.mappings.get(&dev_id.into()).cloned()
+    }
+
+    /// Get a camera's settings by its device ID
+    fn cam_by_dev_id(&self, dev_id: impl Into<String>) -> Option<&CamSettings> {
+        if let Some(cam_id) = self.cam_id_by_dev_id(dev_id) {
+            self.c.cameras.get(&cam_id)
+        } else {
+            None
+        }
+    }
+
+    /// Get a **mutable reference** to a camera's settings by its device ID
+    fn cam_by_dev_id_mut(&mut self, dev_id: impl Into<String>) -> Option<&mut CamSettings> {
+        if let Some(cam_id) = self.cam_id_by_dev_id(dev_id) {
+            self.c.cameras.get_mut(&cam_id)
+        } else {
+            None
         }
     }
 
@@ -93,11 +117,11 @@ impl Configurator {
 
     /// Save the Copper configuration
     pub fn save_cuconfig(&mut self) {
-        for (dev_id, curr_cam) in self.camera_configs.iter() {
+        for (dev_id, curr_cam) in self.c.cameras.iter() {
             let width = curr_cam.width.unwrap();
             let height = curr_cam.height.unwrap();
 
-            let g = self.c.get_graph_mut(None).unwrap();
+            let g = self.cu.get_graph_mut(None).unwrap();
 
             // The camera itself
             let cam = {
@@ -179,7 +203,7 @@ impl Configurator {
             g.0.shrink_to_fit();
         }
 
-        let serialized_config = self.c.serialize_ron();
+        let serialized_config = self.cu.serialize_ron();
         let mut f = OpenOptions::new()
             .create(true)
             .write(true)
@@ -193,13 +217,10 @@ impl Configurator {
     ///
     /// [`Self::find_cameras`] MUST be called before this method.
     fn refresh_cameras(&mut self) {
-        self.camera_configs.clear();
-        self.cameras.clear();
+        self.discovered_cams.clear();
 
         for device in PROVIDER.lock().devices() {
-            self.camera_configs
-                .insert(device.clone(), Default::default());
-            self.cameras.push(device);
+            self.discovered_cams.push(device);
         }
     }
 
@@ -208,13 +229,13 @@ impl Configurator {
         loop {
             if let Some(cam_id) = Select::new()
                 .with_prompt("Select a camera to configure")
-                .items(&self.cameras)
+                .items(self.discovered_cams)
                 .item("Save configuration")
                 .default(0)
                 .interact()
                 .ok()
             {
-                if cam_id == self.cameras.len() {
+                if cam_id == self.discovered_cams.len() {
                     self.save();
                     return false;
                 }
@@ -236,7 +257,7 @@ impl Configurator {
             .default(0)
             .interact()
             .unwrap();
-        let dev_id = self.cameras.get(cam_id).unwrap();
+        let dev_id = self.discovered_cams.get(cam_id).unwrap();
         let cam = self.camera_configs.get_mut(dev_id).unwrap();
         let width = cam.width.unwrap();
         let height = cam.height.unwrap();
@@ -304,7 +325,7 @@ impl Configurator {
     }
 
     pub fn configure_cam_id(&mut self, camera_index: usize) -> Result<()> {
-        let dev_id = self.cameras.get(camera_index).unwrap();
+        let dev_id = self.discovered_cams.get(camera_index).unwrap();
         let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
 
         let cam_id: String = dialoguer::Input::new()
@@ -319,8 +340,10 @@ impl Configurator {
     }
 
     pub fn configure_cam_offsets(&mut self, camera_index: usize) -> Result<()> {
-        let dev_id = self.cameras.get(camera_index).unwrap();
-        let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
+        let dev_id = self.discovered_cams.get(camera_index).unwrap();
+        let Some(ref mut cam_config) = self.cam_by_dev_id_mut(dev_id) else {
+            panic!();
+        };
 
         println!("Camera offsets");
         let trans_x: String = dialoguer::Input::new()
@@ -428,6 +451,7 @@ impl Configurator {
     /// Save the configuration to disk
     pub fn save(self) {
         let config = ConfiguratorConfig {
+            calibrations: self.calibrations,
             cameras: self.camera_configs,
         };
         let serialized_config = serde_json::to_string(&config);
