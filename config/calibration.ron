@@ -1,5 +1,9 @@
 (
   resources: [
+    (
+      id: "monitor",
+      provider: "MonitorBundle",
+    ),
   ],
   tasks: [
     (
@@ -22,9 +26,17 @@
       id: "calibrator",
       type: "chalkydri::subsystems::calibration::Calibrator",
     ),
+    (
+      id: "monitor",
+      type: "Monitor",
+      resources: {
+        "monitor": "monitor.monitor",
+      },
+    ),
   ],
   cnx: [
     (src: "camera", dst: "gst_to_cu", msg: "(cu_gstreamer::CuGstBuffer, CuDuration)"),
     (src: "gst_to_cu", dst: "calibrator", msg: "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)"),
+    (src: "gst_to_cu", dst: "monitor", msg: "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)"),
   ],
 )

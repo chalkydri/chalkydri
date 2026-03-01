@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -14,20 +14,24 @@ use color_eyre::Result;
 use cu29::config::{CuConfig, Node};
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use dialoguer::Select;
+use dialoguer::{Input, Select};
 use gstreamer::State;
 use gstreamer::prelude::{DeviceExt, ElementExt, PadExt};
+use indexmap::IndexMap;
 use indicatif::ProgressBar;
 
+mod monitor;
 mod calibration;
 use calibration::*;
+use monitor::Monitor;
+use monitor::MonitorBundle;
 
 #[copper_runtime(config = "../../config/calibration.ron")]
 struct App {}
 
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct ConfiguratorConfig {
-    cameras: HashMap<String, CamSettings>,
+    cameras: IndexMap<String, CamSettings>,
     mappings: HashMap<String, String>,
 }
 
@@ -49,7 +53,7 @@ pub struct Configurator {
     c: ConfiguratorConfig,
     cu: CuConfig,
     /// IDs of cameras connected to the system
-    discovered_cams: HashMap<String, Option<String>>,
+    discovered_cams: IndexMap<String, Option<String>>,
 }
 impl Configurator {
     pub fn new() -> Self {
@@ -81,7 +85,7 @@ impl Configurator {
         Self {
             c,
             cu,
-            discovered_cams: HashMap::new(),
+            discovered_cams: IndexMap::new(),
         }
     }
 
@@ -103,6 +107,24 @@ impl Configurator {
     fn cam_by_dev_id_mut(&mut self, dev_id: impl Into<String>) -> Option<&mut CamSettings> {
         if let Some(cam_id) = self.cam_id_by_dev_id(dev_id) {
             self.c.cameras.get_mut(&cam_id)
+        } else {
+            None
+        }
+    }
+
+    /// Get a camera's settings by its device ID
+    fn cam_by_dev_index(&self, dev_index: usize) -> Option<&CamSettings> {
+        if let Some((_, Some(cam_id))) = self.discovered_cams.get_index(dev_index) {
+            self.c.cameras.get(cam_id)
+        } else {
+            None
+        }
+    }
+
+    /// Get a **mutable reference** to a camera's settings by its device ID
+    fn cam_by_dev_index_mut(&mut self, dev_index: usize) -> Option<&mut CamSettings> {
+        if let Some((_, Some(cam_id))) = self.discovered_cams.get_index(dev_index) {
+            self.c.cameras.get_mut(cam_id)
         } else {
             None
         }
@@ -220,29 +242,59 @@ impl Configurator {
         self.discovered_cams.clear();
 
         for device in PROVIDER.lock().devices() {
-            self.discovered_cams.push(device);
+            let config_name = self.c.mappings.get(&device).cloned();
+            self.discovered_cams.insert(device, config_name);
         }
     }
 
     /// Run the entire camera configuration procedure
     pub fn configure_cameras(mut self) -> bool {
         loop {
-            if let Some(cam_id) = Select::new()
+            if let Some(dev_index) = Select::new()
                 .with_prompt("Select a camera to configure")
-                .items(self.discovered_cams)
+                .items(self.discovered_cams.iter().map(|(k, v)| {
+                    if v.is_some() {
+                        format!("{k} *")
+                    } else {
+                        k.clone()
+                    }
+                }))
                 .item("Save configuration")
                 .default(0)
                 .interact()
                 .ok()
             {
-                if cam_id == self.discovered_cams.len() {
+                if dev_index == self.discovered_cams.len() {
                     self.save();
                     return false;
                 }
 
-                self.configure_cam_id(cam_id).unwrap();
-                self.configure_cam_cap(cam_id);
-                self.configure_cam_offsets(cam_id).unwrap();
+                let option = Select::new()
+                    .with_prompt("Which configuration would you like to use?")
+                    .item("Create new configuration")
+                    .items(self.c.cameras.keys())
+                    .default(0)
+                    .interact()
+                    .unwrap();
+
+                let dev_id = self.discovered_cams.get_index(dev_index).unwrap().0.clone();
+
+                if option == 0 {
+                    let config_name: String = Input::new()
+                        .with_prompt("What would you like to call this config?")
+                        .interact_text()
+                        .unwrap();
+
+                    self.c.cameras.insert(config_name.clone(), Default::default());
+                    self.c.mappings.insert(dev_id.clone(), config_name.clone());
+                    let (config_index, _) = self.discovered_cams.insert_full(dev_id, Some(config_name));
+
+                    self.configure_cam_id(config_index).unwrap();
+                    self.configure_cam_cap(config_index);
+                    self.configure_cam_offsets(config_index).unwrap();
+                } else {
+                    self.discovered_cams.insert(dev_id, Some(self.c.cameras.get_index((option - 1) as usize).unwrap().0.clone()));
+                }
             }
         }
     }
@@ -251,14 +303,16 @@ impl Configurator {
     ///
     /// This MUST be run separately from [`Self::configure_cameras`] due to some GStreamer BS.
     pub fn configure_cam_calib(&mut self, calibration_frames: u64) -> bool {
-        let cam_id = Select::new()
+        let cam_index = Select::new()
             .with_prompt("Select a camera to calibrate")
-            .items(self.camera_configs.keys())
+            .items(self.discovered_cams.values().filter_map(|v| v.to_owned()))
             .default(0)
             .interact()
             .unwrap();
-        let dev_id = self.discovered_cams.get(cam_id).unwrap();
-        let cam = self.camera_configs.get_mut(dev_id).unwrap();
+        let (dev_id, Some(cam_id)) = self.discovered_cams.get_index(cam_index).unwrap() else {
+            panic!();
+        };
+        let cam = self.c.cameras.get_mut(cam_id).unwrap();
         let width = cam.width.unwrap();
         let height = cam.height.unwrap();
 
@@ -314,19 +368,16 @@ impl Configurator {
         let model = calibrator.calibrate();
 
         if let Some(model) = model {
-            if let Some(cam) = self.camera_configs.get_mut(dev_id) {
-                cam.calib = Some(CalibratedModel::from_str(
-                    serde_json::to_string(&model).unwrap(),
-                ));
-            }
+            cam.calib = Some(CalibratedModel::from_str(
+                serde_json::to_string(&model).unwrap(),
+            ));
         }
 
         true
     }
 
     pub fn configure_cam_id(&mut self, camera_index: usize) -> Result<()> {
-        let dev_id = self.discovered_cams.get(camera_index).unwrap();
-        let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
+        let cam_config = self.cam_by_dev_index_mut(camera_index).unwrap();
 
         let cam_id: String = dialoguer::Input::new()
             .with_prompt("Cam ID")
@@ -340,56 +391,49 @@ impl Configurator {
     }
 
     pub fn configure_cam_offsets(&mut self, camera_index: usize) -> Result<()> {
-        let dev_id = self.discovered_cams.get(camera_index).unwrap();
-        let Some(ref mut cam_config) = self.cam_by_dev_id_mut(dev_id) else {
+        let Some(ref mut cam_config) = self.cam_by_dev_index_mut(camera_index) else {
             panic!();
         };
 
         println!("Camera offsets");
-        let trans_x: String = dialoguer::Input::new()
+        let x: String = dialoguer::Input::new()
             .with_prompt(" |- Translation X")
-            .default(cam_config.cam_offsets.map(|o| o.trans_x.to_string()).unwrap_or_default())
+            .default(cam_config.cam_offsets.map(|o| o.x.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
-        let trans_y: String = dialoguer::Input::new()
+        let y: String = dialoguer::Input::new()
             .with_prompt(" |- Translation Y")
-            .default(cam_config.cam_offsets.map(|o| o.trans_y.to_string()).unwrap_or_default())
+            .default(cam_config.cam_offsets.map(|o| o.y.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
-        let trans_z: String = dialoguer::Input::new()
+        let z: String = dialoguer::Input::new()
             .with_prompt(" |- Translation Z")
-            .default(cam_config.cam_offsets.map(|o| o.trans_z.to_string()).unwrap_or_default())
+            .default(cam_config.cam_offsets.map(|o| o.z.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
-        let rot_w: String = dialoguer::Input::new()
-            .with_prompt(" |- Rotation W")
-            .default(cam_config.cam_offsets.map(|o| o.rot_w.to_string()).unwrap_or_default())
+        let roll: String = dialoguer::Input::new()
+            .with_prompt(" |- Roll")
+            .default(cam_config.cam_offsets.map(|o| o.roll.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
-        let rot_x: String = dialoguer::Input::new()
-            .with_prompt(" |- Rotation X")
-            .default(cam_config.cam_offsets.map(|o| o.rot_x.to_string()).unwrap_or_default())
+        let pitch: String = dialoguer::Input::new()
+            .with_prompt(" |- Pitch")
+            .default(cam_config.cam_offsets.map(|o| o.pitch.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
-        let rot_y: String = dialoguer::Input::new()
-            .with_prompt(" |- Rotation Y")
-            .default(cam_config.cam_offsets.map(|o| o.rot_y.to_string()).unwrap_or_default())
-            .interact_text()
-            .unwrap();
-        let rot_z: String = dialoguer::Input::new()
-            .with_prompt(" '- Rotation Z")
-            .default(cam_config.cam_offsets.map(|o| o.rot_z.to_string()).unwrap_or_default())
+        let yaw: String = dialoguer::Input::new()
+            .with_prompt(" '- Yaw")
+            .default(cam_config.cam_offsets.map(|o| o.yaw.to_string()).unwrap_or_default())
             .interact_text()
             .unwrap();
 
         let offsets = RobotToCamOffset {
-            trans_x: trans_x.parse()?,
-            trans_y: trans_y.parse()?,
-            trans_z: trans_z.parse()?,
-            rot_w: rot_w.parse()?,
-            rot_x: rot_x.parse()?,
-            rot_y: rot_y.parse()?,
-            rot_z: rot_z.parse()?,
+            x: x.parse()?,
+            y: y.parse()?,
+            z: z.parse()?,
+            roll: roll.parse()?,
+            pitch: pitch.parse()?,
+            yaw: yaw.parse()?,
         };
         cam_config.cam_offsets = Some(offsets);
 
@@ -443,7 +487,7 @@ impl Configurator {
             .unwrap();
 
         let structure = caps.get(cap_index).unwrap().clone();
-        let cam_config = self.camera_configs.get_mut(dev_id).unwrap();
+        let cam_config = self.cam_by_dev_id_mut(dev_id).unwrap();
         cam_config.width = Some(structure.get::<i32>("width").unwrap() as u32);
         cam_config.height = Some(structure.get::<i32>("height").unwrap() as u32);
     }
@@ -451,8 +495,12 @@ impl Configurator {
     /// Save the configuration to disk
     pub fn save(self) {
         let config = ConfiguratorConfig {
-            calibrations: self.calibrations,
-            cameras: self.camera_configs,
+            cameras: self.c.cameras,
+            mappings: HashMap::from_iter(self.discovered_cams.clone().iter().filter_map(|(k, v)| if let Some(v) = v {
+                Some((k.clone(), v.clone()))
+            } else {
+                None
+            })),
         };
         let serialized_config = serde_json::to_string(&config);
         let mut f = OpenOptions::new()
@@ -507,6 +555,9 @@ fn main() -> Result<()> {
             config.configure_cameras();
         }
         Command::Calibrate(CmdCalibrate { calibration_frames }) => {
+            config.find_cameras();
+            config.refresh_cameras();
+
             config.configure_cam_calib(calibration_frames);
             config.save_cuconfig();
             config.save();

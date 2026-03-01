@@ -28,7 +28,7 @@ use chalkydri_sqpnp::{Rot3, SqPnP, Vec3};
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
 use cu29::prelude::*;
-use nalgebra::{Matrix, Matrix2x1, Vector2, Vector3, matrix};
+use nalgebra::{Matrix, Matrix2x1, Quaternion, Rotation3, Vector2, Vector3, matrix};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -184,13 +184,15 @@ pub struct AprilTags {
 
 #[derive(Clone, Copy, Default, Serialize, Deserialize)]
 pub struct RobotToCamOffset {
-    pub rot_w: f64,
-    pub rot_x: f64,
-    pub rot_y: f64,
-    pub rot_z: f64,
-    pub trans_x: f64,
-    pub trans_y: f64,
-    pub trans_z: f64,
+    pub roll: f64,
+    pub pitch: f64,
+    pub yaw: f64,
+    /// Translation X
+    pub x: f64,
+    /// Translation Y
+    pub y: f64,
+    /// Translation Z
+    pub z: f64,
 }
 
 fn image_from_cuimage<A>(cu_image: &CuImage<A>) -> ManuallyDrop<Image>
@@ -237,10 +239,8 @@ impl CuSinkTask for AprilTags {
             let calib = config.get::<String>("calib").unwrap().unwrap();
 
             let robot_to_cam_offsets: RobotToCamOffset = serde_json::from_str(&robot_to_cam_str).unwrap();
-            let translation = nalgebra::Translation3::new(robot_to_cam_offsets.trans_x, robot_to_cam_offsets.trans_y, robot_to_cam_offsets.trans_z);
-            let rotation =
-                nalgebra::Quaternion::new(robot_to_cam_offsets.rot_w, robot_to_cam_offsets.rot_x, robot_to_cam_offsets.rot_y, robot_to_cam_offsets.rot_z);
-            let rotation = nalgebra::UnitQuaternion::from_quaternion(rotation);
+            let translation = nalgebra::Translation3::new(robot_to_cam_offsets.x, robot_to_cam_offsets.y, robot_to_cam_offsets.z);
+            let rotation = nalgebra::UnitQuaternion::from_euler_angles(robot_to_cam_offsets.roll, robot_to_cam_offsets.pitch, robot_to_cam_offsets.yaw);
             let robot_to_cam = Iso3::from_parts(translation, rotation);
 
             let cam_model: GenericModel<f64> = serde_json::from_str(&calib).unwrap();

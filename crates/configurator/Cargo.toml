@@ -27,3 +27,6 @@ dialoguer = { version = "0.12.0", features = ["completion"] }
 clap = { version = "4.5.60", features = ["derive"] }
 chalkydri_apriltags = { version = "0.1.0", path = "../apriltags" }
 indicatif = "0.18.4"
+indexmap = { version = "2.13.0", features = ["serde"] }
+sysinfo = { version = "0.38.2", default-features = false, features = ["network"] }
+turbojpeg = { version = "1.4.0", features = ["image"] }

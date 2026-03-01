@@ -36,7 +36,7 @@ futures-core.workspace = true
 futures-util = "0.3.31"
 rustix = { version = "1.1.2", features = ["all-apis"] }
 futures-executor = "0.3.31"
-sysinfo = "0.37.2"
+sysinfo = { version = "0.37.2", default-features = false, features = ["network"] }
 libblur = "0.20.0"
 nalgebra = { version = "0.33.2", default-features = false, features = ["matrixmultiply", "rayon"] }
 image = "0.25.5"
