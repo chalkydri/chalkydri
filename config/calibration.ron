@@ -1,10 +1,4 @@
 (
-  resources: [
-    (
-      id: "monitor",
-      provider: "MonitorBundle",
-    ),
-  ],
   tasks: [
     (
       id: "camera",
@@ -25,13 +19,12 @@
     (
       id: "calibrator",
       type: "chalkydri::subsystems::calibration::Calibrator",
+      logging: (enabled: false),
     ),
     (
       id: "monitor",
       type: "Monitor",
-      resources: {
-        "monitor": "monitor.monitor",
-      },
+      logging: (enabled: false),
     ),
   ],
   cnx: [

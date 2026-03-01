@@ -13,6 +13,8 @@ use camera_intrinsic_model::{GenericModel, OpenCVModel5};
 
 use tokio::time::Instant;
 
+use crate::monitor::MONITOR;
+
 #[derive(Default, Deserialize, Serialize)]
 pub struct CalibratedModel {
     model: Option<GenericModel<f64>>,
@@ -37,15 +39,11 @@ pub struct Calibrator {
     frame_feats: Vec<FrameFeature>,
     cam_model: GenericModel<f64>,
     start: Instant,
-    stream: rerun::RecordingStream,
 }
 impl Calibrator {
     /// Initialize the [Calibrator]
     pub fn new() -> Self {
-        let (stream, _mem_sink) = rerun::RecordingStreamBuilder::new("calibration")
-            .memory()
-            .unwrap();
-        stream
+        MONITOR.stream
             .log_static("/", &rerun::ViewCoordinates::RDF())
             .unwrap();
         Self {
@@ -54,7 +52,6 @@ impl Calibrator {
             frame_feats: Vec::new(),
             cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
             start: Instant::now(),
-            stream,
         }
     }
 
@@ -75,6 +72,14 @@ impl Calibrator {
                 )
             {
                 self.frame_feats.push(frame_feat);
+                let points2d = self.frame_feats.iter().map(|frame_feat| frame_feat.features.values().map(|feat| {
+                    (feat.p2d.x, feat.p2d.y)
+                })).flatten();
+                let points3d = self.frame_feats.iter().map(|frame_feat| frame_feat.features.values().map(|feat| {
+                    (feat.p3d.x, feat.p3d.y, feat.p3d.z)
+                })).flatten();
+                MONITOR.stream.log_with_static("/cam/frame/points2d", true, &rerun::Points2D::new(points2d)).unwrap();
+                MONITOR.stream.log_with_static("/cam/frame/points3d", true, &rerun::Points3D::new(points3d)).unwrap();
             }
         }
 
@@ -95,7 +100,7 @@ impl Calibrator {
                     .map(|f| Some(f))
                     .collect()],
                 &self.cam_model,
-                &self.stream,
+                //&MONITOR.stream,
                 &CalibParams {
                     one_focal: false,
                     fixed_focal: None,

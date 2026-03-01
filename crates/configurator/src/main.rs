@@ -24,7 +24,6 @@ mod monitor;
 mod calibration;
 use calibration::*;
 use monitor::Monitor;
-use monitor::MonitorBundle;
 
 #[copper_runtime(config = "../../config/calibration.ron")]
 struct App {}
