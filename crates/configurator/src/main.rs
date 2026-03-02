@@ -20,8 +20,8 @@ use gstreamer::prelude::{DeviceExt, ElementExt, PadExt};
 use indexmap::IndexMap;
 use indicatif::ProgressBar;
 
-mod monitor;
 mod calibration;
+mod monitor;
 use calibration::*;
 use monitor::Monitor;
 
@@ -181,7 +181,8 @@ impl Configurator {
                     apriltags.set_param("calib", calib_json);
                 }
 
-                let robot_to_cam_json = serde_json::to_string(&curr_cam.cam_offsets.unwrap()).unwrap();
+                let robot_to_cam_json =
+                    serde_json::to_string(&curr_cam.cam_offsets.unwrap()).unwrap();
                 apriltags.set_param::<String>("robot_to_cam", robot_to_cam_json);
 
                 if let Some(cam_id) = curr_cam.cam_id {
@@ -269,9 +270,13 @@ impl Configurator {
                         .interact_text()
                         .unwrap();
 
-                    self.c.cameras.insert(config_name.clone(), Default::default());
+                    self.c
+                        .cameras
+                        .insert(config_name.clone(), Default::default());
                     self.c.mappings.insert(dev_id.clone(), config_name.clone());
-                    let (config_index, _) = self.discovered_cams.insert_full(dev_id.clone(), Some(config_name.clone()));
+                    let (config_index, _) = self
+                        .discovered_cams
+                        .insert_full(dev_id.clone(), Some(config_name.clone()));
                     if let Some(ref mut cam) = self.c.cameras.get_mut(&config_name) {
                         cam.dev_id = Some(dev_id);
                     }
@@ -280,7 +285,17 @@ impl Configurator {
                     self.configure_cam_cap(config_index);
                     self.configure_cam_offsets(config_index).unwrap();
                 } else {
-                    self.discovered_cams.insert(dev_id, Some(self.c.cameras.get_index((option - 1) as usize).unwrap().0.clone()));
+                    self.discovered_cams.insert(
+                        dev_id,
+                        Some(
+                            self.c
+                                .cameras
+                                .get_index((option - 1) as usize)
+                                .unwrap()
+                                .0
+                                .clone(),
+                        ),
+                    );
                 }
             }
         }
@@ -368,7 +383,12 @@ impl Configurator {
 
         let cam_id: String = dialoguer::Input::new()
             .with_prompt("Cam ID")
-            .default(cam_config.cam_id.map(|cam_id| cam_id.to_string()).unwrap_or_default())
+            .default(
+                cam_config
+                    .cam_id
+                    .map(|cam_id| cam_id.to_string())
+                    .unwrap_or_default(),
+            )
             .interact_text()
             .unwrap();
 
@@ -385,32 +405,62 @@ impl Configurator {
         println!("Camera offsets");
         let x: String = dialoguer::Input::new()
             .with_prompt(" |- Translation X")
-            .default(cam_config.cam_offsets.map(|o| o.x.to_string()).unwrap_or_default())
+            .default(
+                cam_config
+                    .cam_offsets
+                    .map(|o| o.x.to_string())
+                    .unwrap_or_default(),
+            )
             .interact_text()
             .unwrap();
         let y: String = dialoguer::Input::new()
             .with_prompt(" |- Translation Y")
-            .default(cam_config.cam_offsets.map(|o| o.y.to_string()).unwrap_or_default())
+            .default(
+                cam_config
+                    .cam_offsets
+                    .map(|o| o.y.to_string())
+                    .unwrap_or_default(),
+            )
             .interact_text()
             .unwrap();
         let z: String = dialoguer::Input::new()
             .with_prompt(" |- Translation Z")
-            .default(cam_config.cam_offsets.map(|o| o.z.to_string()).unwrap_or_default())
+            .default(
+                cam_config
+                    .cam_offsets
+                    .map(|o| o.z.to_string())
+                    .unwrap_or_default(),
+            )
             .interact_text()
             .unwrap();
         let roll: String = dialoguer::Input::new()
             .with_prompt(" |- Roll")
-            .default(cam_config.cam_offsets.map(|o| o.roll.to_string()).unwrap_or_default())
+            .default(
+                cam_config
+                    .cam_offsets
+                    .map(|o| o.roll.to_string())
+                    .unwrap_or_default(),
+            )
             .interact_text()
             .unwrap();
         let pitch: String = dialoguer::Input::new()
             .with_prompt(" |- Pitch")
-            .default(cam_config.cam_offsets.map(|o| o.pitch.to_string()).unwrap_or_default())
+            .default(
+                cam_config
+                    .cam_offsets
+                    .map(|o| o.pitch.to_string())
+                    .unwrap_or_default(),
+            )
             .interact_text()
             .unwrap();
         let yaw: String = dialoguer::Input::new()
             .with_prompt(" '- Yaw")
-            .default(cam_config.cam_offsets.map(|o| o.yaw.to_string()).unwrap_or_default())
+            .default(
+                cam_config
+                    .cam_offsets
+                    .map(|o| o.yaw.to_string())
+                    .unwrap_or_default(),
+            )
             .interact_text()
             .unwrap();
 
@@ -483,11 +533,15 @@ impl Configurator {
     pub fn save(self) {
         let config = ConfiguratorConfig {
             cameras: self.c.cameras,
-            mappings: HashMap::from_iter(self.discovered_cams.clone().iter().filter_map(|(k, v)| if let Some(v) = v {
-                Some((k.clone(), v.clone()))
-            } else {
-                None
-            })),
+            mappings: HashMap::from_iter(self.discovered_cams.clone().iter().filter_map(
+                |(k, v)| {
+                    if let Some(v) = v {
+                        Some((k.clone(), v.clone()))
+                    } else {
+                        None
+                    }
+                },
+            )),
         };
         let serialized_config = serde_json::to_string(&config);
         let mut f = OpenOptions::new()

@@ -39,7 +39,8 @@ pub struct Calibrator {
 impl Calibrator {
     /// Initialize the [Calibrator]
     pub fn new() -> Self {
-        MONITOR.stream
+        MONITOR
+            .stream
             .log_static("/", &rerun::ViewCoordinates::RDF())
             .unwrap();
         Self {
@@ -67,14 +68,34 @@ impl Calibrator {
                 )
             {
                 self.frame_feats.push(frame_feat);
-                let points2d = self.frame_feats.iter().map(|frame_feat| frame_feat.features.values().map(|feat| {
-                    (feat.p2d.x, feat.p2d.y)
-                })).flatten();
-                let points3d = self.frame_feats.iter().map(|frame_feat| frame_feat.features.values().map(|feat| {
-                    (feat.p3d.x, feat.p3d.y, feat.p3d.z)
-                })).flatten();
-                MONITOR.stream.log_with_static("/cam/frame/points2d", true, &rerun::Points2D::new(points2d)).unwrap();
-                MONITOR.stream.log_with_static("/cam/frame/points3d", true, &rerun::Points3D::new(points3d)).unwrap();
+                let points2d = self
+                    .frame_feats
+                    .iter()
+                    .map(|frame_feat| {
+                        frame_feat
+                            .features
+                            .values()
+                            .map(|feat| (feat.p2d.x, feat.p2d.y))
+                    })
+                    .flatten();
+                let points3d = self
+                    .frame_feats
+                    .iter()
+                    .map(|frame_feat| {
+                        frame_feat
+                            .features
+                            .values()
+                            .map(|feat| (feat.p3d.x, feat.p3d.y, feat.p3d.z))
+                    })
+                    .flatten();
+                MONITOR
+                    .stream
+                    .log_with_static("/cam/frame/points2d", true, &rerun::Points2D::new(points2d))
+                    .unwrap();
+                MONITOR
+                    .stream
+                    .log_with_static("/cam/frame/points3d", true, &rerun::Points3D::new(points3d))
+                    .unwrap();
             }
         }
 

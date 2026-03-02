@@ -232,9 +232,18 @@ impl CuSinkTask for AprilTags {
             let robot_to_cam_str: String = config.get("robot_to_cam").unwrap().unwrap();
             let calib = config.get::<String>("calib").unwrap().unwrap();
 
-            let robot_to_cam_offsets: RobotToCamOffset = serde_json::from_str(&robot_to_cam_str).unwrap();
-            let translation = nalgebra::Translation3::new(robot_to_cam_offsets.x, robot_to_cam_offsets.y, robot_to_cam_offsets.z);
-            let rotation = nalgebra::UnitQuaternion::from_euler_angles(robot_to_cam_offsets.roll, robot_to_cam_offsets.pitch, robot_to_cam_offsets.yaw);
+            let robot_to_cam_offsets: RobotToCamOffset =
+                serde_json::from_str(&robot_to_cam_str).unwrap();
+            let translation = nalgebra::Translation3::new(
+                robot_to_cam_offsets.x,
+                robot_to_cam_offsets.y,
+                robot_to_cam_offsets.z,
+            );
+            let rotation = nalgebra::UnitQuaternion::from_euler_angles(
+                robot_to_cam_offsets.roll,
+                robot_to_cam_offsets.pitch,
+                robot_to_cam_offsets.yaw,
+            );
             let robot_to_cam = Iso3::from_parts(translation, rotation);
 
             let cam_model: GenericModel<f64> = serde_json::from_str(&calib).unwrap();
@@ -358,4 +367,3 @@ impl CuSinkTask for AprilTags {
         Ok(())
     }
 }
-
