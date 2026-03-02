@@ -1,6 +1,5 @@
 use chalkydri::subsystems::calibration::CALIB;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 use aprilgrid::{TagFamily, detector::TagDetector};
 use camera_intrinsic_calibration::{
@@ -10,8 +9,6 @@ use camera_intrinsic_calibration::{
     util::*,
 };
 use camera_intrinsic_model::{GenericModel, OpenCVModel5};
-
-use tokio::time::Instant;
 
 use crate::monitor::MONITOR;
 
@@ -38,7 +35,6 @@ pub struct Calibrator {
     board: Board,
     frame_feats: Vec<FrameFeature>,
     cam_model: GenericModel<f64>,
-    start: Instant,
 }
 impl Calibrator {
     /// Initialize the [Calibrator]
@@ -51,7 +47,6 @@ impl Calibrator {
             board: create_default_6x6_board(),
             frame_feats: Vec::new(),
             cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
-            start: Instant::now(),
         }
     }
 
@@ -66,7 +61,7 @@ impl Calibrator {
                 camera_intrinsic_calibration::data_loader::image_to_option_feature_frame(
                     &self.det,
                     &img.0,
-                    &create_default_6x6_board(),
+                    &self.board,
                     MIN_CORNERS,
                     img.1.as_nanos() as i64,
                 )
@@ -100,7 +95,6 @@ impl Calibrator {
                     .map(|f| Some(f))
                     .collect()],
                 &self.cam_model,
-                //&MONITOR.stream,
                 &CalibParams {
                     one_focal: false,
                     fixed_focal: None,

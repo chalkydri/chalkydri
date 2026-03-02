@@ -4,10 +4,10 @@
             id: "camera_laptop",
             type: "CamPipeline",
             config: {
+                "id": "pci-0000:00:14.0-usb-0:11:1.0",
                 "width": 1280,
-                "id": "laptop",
-                "height": 720,
                 "name": "A",
+                "height": 720,
             },
             missions: None,
         ),
@@ -16,8 +16,8 @@
             type: "GstToCuImage",
             config: {
                 "fourcc": "GREY",
-                "width": 1280,
                 "height": 720,
+                "width": 1280,
             },
             missions: None,
         ),
@@ -25,9 +25,9 @@
             id: "apriltags_laptop",
             type: "chalkydri_apriltags::AprilTags",
             config: {
-                "calib": "{\"OpenCVModel5\":{\"fx\":898.994806807896,\"fy\":897.9156469180645,\"cx\":627.0698256482966,\"cy\":357.65273282451244,\"k1\":-0.18595770381253796,\"k2\":0.4406013374445432,\"p1\":-0.001,\"p2\":-0.001,\"k3\":-0.3704732841830049,\"width\":1280,\"height\":720}}",
                 "cam_id": 0,
                 "robot_to_cam": "{\"roll\":0.0,\"pitch\":0.0,\"yaw\":0.0,\"x\":0.0,\"y\":0.0,\"z\":0.0}",
+                "calib": "{\"OpenCVModel5\":{\"fx\":898.994806807896,\"fy\":897.9156469180645,\"cx\":627.0698256482966,\"cy\":357.65273282451244,\"k1\":-0.18595770381253796,\"k2\":0.4406013374445432,\"p1\":-0.001,\"p2\":-0.001,\"k3\":-0.3704732841830049,\"width\":1280,\"height\":720}}",
             },
             resources: {
                 "comm": "comm.comm",

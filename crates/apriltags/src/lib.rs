@@ -16,7 +16,7 @@ mod field_layout;
 use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 
-use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
+use apriltag::{Detector, DetectorBuilder, Family, Image};
 
 use apriltag_sys::image_u8_t;
 
@@ -24,20 +24,19 @@ use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use camera_intrinsic_model::{GenericModel, OpenCVModel5};
-use chalkydri_sqpnp::{Rot3, SqPnP, Vec3};
+use chalkydri_core::tracing;
+use chalkydri_sqpnp::SqPnP;
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
 use cu29::prelude::*;
-use nalgebra::{Matrix, Matrix2x1, Quaternion, Rotation3, Vector2, Vector3, matrix};
+use nalgebra::Vector2;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use chalkydri_sqpnp::{Iso3, Pnt3};
+use chalkydri_sqpnp::Iso3;
 use whacknet::{Comm, CommBundleId, RobotPose, VisionUncertainty};
 
 use crate::field_layout::AprilTagFieldLayout;
-
-use std::sync::LazyLock;
 
 // the maximum number of detections that can be returned by the detector
 const MAX_DETECTIONS: usize = 16;
@@ -231,11 +230,6 @@ impl CuSinkTask for AprilTags {
             let bits_corrected: u32 = config.get("bits_corrected").unwrap().unwrap_or(3);
             let cam_id: u8 = config.get("cam_id").unwrap().unwrap();
             let robot_to_cam_str: String = config.get("robot_to_cam").unwrap().unwrap();
-            //let fx = config.get("fx").unwrap_or(FX);
-            //let fy = config.get("fy").unwrap_or(FY);
-            //let cx = config.get("cx").unwrap_or(CX);
-            //let cy = config.get("cy").unwrap_or(CY);
-            //let field_layout_path = config.get("field_json_path");
             let calib = config.get::<String>("calib").unwrap().unwrap();
 
             let robot_to_cam_offsets: RobotToCamOffset = serde_json::from_str(&robot_to_cam_str).unwrap();
@@ -343,6 +337,7 @@ impl CuSinkTask for AprilTags {
                         pose.clone(),
                         uncertainty.clone(),
                     );
+                    tracing::debug!("detected pose: {pose:?}");
                 }
             } else {
                 let timey_time = clock.now().as_millis();

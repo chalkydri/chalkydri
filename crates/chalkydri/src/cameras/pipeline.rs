@@ -1,21 +1,16 @@
 use std::ops::ControlFlow;
-use std::ops::Deref;
-use std::sync::Arc;
-use std::sync::mpsc;
-use std::time::Duration;
 
 use chalkydri_core::config::CameraSettings;
 use cu_gstreamer::CuGstBuffer;
 use cu29::prelude::*;
-use gstreamer::Structure;
 use gstreamer::{
-    Caps, ClockTime, Device, Element, ElementFactory, Pipeline, ReferenceTimestampMeta, Sample,
+    Caps, ClockTime, Device, Element, ElementFactory, Pipeline,
     State, prelude::*,
 };
 use gstreamer_app::AppSink;
 
 use crate::cameras::providers::PROVIDER;
-use crate::cameras::providers::{CamProvider, V4l2Provider};
+use crate::cameras::providers::CamProvider;
 use chalkydri_core::prelude::*;
 
 /// A camera pipeline

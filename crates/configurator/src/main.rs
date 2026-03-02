@@ -37,6 +37,7 @@ pub struct ConfiguratorConfig {
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct CamSettings {
     cam_id: Option<u8>,
+    dev_id: Option<String>,
     width: Option<u32>,
     height: Option<u32>,
     calib: Option<CalibratedModel>,
@@ -93,28 +94,10 @@ impl Configurator {
         self.c.mappings.get(&dev_id.into()).cloned()
     }
 
-    /// Get a camera's settings by its device ID
-    fn cam_by_dev_id(&self, dev_id: impl Into<String>) -> Option<&CamSettings> {
-        if let Some(cam_id) = self.cam_id_by_dev_id(dev_id) {
-            self.c.cameras.get(&cam_id)
-        } else {
-            None
-        }
-    }
-
     /// Get a **mutable reference** to a camera's settings by its device ID
     fn cam_by_dev_id_mut(&mut self, dev_id: impl Into<String>) -> Option<&mut CamSettings> {
         if let Some(cam_id) = self.cam_id_by_dev_id(dev_id) {
             self.c.cameras.get_mut(&cam_id)
-        } else {
-            None
-        }
-    }
-
-    /// Get a camera's settings by its device ID
-    fn cam_by_dev_index(&self, dev_index: usize) -> Option<&CamSettings> {
-        if let Some((_, Some(cam_id))) = self.discovered_cams.get_index(dev_index) {
-            self.c.cameras.get(cam_id)
         } else {
             None
         }
@@ -138,7 +121,7 @@ impl Configurator {
 
     /// Save the Copper configuration
     pub fn save_cuconfig(&mut self) {
-        for (dev_id, curr_cam) in self.c.cameras.iter() {
+        for (cam_id, curr_cam) in self.c.cameras.iter() {
             let width = curr_cam.width.unwrap();
             let height = curr_cam.height.unwrap();
 
@@ -146,7 +129,7 @@ impl Configurator {
 
             // The camera itself
             let cam = {
-                let text_id = format!("camera_{dev_id}");
+                let text_id = format!("camera_{cam_id}");
                 let cam_id = g.get_node_id_by_name(&text_id).unwrap_or_else(|| {
                     let node = Node::new(&text_id, "CamPipeline");
                     g.add_node(node).expect("this should never fail")
@@ -155,7 +138,9 @@ impl Configurator {
 
                 // Configure the camera
                 cam.set_param("name", "A".to_owned());
-                cam.set_param("id", dev_id.to_owned());
+                if let Some(ref dev_id) = curr_cam.dev_id {
+                    cam.set_param("id", dev_id.to_owned());
+                }
                 cam.set_param("width", width);
                 cam.set_param("height", height);
 
@@ -164,7 +149,7 @@ impl Configurator {
 
             // GstBuffer -> CuImage conversion
             let gst_to_cu = {
-                let text_id = format!("gst_to_cu_{dev_id}");
+                let text_id = format!("gst_to_cu_{cam_id}");
                 let gst_to_cu_id = g.get_node_id_by_name(&text_id).unwrap_or_else(|| {
                     let node = Node::new(&text_id, "GstToCuImage");
                     g.add_node(node).expect("this should never fail")
@@ -180,7 +165,7 @@ impl Configurator {
 
             // AprilTag processing
             let apriltags = {
-                let text_id = format!("apriltags_{dev_id}");
+                let text_id = format!("apriltags_{cam_id}");
                 let apriltags_id = g.get_node_id_by_name(&text_id).unwrap_or_else(|| {
                     let node = Node::new(&text_id, "chalkydri_apriltags::AprilTags");
                     g.add_node(node).expect("this should never fail")
@@ -286,7 +271,10 @@ impl Configurator {
 
                     self.c.cameras.insert(config_name.clone(), Default::default());
                     self.c.mappings.insert(dev_id.clone(), config_name.clone());
-                    let (config_index, _) = self.discovered_cams.insert_full(dev_id, Some(config_name));
+                    let (config_index, _) = self.discovered_cams.insert_full(dev_id.clone(), Some(config_name.clone()));
+                    if let Some(ref mut cam) = self.c.cameras.get_mut(&config_name) {
+                        cam.dev_id = Some(dev_id);
+                    }
 
                     self.configure_cam_id(config_index).unwrap();
                     self.configure_cam_cap(config_index);
