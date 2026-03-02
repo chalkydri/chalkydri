@@ -30,3 +30,4 @@ indicatif = "0.18.4"
 indexmap = { version = "2.13.0", features = ["serde"] }
 sysinfo = { version = "0.38.2", default-features = false, features = ["network"] }
 turbojpeg = { version = "1.4.0", features = ["image"] }
+tracing-subscriber.workspace = true

@@ -102,6 +102,10 @@ impl Calibrator {
         self.frame_feats.len()
     }
 
+    pub fn clear(&mut self) {
+        self.frame_feats.clear();
+    }
+
     /// Calibrate
     pub fn calibrate(&mut self) -> Option<GenericModel<f64>> {
         let mut calib_res = None;

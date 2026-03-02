@@ -3,6 +3,7 @@ use std::ops::ControlFlow;
 use chalkydri_core::config::CameraSettings;
 use cu_gstreamer::CuGstBuffer;
 use cu29::prelude::*;
+use gstreamer::Structure;
 use gstreamer::{Caps, ClockTime, Device, Element, ElementFactory, Pipeline, State, prelude::*};
 use gstreamer_app::AppSink;
 
@@ -231,15 +232,22 @@ impl CamPipelineImpl {
 
             let camera = self.pipeline.by_name("camera").unwrap();
 
+            //if camera.has_property("extra-controls") {
             //let mut extra_controls = camera.property::<Structure>("extra-controls");
-            //extra_controls.set(
-            //    "auto_exposure",
-            //    if cam_config.auto_exposure { 3 } else { 1 },
-            //);
+            //if extra_controls.has_field("auto_exposure") {
+            //    extra_controls.set(
+            //        "auto_exposure",
+            //        if cam_config.auto_exposure { 3 } else { 1 },
+            //    );
+            //}
+            //if extra_controls.has_field("exposure_time_absolute") {
             //if let Some(manual_exposure) = cam_config.manual_exposure {
             //    extra_controls.set("exposure_time_absolute", &manual_exposure);
             //}
+            //}
+            //    tracing::trace!("setting extra-controls");
             //camera.set_property("extra-controls", extra_controls);
+            //}
 
             self.pipeline
                 .by_name("videoflip")
@@ -275,7 +283,7 @@ impl CuSrcTask for CamPipeline {
     type Resources<'r> = ();
     type Output<'m> = output_msg!((CuGstBuffer, CuDuration));
 
-    fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -286,10 +294,11 @@ impl CuSrcTask for CamPipeline {
             settings: Some(CameraSettings {
                 width: rc.get("width").unwrap_or(Some(1280)).unwrap(),
                 height: rc.get("height").unwrap_or(Some(720)).unwrap(),
+                format: rc.get("format").unwrap(),
                 ..Default::default()
             }),
-            auto_exposure: rc.get("auto_exposure").unwrap().unwrap_or(true),
-            //manual_exposure: rc.get("manual_exposure"),
+            auto_exposure: rc.get::<u8>("auto_exposure").unwrap().map(|val| val != 0).unwrap_or(true),
+            manual_exposure: rc.get("manual_exposure").unwrap(),
             ..Default::default()
         };
         let provider = PROVIDER.lock();
@@ -310,6 +319,7 @@ impl CuSrcTask for CamPipeline {
             self.inner = Some(pipeline);
         }
         if let Some(ref pipeline) = self.inner {
+            pipeline.update(self.cfgg.clone());
             pipeline.start_pipeline();
         }
 

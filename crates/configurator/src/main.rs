@@ -13,6 +13,7 @@ use clap::Parser;
 use color_eyre::Result;
 use cu29::config::{CuConfig, Node};
 use cu29::prelude::*;
+use cu29::reflect::GetField;
 use cu29_helpers::basic_copper_setup;
 use dialoguer::{Input, Select};
 use gstreamer::State;
@@ -24,6 +25,9 @@ mod calibration;
 mod monitor;
 use calibration::*;
 use monitor::Monitor;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
 
 #[copper_runtime(config = "../../config/calibration.ron")]
 struct App {}
@@ -37,7 +41,6 @@ pub struct ConfiguratorConfig {
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct CamSettings {
     cam_id: Option<u8>,
-    dev_id: Option<String>,
     width: Option<u32>,
     height: Option<u32>,
     calib: Option<CalibratedModel>,
@@ -121,7 +124,8 @@ impl Configurator {
 
     /// Save the Copper configuration
     pub fn save_cuconfig(&mut self) {
-        for (cam_id, curr_cam) in self.c.cameras.iter() {
+        for (dev_id, cam_id) in self.c.mappings.iter() {
+            let curr_cam = self.c.cameras.get(cam_id).unwrap();
             let width = curr_cam.width.unwrap();
             let height = curr_cam.height.unwrap();
 
@@ -138,9 +142,7 @@ impl Configurator {
 
                 // Configure the camera
                 cam.set_param("name", "A".to_owned());
-                if let Some(ref dev_id) = curr_cam.dev_id {
-                    cam.set_param("id", dev_id.to_owned());
-                }
+                cam.set_param("id", dev_id.to_owned());
                 cam.set_param("width", width);
                 cam.set_param("height", height);
 
@@ -177,12 +179,12 @@ impl Configurator {
                 // Due to GStreamer being GStreamer, can only do one camera calibration per run
                 if let Some(ref calib) = curr_cam.calib {
                     let model = calib.inner_model().clone();
-                    let calib_json = serde_json::to_string(&model).unwrap();
+                    let calib_json = serde_json::to_string_pretty(&model).unwrap();
                     apriltags.set_param("calib", calib_json);
                 }
 
                 let robot_to_cam_json =
-                    serde_json::to_string(&curr_cam.cam_offsets.unwrap()).unwrap();
+                    serde_json::to_string_pretty(&curr_cam.cam_offsets.unwrap()).unwrap();
                 apriltags.set_param::<String>("robot_to_cam", robot_to_cam_json);
 
                 if let Some(cam_id) = curr_cam.cam_id {
@@ -277,9 +279,6 @@ impl Configurator {
                     let (config_index, _) = self
                         .discovered_cams
                         .insert_full(dev_id.clone(), Some(config_name.clone()));
-                    if let Some(ref mut cam) = self.c.cameras.get_mut(&config_name) {
-                        cam.dev_id = Some(dev_id);
-                    }
 
                     self.configure_cam_id(config_index).unwrap();
                     self.configure_cam_cap(config_index);
@@ -351,14 +350,53 @@ impl Configurator {
         calib_node.set_param("width", width);
         calib_node.set_param("height", height);
 
-        let mut app = AppBuilder::new()
-            .with_context(&copper_ctx)
-            .with_config(config)
-            .build()
-            .unwrap();
+        //{
+        //    let mut app = AppBuilder::new()
+        //        .with_context(&copper_ctx)
+        //        .with_config(config.clone())
+        //        .build()
+        //        .unwrap();
 
-        app.start_all_tasks().unwrap();
+        //    app.start_all_tasks().unwrap();
+        //    for _ in 0..5 {
+        //    app.run_one_iteration().unwrap();
+        //    }
+        //    app.stop_all_tasks().unwrap();
+        //}
+
+        //while let Some(exposure) = Input::<String>::new().with_prompt("Set manual exposure").allow_empty(true).interact_text().ok() {
+        //    if let Some(exposure) = exposure.parse::<u64>().ok() {
+        //    let g = config.get_graph_mut(None).unwrap();
+        //    let cam_node = g
+        //        .get_node_mut(g.get_node_id_by_name("camera").unwrap())
+        //        .unwrap();
+        //    cam_node.set_param("auto_exposure", 0);
+        //    cam_node.set_param("manual_exposure", exposure);
+        //    } else {
+        //        break;
+        //    }
+        //    let mut app = AppBuilder::new()
+        //        .with_context(&copper_ctx)
+        //        .with_config(config.clone())
+        //        .build()
+        //        .unwrap();
+
+        //    app.start_all_tasks().unwrap();
+        //    calibrator.process();
+        //    app.run_one_iteration().unwrap();
+        //    app.stop_all_tasks().unwrap();
+        //}
+
+        //calibrator.clear();
+
         println!("   > running calibration...");
+        let mut app = AppBuilder::new()
+                .with_context(&copper_ctx)
+                .with_config(config.clone())
+                .build()
+                .unwrap();
+
+            app.start_all_tasks().unwrap();
 
         let progress = ProgressBar::new(calibration_frames);
         // Run until done
@@ -371,7 +409,7 @@ impl Configurator {
 
         if let Some(model) = model {
             cam.calib = Some(CalibratedModel::from_str(
-                serde_json::to_string(&model).unwrap(),
+                serde_json::to_string_pretty(&model).unwrap(),
             ));
         }
 
@@ -543,7 +581,7 @@ impl Configurator {
                 },
             )),
         };
-        let serialized_config = serde_json::to_string(&config);
+        let serialized_config = serde_json::to_string_pretty(&config);
         let mut f = OpenOptions::new()
             .create(true)
             .write(true)
@@ -571,7 +609,11 @@ pub struct CmdCalibrate {
 }
 
 fn main() -> Result<()> {
-    color_eyre::install()?;
+    //color_eyre::install()?;
+
+    let filter = EnvFilter::from_default_env();
+    let layer = tracing_subscriber::fmt::layer().with_filter(filter);
+    tracing_subscriber::registry().with(layer).init();
 
     let cmd = Command::parse();
 
