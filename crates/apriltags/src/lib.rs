@@ -179,6 +179,7 @@ pub struct AprilTags {
     cam_id: u8,
     #[reflect(ignore)]
     robot_to_cam: Option<Iso3>,
+    yaw: f64,
 }
 
 #[derive(Clone, Copy, Default, Serialize, Deserialize)]
@@ -264,6 +265,7 @@ impl CuSinkTask for AprilTags {
                 cam_model,
                 last_time: None,
                 robot_to_cam: Some(robot_to_cam),
+                yaw: robot_to_cam_offsets.yaw,
             });
         }
         Ok(Self {
@@ -278,6 +280,7 @@ impl CuSinkTask for AprilTags {
             cam_model: GenericModel::OpenCVModel5(OpenCVModel5::zeros()),
             last_time: None,
             robot_to_cam: None,
+            yaw: 0.0,
         })
     }
 
@@ -323,7 +326,7 @@ impl CuSinkTask for AprilTags {
                         &world_pts,
                         &camera_pts,
                         &self.robot_to_cam.unwrap_or_else(|| Default::default()),
-                        self.comm.gyro_angle().unwrap_or(0.0),
+                        self.comm.gyro_angle().unwrap_or(0.0) + self.yaw.to_radians(),
                         SIGN_FLIP_CONST,
                     )
                 {

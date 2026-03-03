@@ -304,7 +304,7 @@ impl SqPnP {
             .rotation
             .to_rotation_matrix()
             .matrix()
-            .column(0)
+            .column(2)
             .into_owned();
 
         let (rot_world_to_cam, trans_world_to_cam, pure_energy) =
@@ -315,12 +315,12 @@ impl SqPnP {
 
         let std_devs = self.compute_std_devs(pure_energy, distance, n_tags);
 
-        let t_cw = Isometry3::from_parts(
+        let world_to_cam = Isometry3::from_parts(
             nalgebra::Translation3::from(trans_world_to_cam),
             nalgebra::UnitQuaternion::from_rotation_matrix(&rot_world_to_cam),
         );
 
-        let t_world_robot = t_cw.inverse() * *robot_to_cam;
+        let t_world_robot = world_to_cam * (*robot_to_cam).inverse();
 
         let robot_pos = t_world_robot.translation.vector;
         let robot_rot = t_world_robot.rotation.to_rotation_matrix();
