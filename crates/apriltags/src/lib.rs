@@ -42,7 +42,6 @@ use crate::field_layout::AprilTagFieldLayout;
 const MAX_DETECTIONS: usize = 16;
 
 // Defaults
-const TAG_SIZE: f64 = 0.14;
 const FAMILY: &str = "tag36h11";
 
 #[derive(Default, Debug, Clone, Encode)]
@@ -321,37 +320,42 @@ impl CuSinkTask for AprilTags {
                     }
                 }
 
-                if let Some((cam_to_world_rotation, cam_to_world_translation, std_dev)) =
-                    self.solver.solve_robot_pose(
-                        &world_pts,
-                        &camera_pts,
-                        &self.robot_to_cam.unwrap_or_else(|| Default::default()),
-                        self.comm.gyro_angle().unwrap_or(0.0) + self.yaw.to_radians(),
-                        SIGN_FLIP_CONST,
-                    )
-                {
-                    let pose = RobotPose {
-                        x: cam_to_world_translation[0],
-                        y: cam_to_world_translation[1],
-                        rot: cam_to_world_rotation.euler_angles().2,
-                    };
-                    let uncertainty = VisionUncertainty {
-                        x: std_dev[0],
-                        y: std_dev[1],
-                        rot: std_dev[2],
-                    };
+                if let Some(gyro_angle) = self.comm.gyro_angle() {
+                    if let Some((cam_to_world_rotation, cam_to_world_translation, std_dev)) =
+                        self.solver.solve_robot_pose(
+                            &world_pts,
+                            &camera_pts,
+                            &self.robot_to_cam.unwrap_or_else(|| Default::default()),
+                            gyro_angle + self.yaw.to_radians(),
+                            SIGN_FLIP_CONST,
+                        )
+                    {
+                        let pose = RobotPose {
+                            x: cam_to_world_translation[0],
+                            y: cam_to_world_translation[1],
+                            rot: cam_to_world_rotation.euler_angles().2,
+                        };
+                        let uncertainty = VisionUncertainty {
+                            x: std_dev[0],
+                            y: std_dev[1],
+                            rot: std_dev[2],
+                        };
 
-                    let ts = clock.now().as_micros() - time.as_micros();
-                    self.comm.publish(
-                        self.cam_id,
-                        detections.len().try_into().unwrap_or(u8::MAX),
-                        ts,
-                        pose.clone(),
-                        uncertainty.clone(),
-                    );
-                    tracing::debug!("detected pose: {pose:?}");
+                        let ts = clock.now().as_micros() - time.as_micros();
+                        self.comm.publish(
+                            self.cam_id,
+                            detections.len().try_into().unwrap_or(u8::MAX),
+                            ts,
+                            pose.clone(),
+                            uncertainty.clone(),
+                        );
+                        tracing::debug!("detected pose: {pose:?}");
+                        return Ok(());
+                    }
                 }
-            } else {
+            }
+
+            }
                 let timey_time = clock.now().as_millis();
                 let ts = clock.now().as_micros() - time.as_micros();
                 if self.last_time.is_none() || (timey_time - self.last_time.unwrap()) > 5 {
@@ -364,8 +368,6 @@ impl CuSinkTask for AprilTags {
                     );
                     self.last_time = Some(timey_time);
                 }
-            }
-        }
 
         Ok(())
     }

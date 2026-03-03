@@ -1,6 +1,8 @@
 #![feature(const_heap)]
 
-use nalgebra::{Isometry3, Matrix3x4, Point3, Rotation3, SMatrix, SVector, SimdRealField};
+use nalgebra::{
+    Isometry3, Matrix3x4, Point3, Rotation3, SMatrix, SVector, SimdRealField, UnitQuaternion,
+};
 use std::{f64::consts::PI, ops::AddAssign};
 
 // --- Type Definitions ---
@@ -221,17 +223,19 @@ impl SqPnP {
             return Vec3::new(f64::MAX, f64::MAX, f64::MAX);
         }
 
-        let distance_multiplier = 1.0 + (distance / TAG_SIZE);
+        let d_ratio = distance / TAG_SIZE;
+        let distance_multiplier = 1.0 + (d_ratio * d_ratio);
 
-        let base_xy_std = rms_error * distance_multiplier;
+        let tag_penalty = if n_tags <= 2 { 3.0 } else { 1.0 };
+
+        let base_xy_std = rms_error * distance_multiplier * tag_penalty;
         let xy_std = (base_xy_std / (n_tags as f64).sqrt()) * XY_STD_DEV_SCALAR;
-        let xy_std = xy_std.clamp(0.01, 10.0);
+        let xy_std = xy_std.clamp(0.01, f64::MAX);
 
         let theta_std = {
-            let base_theta_std = rms_error / TAG_SIZE;
-            let val = (base_theta_std * distance_multiplier / (n_tags as f64).sqrt())
-                * THETA_STD_DEV_SCALAR;
-            val.clamp(0.05, PI)
+            let base_theta_std = (rms_error * distance_multiplier * tag_penalty) / TAG_SIZE;
+            let val = (base_theta_std / (n_tags as f64).sqrt()) * THETA_STD_DEV_SCALAR;
+            val.clamp(0.01, f64::MAX)
         };
 
         Vec3::new(xy_std, xy_std, theta_std)
@@ -241,7 +245,7 @@ impl SqPnP {
         &mut self,
         points_isometry: &[Isometry3<f64>],
         points_2d: &[Vec3],
-    ) -> Option<(Rot3, Vec3, f64)> {
+    ) -> Option<Vec<(Rot3, Vec3, f64)>> {
         self.corner_points_from_center(points_isometry);
 
         if self.buffer.len() < 3 || self.buffer.len() != points_2d.len() {
@@ -256,8 +260,7 @@ impl SqPnP {
 
         self.solve_rotation_candidates(&sys.omega);
 
-        let mut best_result: Option<(Rot3, Vec3, f64)> = None;
-        let mut best_score = f64::MAX;
+        let mut results: Vec<(Rot3, Vec3, f64)> = Vec::new();
 
         for (r_vec, penalized_energy) in &self.candidates {
             let r_mat = Mat3::from_column_slice(r_vec.as_slice());
@@ -269,21 +272,13 @@ impl SqPnP {
                 p_cam.z > 0.0
             });
 
-            if !all_in_front {
-                continue;
-            }
-
-            if *penalized_energy < best_score {
-                best_score = *penalized_energy;
-
-                let pure_geometric_energy = r_vec.dot(&(sys.omega * r_vec));
-
+            if all_in_front {
                 let rot = Rot3::from_matrix(&r_mat);
-                best_result = Some((rot, t, pure_geometric_energy));
+                results.push((rot, t, *penalized_energy));
             }
         }
 
-        best_result
+        Some(results)
     }
 
     pub fn solve_robot_pose(
@@ -296,69 +291,59 @@ impl SqPnP {
     ) -> Option<(Rot3, Vec3, Vec3)> {
         self.gyro_cos = gyro.cos();
         self.gyro_sin = gyro.sin();
-        self.sign_change_error = sign_change_error;
-        self.buffer.clear();
-        self.candidates.clear();
 
-        self.fwd_in_cam = robot_to_cam
-            .rotation
-            .to_rotation_matrix()
-            .matrix()
-            .column(0)
-            .into_owned();
-
-        let (rot_world_to_cam, trans_world_to_cam, pure_energy) =
-            self.solve(points_isometry, points_2d)?;
-
-        let distance = trans_world_to_cam.norm();
+        let candidates = self.solve(points_isometry, points_2d)?;
         let n_tags = points_isometry.len();
 
-        let std_devs = self.compute_std_devs(pure_energy, distance, n_tags);
+        let mut best_pose = None;
+        let mut best_score = f64::MAX;
+        let mut best_std_devs = Vec3::zeros();
 
-        let world_to_cam = Isometry3::from_parts(
-            nalgebra::Translation3::from(trans_world_to_cam),
-            nalgebra::UnitQuaternion::from_rotation_matrix(&rot_world_to_cam),
-        );
+        let expected_fwd = Vec3::new(self.gyro_cos, self.gyro_sin, 0.0);
 
-        let t_world_robot = world_to_cam.inverse() * (*robot_to_cam);
+        for (world_to_cam_rot, world_to_cam_trans, penalized_energy) in candidates {
+            let world_to_cam_iso =
+                Iso3::from_parts(world_to_cam_trans.into(), world_to_cam_rot.into());
+            let world_to_cam_iso_inv = world_to_cam_iso.inverse();
+            let world_to_cam_inv_rot_mat =
+                world_to_cam_iso_inv.rotation.to_rotation_matrix().matrix().clone();
 
-        let robot_pos = t_world_robot.translation.vector;
-        let robot_rot = t_world_robot.rotation.to_rotation_matrix();
-        let robot_rot_mat = robot_rot.matrix();
+            let world_to_cam_iso_nwu = Iso3::from_parts(
+                world_to_cam_iso_inv.translation,
+                UnitQuaternion::from_rotation_matrix(&Rot3::from_matrix(&Mat3::from_columns(&[
+                    world_to_cam_inv_rot_mat.column(2).into_owned(),
+                    -world_to_cam_inv_rot_mat.column(0).into_owned(),
+                    -world_to_cam_inv_rot_mat.column(1).into_owned(),
+                ]))),
+            );
 
-        let tag_centroid = points_isometry
-            .iter()
-            .fold(Vec3::zeros(), |acc, iso| acc + iso.translation.vector)
-            / n_tags as f64;
+            let world_to_robot_iso = world_to_cam_iso_nwu * robot_to_cam.inverse();
+            let world_to_robot_rot = world_to_robot_iso.rotation.to_rotation_matrix();
+            let world_to_robot_trans = world_to_robot_iso.translation.vector;
 
-        let vision_fwd_x = robot_rot_mat[(0, 0)];
-        let vision_fwd_y = robot_rot_mat[(1, 0)];
-        let vision_yaw = vision_fwd_y.simd_atan2(vision_fwd_x);
+            let est_fwd = world_to_robot_rot * Vec3::new(1.0, 0.0, 0.0);
+            let fwd_dot = est_fwd.dot(&expected_fwd);
 
-        let mut delta_yaw = (gyro - vision_yaw) % (2.0 * PI);
-        if delta_yaw > PI {
-            delta_yaw -= 2.0 * PI;
-        } else if delta_yaw < -PI {
-            delta_yaw += 2.0 * PI;
+            if sign_change_error > 0.0 && fwd_dot < 0.707 {
+                continue;
+            }
+
+            let yaw_error_metric = (1.0 - fwd_dot).max(0.0);
+            let penalized_score = penalized_energy + sign_change_error * yaw_error_metric * 1000.0;
+
+            if penalized_score < best_score {
+                best_score = penalized_score;
+                best_pose = Some((world_to_robot_rot, world_to_robot_trans));
+                let distance = world_to_cam_trans.norm();
+                best_std_devs = self.compute_std_devs(penalized_energy, distance, n_tags);
+            }
         }
 
-        let delta_deg = delta_yaw.abs().to_degrees();
-        let mut weight = (delta_deg / MAX_GYRO_DELTA).clamp(0.0, 1.0);
-        weight = weight * weight * (3.0 - 2.0 * weight);
-
-        let applied_delta_yaw = delta_yaw * weight;
-
-        let cos_dt = applied_delta_yaw.cos();
-        let sin_dt = applied_delta_yaw.sin();
-
-        let rot_z = Mat3::new(cos_dt, -sin_dt, 0.0, sin_dt, cos_dt, 0.0, 0.0, 0.0, 1.0);
-        let rot_z_rot3 = Rotation3::from_matrix(&rot_z);
-
-        let pos_relative_to_tag = robot_pos - tag_centroid;
-        let pivoted_pos = tag_centroid + (rot_z * pos_relative_to_tag);
-        let pivoted_robot_rot = rot_z_rot3 * robot_rot;
-
-        Some((pivoted_robot_rot, pivoted_pos, std_devs))
+        if let Some((rot, trans)) = best_pose {
+            Some((rot, trans, best_std_devs))
+        } else {
+            None
+        }
     }
 
     fn corner_points_from_center(&mut self, isometry: &[Iso3]) -> () {
