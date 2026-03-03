@@ -338,8 +338,7 @@ impl SqPnP {
         let mut delta_yaw = (gyro - vision_yaw) % (2.0 * PI);
         if delta_yaw > PI {
             delta_yaw -= 2.0 * PI;
-        }
-        if delta_yaw < -PI {
+        } else if delta_yaw < -PI {
             delta_yaw += 2.0 * PI;
         }
 
