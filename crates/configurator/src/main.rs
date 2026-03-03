@@ -391,12 +391,12 @@ impl Configurator {
 
         println!("   > running calibration...");
         let mut app = AppBuilder::new()
-                .with_context(&copper_ctx)
-                .with_config(config.clone())
-                .build()
-                .unwrap();
+            .with_context(&copper_ctx)
+            .with_config(config.clone())
+            .build()
+            .unwrap();
 
-            app.start_all_tasks().unwrap();
+        app.start_all_tasks().unwrap();
 
         let progress = ProgressBar::new(calibration_frames);
         // Run until done

@@ -297,7 +297,11 @@ impl CuSrcTask for CamPipeline {
                 format: rc.get("format").unwrap(),
                 ..Default::default()
             }),
-            auto_exposure: rc.get::<u8>("auto_exposure").unwrap().map(|val| val != 0).unwrap_or(true),
+            auto_exposure: rc
+                .get::<u8>("auto_exposure")
+                .unwrap()
+                .map(|val| val != 0)
+                .unwrap_or(true),
             manual_exposure: rc.get("manual_exposure").unwrap(),
             ..Default::default()
         };
