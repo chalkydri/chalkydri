@@ -297,6 +297,8 @@ impl SqPnP {
         self.gyro_cos = gyro.cos();
         self.gyro_sin = gyro.sin();
         self.sign_change_error = sign_change_error;
+        self.buffer.clear();
+        self.candidates.clear();
 
         self.fwd_in_cam = robot_to_cam
             .rotation
@@ -335,10 +337,10 @@ impl SqPnP {
 
         let mut delta_yaw = (gyro - vision_yaw) % (2.0 * PI);
         if delta_yaw > PI {
-            delta_yaw -= PI;
+            delta_yaw -= 2.0 * PI;
         }
         if delta_yaw < -PI {
-            delta_yaw += PI;
+            delta_yaw += 2.0 * PI;
         }
 
         let delta_deg = delta_yaw.abs().to_degrees();
@@ -364,17 +366,16 @@ impl SqPnP {
         const S: f64 = CORNER_DISTANCE;
 
         #[rustfmt::skip]
-        const CORNER_POINTS_MAT: [Vec3; 4] = [
-            Vec3::new(0.0, -S, -S),
-            Vec3::new(0.0,  S, -S),
-            Vec3::new(0.0,  S,  S),
-            Vec3::new(0.0, -S,  S),
+        const CORNER_POINTS_MAT: [Pnt3; 4] = [
+            Pnt3::new(0.0, -S, -S),
+            Pnt3::new(0.0,  S, -S),
+            Pnt3::new(0.0,  S,  S),
+            Pnt3::new(0.0, -S,  S),
         ];
 
-        self.buffer.clear();
         isometry.iter().for_each(|iso: &Iso3| {
             self.buffer
-                .extend(CORNER_POINTS_MAT.iter().map(|c| iso * c));
+                .extend(CORNER_POINTS_MAT.iter().map(|c| (iso * c).coords));
         });
     }
 
