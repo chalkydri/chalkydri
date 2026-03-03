@@ -354,20 +354,19 @@ impl CuSinkTask for AprilTags {
                     }
                 }
             }
-
-            }
-                let timey_time = clock.now().as_millis();
-                let ts = clock.now().as_micros() - time.as_micros();
-                if self.last_time.is_none() || (timey_time - self.last_time.unwrap()) > 5 {
-                    self.comm.publish(
-                        self.cam_id,
-                        0,
-                        ts,
-                        RobotPose::default(),
-                        VisionUncertainty::default(),
-                    );
-                    self.last_time = Some(timey_time);
-                }
+        }
+        let timey_time = clock.now().as_millis();
+        let ts = clock.now().as_micros() - time.as_micros();
+        if self.last_time.is_none() || (timey_time - self.last_time.unwrap()) > 5 {
+            self.comm.publish(
+                self.cam_id,
+                0,
+                ts,
+                RobotPose::default(),
+                VisionUncertainty::default(),
+            );
+            self.last_time = Some(timey_time);
+        }
 
         Ok(())
     }

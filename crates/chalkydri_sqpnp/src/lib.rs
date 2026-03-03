@@ -305,8 +305,11 @@ impl SqPnP {
             let world_to_cam_iso =
                 Iso3::from_parts(world_to_cam_trans.into(), world_to_cam_rot.into());
             let world_to_cam_iso_inv = world_to_cam_iso.inverse();
-            let world_to_cam_inv_rot_mat =
-                world_to_cam_iso_inv.rotation.to_rotation_matrix().matrix().clone();
+            let world_to_cam_inv_rot_mat = world_to_cam_iso_inv
+                .rotation
+                .to_rotation_matrix()
+                .matrix()
+                .clone();
 
             let world_to_cam_iso_nwu = Iso3::from_parts(
                 world_to_cam_iso_inv.translation,
