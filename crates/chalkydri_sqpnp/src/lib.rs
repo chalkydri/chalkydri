@@ -304,7 +304,7 @@ impl SqPnP {
             .rotation
             .to_rotation_matrix()
             .matrix()
-            .column(2)
+            .column(0)
             .into_owned();
 
         let (rot_world_to_cam, trans_world_to_cam, pure_energy) =
@@ -320,7 +320,7 @@ impl SqPnP {
             nalgebra::UnitQuaternion::from_rotation_matrix(&rot_world_to_cam),
         );
 
-        let t_world_robot = world_to_cam * (*robot_to_cam).inverse();
+        let t_world_robot = world_to_cam.inverse() * (*robot_to_cam);
 
         let robot_pos = t_world_robot.translation.vector;
         let robot_rot = t_world_robot.rotation.to_rotation_matrix();
