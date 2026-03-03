@@ -315,11 +315,13 @@ impl CuSrcTask for CamPipeline {
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         if let Some(dev) = PROVIDER.lock().get_by_id(self.cfgg.id.clone()) {
-            let pipeline = CamPipelineImpl::new(dev, self.cfgg.clone());
+            let dev_ = dev.clone();
+            drop(dev);
+            let pipeline = CamPipelineImpl::new(dev_, self.cfgg.clone());
             self.inner = Some(pipeline);
         }
         if let Some(ref pipeline) = self.inner {
-            pipeline.update(self.cfgg.clone());
+            //pipeline.update(self.cfgg.clone());
             pipeline.start_pipeline();
         }
 

@@ -1,6 +1,6 @@
 use std::sync::{Arc, LazyLock};
 
-use chalkydri_core::prelude::Mutex;
+use chalkydri_core::prelude::{Mutex, RwLock};
 use cu29::{
     bundle_resources,
     cutask::{CuMsgPayload, CuSrcTask, Freezable},
@@ -131,8 +131,8 @@ impl CamProvider for V4l2Provider {
         None
     }
     fn start(&self) {
-        self.register_handler();
         if !self.inner().is_started() {
+            self.register_handler();
             self.inner().start().unwrap();
         }
     }

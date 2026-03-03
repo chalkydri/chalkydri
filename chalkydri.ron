@@ -1,13 +1,81 @@
 (
     tasks: [
         (
-            id: "camera_laptop",
+            id: "camera_back",
             type: "CamPipeline",
             config: {
                 "name": "A",
-                "id": "pci-0000:00:14.0-usb-0:11:1.0",
-                "height": 720,
+                "width": 1600,
+                "height": 1304,
+                "id": "pci-0000:00:14.0-usb-0:4:1.0",
+            },
+            missions: None,
+        ),
+        (
+            id: "gst_to_cu_back",
+            type: "GstToCuImage",
+            config: {
+                "width": 1600,
+                "fourcc": "GREY",
+                "height": 1304,
+            },
+            missions: None,
+        ),
+        (
+            id: "apriltags_back",
+            type: "chalkydri_apriltags::AprilTags",
+            config: {
+                "cam_id": 1,
+                "calib": "{\n  \"OpenCVModel5\": {\n    \"fx\": 1368.3343056383071,\n    \"fy\": 1368.513346806007,\n    \"cx\": 784.1021700594862,\n    \"cy\": 655.1967162171935,\n    \"k1\": -0.03428799012079279,\n    \"k2\": -0.0021223103005884106,\n    \"p1\": -0.001,\n    \"p2\": -0.00014085919680638913,\n    \"k3\": 0.015316405591806586,\n    \"width\": 1600,\n    \"height\": 1304\n  }\n}",
+                "robot_to_cam": "{\n  \"roll\": 0.0,\n  \"pitch\": 0.0,\n  \"yaw\": 180.0,\n  \"x\": 0.0,\n  \"y\": 0.0,\n  \"z\": 0.0\n}",
+            },
+            resources: {
+                "comm": "comm.comm",
+            },
+            missions: None,
+        ),
+        (
+            id: "camera_front",
+            type: "CamPipeline",
+            config: {
+                "height": 1304,
+                "name": "A",
+                "id": "pci-0000:00:14.0-usb-0:1:1.0",
+                "width": 1600,
+            },
+            missions: None,
+        ),
+        (
+            id: "gst_to_cu_front",
+            type: "GstToCuImage",
+            config: {
+                "width": 1600,
+                "height": 1304,
+                "fourcc": "GREY",
+            },
+            missions: None,
+        ),
+        (
+            id: "apriltags_front",
+            type: "chalkydri_apriltags::AprilTags",
+            config: {
+                "calib": "{\n  \"OpenCVModel5\": {\n    \"fx\": 1109.905851168588,\n    \"fy\": 1111.4062341680865,\n    \"cx\": 809.9330270412175,\n    \"cy\": 727.2376385832017,\n    \"k1\": -0.43547124496290274,\n    \"k2\": 0.21226189066302817,\n    \"p1\": 0.000679323564450314,\n    \"p2\": -0.0002344072568342694,\n    \"k3\": -0.053749870603541826,\n    \"width\": 1600,\n    \"height\": 1304\n  }\n}",
+                "robot_to_cam": "{\n  \"roll\": 0.0,\n  \"pitch\": 0.0,\n  \"yaw\": 0.0,\n  \"x\": 0.0,\n  \"y\": 0.0,\n  \"z\": 0.0\n}",
+                "cam_id": 0,
+            },
+            resources: {
+                "comm": "comm.comm",
+            },
+            missions: None,
+        ),
+        (
+            id: "camera_laptop",
+            type: "CamPipeline",
+            config: {
                 "width": 1280,
+                "height": 720,
+                "id": "pci-0000:00:14.0-usb-0:11:1.0",
+                "name": "A",
             },
             missions: None,
         ),
@@ -16,8 +84,8 @@
             type: "GstToCuImage",
             config: {
                 "fourcc": "GREY",
-                "height": 720,
                 "width": 1280,
+                "height": 720,
             },
             missions: None,
         ),
@@ -25,9 +93,9 @@
             id: "apriltags_laptop",
             type: "chalkydri_apriltags::AprilTags",
             config: {
-                "robot_to_cam": "{\n  \"roll\": 0.0,\n  \"pitch\": 0.0,\n  \"yaw\": 0.0,\n  \"x\": 0.0,\n  \"y\": 0.0,\n  \"z\": 0.0\n}",
                 "cam_id": 4,
                 "calib": "{\n  \"OpenCVModel5\": {\n    \"fx\": 898.994806807896,\n    \"fy\": 897.9156469180645,\n    \"cx\": 627.0698256482966,\n    \"cy\": 357.65273282451244,\n    \"k1\": -0.18595770381253796,\n    \"k2\": 0.4406013374445432,\n    \"p1\": -0.001,\n    \"p2\": -0.001,\n    \"k3\": -0.3704732841830049,\n    \"width\": 1280,\n    \"height\": 720\n  }\n}",
+                "robot_to_cam": "{\n  \"roll\": 0.0,\n  \"pitch\": 0.0,\n  \"yaw\": 0.0,\n  \"x\": 0.0,\n  \"y\": 0.0,\n  \"z\": 0.0\n}",
             },
             resources: {
                 "comm": "comm.comm",
@@ -43,6 +111,30 @@
     ],
     bridges: None,
     cnx: [
+        (
+            src: "camera_back",
+            dst: "gst_to_cu_back",
+            msg: "(cu_gstreamer::CuGstBuffer, CuDuration)",
+            missions: None,
+        ),
+        (
+            src: "gst_to_cu_back",
+            dst: "apriltags_back",
+            msg: "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)",
+            missions: None,
+        ),
+        (
+            src: "camera_front",
+            dst: "gst_to_cu_front",
+            msg: "(cu_gstreamer::CuGstBuffer, CuDuration)",
+            missions: None,
+        ),
+        (
+            src: "gst_to_cu_front",
+            dst: "apriltags_front",
+            msg: "(cu_sensor_payloads::CuImage<Vec<u8>>, CuDuration)",
+            missions: None,
+        ),
         (
             src: "camera_laptop",
             dst: "gst_to_cu_laptop",
