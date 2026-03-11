@@ -1,0 +1,14 @@
+[Unit]
+Description=Chalkydri vision system
+After=network.target
+
+[Service]
+WorkingDirectory=/home/ubuntu/chalkydri
+ExecStart=/home/ubuntu/chalkydri/target/release/chalkydri
+Type=simple
+Restart=always
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=default.target
+RequiredBy=network.target
