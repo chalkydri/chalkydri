@@ -360,6 +360,39 @@ impl SqPnP {
         Some((pivoted_robot_rot, pivoted_pos, std_devs))
     }
 
+    pub fn create_solver_camera_transform(
+        fwd_m: f64,
+        left_m: f64,
+        up_m: f64,
+        roll_deg: f64,
+        pitch_deg: f64,
+        yaw_deg: f64,
+    ) -> Isometry3<f64> {
+        let nwu_translation = Translation3::new(fwd_m, left_m, up_m);
+        
+        let nwu_rotation = UnitQuaternion::from_euler_angles(
+            roll_deg.to_radians(),
+            pitch_deg.to_radians(),
+            yaw_deg.to_radians(),
+        );
+        
+        let robot_pose_of_cam_nwu = Isometry3::from_parts(nwu_translation, nwu_rotation);
+
+        let nwu_to_cv_rot = Rotation3::from_matrix_unchecked(Matrix3::new(
+            0.0,  0.0,  1.0,
+            -1.0,  0.0,  0.0,
+            0.0, -1.0,  0.0,
+        ));
+        
+        let nwu_to_cv = Isometry3::from_parts(
+            Translation3::identity(), 
+            UnitQuaternion::from_rotation_matrix(&nwu_to_cv_rot)
+        );
+
+        (robot_pose_of_cam_nwu * nwu_to_cv).inverse()
+    }
+
+
     fn corner_points_from_center(&mut self, isometry: &[Iso3]) -> () {
         const S: f64 = CORNER_DISTANCE;
 
