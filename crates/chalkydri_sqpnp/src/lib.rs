@@ -1,7 +1,7 @@
 #![feature(const_heap)]
 
 use nalgebra::{
-    Isometry3, Matrix3x4, Point3, Rotation3, SMatrix, SVector, SimdRealField, UnitQuaternion,
+    Isometry3, Matrix3x4, Point3, Rotation3, SMatrix, SVector, SimdRealField, Translation3, UnitQuaternion
 };
 use uom::si::{f64::Length, length::{centimeter, meter}};
 use std::{f64::consts::PI, ops::AddAssign, sync::LazyLock};
@@ -250,7 +250,7 @@ impl SqPnP {
         let xy_std = xy_std.clamp(0.01, f64::MAX);
 
         let theta_std = {
-            let base_theta_std = (rms_error * distance_multiplier * tag_penalty) / TAG_SIZE;
+            let base_theta_std = (rms_error * distance_multiplier * tag_penalty) / TAG_SIZE.get::<meter>();
             let val = (base_theta_std / (n_tags as f64).sqrt()) * THETA_STD_DEV_SCALAR;
             val.clamp(0.01, f64::MAX)
         };
@@ -373,7 +373,7 @@ impl SqPnP {
         roll_deg: f64,
         pitch_deg: f64,
         yaw_deg: f64,
-    ) -> Isometry3<f64> {
+    ) -> Iso3 {
         let nwu_translation = Translation3::new(fwd_m, left_m, up_m);
         
         let nwu_rotation = UnitQuaternion::from_euler_angles(
@@ -384,7 +384,7 @@ impl SqPnP {
         
         let robot_pose_of_cam_nwu = Isometry3::from_parts(nwu_translation, nwu_rotation);
 
-        let nwu_to_cv_rot = Rotation3::from_matrix_unchecked(Matrix3::new(
+        let nwu_to_cv_rot = Rotation3::from_matrix_unchecked(Mat3::new(
             0.0,  0.0,  1.0,
             -1.0,  0.0,  0.0,
             0.0, -1.0,  0.0,
