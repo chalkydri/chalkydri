@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 nalgebra = "0.34.1"
+uom = "0.38.0"

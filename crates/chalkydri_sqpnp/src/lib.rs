@@ -3,7 +3,8 @@
 use nalgebra::{
     Isometry3, Matrix3x4, Point3, Rotation3, SMatrix, SVector, SimdRealField, UnitQuaternion,
 };
-use std::{f64::consts::PI, ops::AddAssign};
+use uom::si::{f64::Length, length::{centimeter, meter}};
+use std::{f64::consts::PI, ops::AddAssign, sync::LazyLock};
 
 // --- Type Definitions ---
 pub type Mat3 = SMatrix<f64, 3, 3>;
@@ -29,8 +30,24 @@ const MAX_TRUSTABLE_RMS: f64 = 0.1;
 const MAX_GYRO_DELTA: f64 = 30.0;
 
 // 2026 tag size in meters
-const TAG_SIZE: f64 = 0.1651;
-const CORNER_DISTANCE: f64 = TAG_SIZE / 2.0;
+static TAG_SIZE: LazyLock<Length> = LazyLock::new(|| {
+    Length::new::<centimeter>(16.51)
+});
+static CORNER_DISTANCE: LazyLock<Length> = LazyLock::new(|| {
+    *TAG_SIZE / 2.0
+});
+
+#[rustfmt::skip]
+static CORNER_POINTS_MAT: LazyLock<[Pnt3; 4]> = LazyLock::new(|| {
+    let s: f64 = (*CORNER_DISTANCE).get::<meter>();
+
+    [
+        Pnt3::new(0.0, -s, -s),
+        Pnt3::new(0.0,  s, -s),
+        Pnt3::new(0.0,  s,  s),
+        Pnt3::new(0.0, -s,  s),
+    ]
+});
 
 #[inline(always)]
 fn nearest_so3(r_vec: &Vec9) -> Option<Vec9> {
@@ -215,7 +232,7 @@ impl SqPnP {
         self
     }
 
-    fn compute_std_devs(&self, pure_geometric_energy: f64, distance: f64, n_tags: usize) -> Vec3 {
+    fn compute_std_devs(&self, pure_geometric_energy: f64, distance: Length, n_tags: usize) -> Vec3 {
         let n_points = (n_tags * 4) as f64;
         let rms_error = (pure_geometric_energy / n_points).sqrt();
 
@@ -223,7 +240,7 @@ impl SqPnP {
             return Vec3::new(f64::MAX, f64::MAX, f64::MAX);
         }
 
-        let d_ratio = distance / TAG_SIZE;
+        let d_ratio = distance.get::<meter>() / TAG_SIZE.get::<meter>();
         let distance_multiplier = 1.0 + (d_ratio * d_ratio);
 
         let tag_penalty = if n_tags <= 2 { 3.0 } else { 1.0 };
@@ -338,7 +355,7 @@ impl SqPnP {
                 best_score = penalized_score;
                 best_pose = Some((world_to_robot_rot, world_to_robot_trans));
                 let distance = world_to_cam_trans.norm();
-                best_std_devs = self.compute_std_devs(penalized_energy, distance, n_tags);
+                best_std_devs = self.compute_std_devs(penalized_energy, Length::new::<meter>(distance), n_tags);
             }
         }
 
@@ -350,16 +367,6 @@ impl SqPnP {
     }
 
     fn corner_points_from_center(&mut self, isometry: &[Iso3]) -> () {
-        const S: f64 = CORNER_DISTANCE;
-
-        #[rustfmt::skip]
-        const CORNER_POINTS_MAT: [Pnt3; 4] = [
-            Pnt3::new(0.0, -S, -S),
-            Pnt3::new(0.0,  S, -S),
-            Pnt3::new(0.0,  S,  S),
-            Pnt3::new(0.0, -S,  S),
-        ];
-
         isometry.iter().for_each(|iso: &Iso3| {
             self.buffer
                 .extend(CORNER_POINTS_MAT.iter().map(|c| (iso * c).coords));
