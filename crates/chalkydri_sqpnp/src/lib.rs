@@ -1,6 +1,9 @@
 #![feature(const_heap)]
 
-use nalgebra::{Isometry3, Matrix3, Matrix3x4, Point3, Rotation3, SMatrix, SVector, SimdRealField, Translation3, UnitQuaternion};
+use nalgebra::{
+    Isometry3, Matrix3, Matrix3x4, Point3, Rotation3, SMatrix, SVector, SimdRealField,
+    Translation3, UnitQuaternion,
+};
 use std::{f64::consts::PI, ops::AddAssign};
 
 // --- Type Definitions ---
@@ -421,24 +424,22 @@ impl SqPnP {
         yaw_deg: f64,
     ) -> Iso3 {
         let nwu_translation = Translation3::new(fwd_m, left_m, up_m);
-        
+
         let nwu_rotation = UnitQuaternion::from_euler_angles(
             roll_deg.to_radians(),
             pitch_deg.to_radians(),
             yaw_deg.to_radians(),
         );
-        
+
         let robot_pose_of_cam_nwu = Isometry3::from_parts(nwu_translation, nwu_rotation);
 
         let nwu_to_cv_rot = Rotation3::from_matrix_unchecked(Matrix3::new(
-            0.0,  0.0,  1.0,
-            -1.0,  0.0,  0.0,
-            0.0, -1.0,  0.0,
+            0.0, 0.0, 1.0, -1.0, 0.0, 0.0, 0.0, -1.0, 0.0,
         ));
-        
+
         let nwu_to_cv = Isometry3::from_parts(
-            Translation3::identity(), 
-            UnitQuaternion::from_rotation_matrix(&nwu_to_cv_rot)
+            Translation3::identity(),
+            UnitQuaternion::from_rotation_matrix(&nwu_to_cv_rot),
         );
 
         (robot_pose_of_cam_nwu * nwu_to_cv).inverse()

@@ -244,7 +244,14 @@ impl CuSinkTask for AprilTags {
             //    robot_to_cam_offsets.pitch,
             //    robot_to_cam_offsets.yaw,
             //);
-            let robot_to_cam = SqPnP::create_solver_camera_transform(robot_to_cam_offsets.x, robot_to_cam_offsets.y, robot_to_cam_offsets.z, robot_to_cam_offsets.roll, robot_to_cam_offsets.pitch, robot_to_cam_offsets.yaw);
+            let robot_to_cam = SqPnP::create_solver_camera_transform(
+                robot_to_cam_offsets.x,
+                robot_to_cam_offsets.y,
+                robot_to_cam_offsets.z,
+                robot_to_cam_offsets.roll,
+                robot_to_cam_offsets.pitch,
+                robot_to_cam_offsets.yaw,
+            );
 
             let cam_model: GenericModel<f64> = serde_json::from_str(&calib).unwrap();
 
