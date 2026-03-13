@@ -1,5 +1,10 @@
 #![feature(const_heap)]
 
+#[macro_use]
+extern crate tracing;
+
+mod util;
+
 use nalgebra::{
     Isometry3, Matrix3, Matrix3x4, Point3, Rotation3, SMatrix, SVector, SimdRealField,
     Translation3, UnitQuaternion,
@@ -303,6 +308,8 @@ impl SqPnP {
         self.buffer.clear();
         self.candidates.clear();
 
+        trace!(sin = self.gyro_sin, cos = self.gyro_cos);
+
         self.fwd_in_cam = robot_to_cam
             .rotation
             .to_rotation_matrix()
@@ -339,11 +346,13 @@ impl SqPnP {
         let vision_yaw = vision_fwd_y.simd_atan2(vision_fwd_x);
 
         let mut delta_yaw = (gyro - vision_yaw) % (2.0 * PI);
+        trace!("delta yaw:      {delta_yaw}");
         if delta_yaw > PI {
             delta_yaw -= 2.0 * PI;
         } else if delta_yaw < -PI {
             delta_yaw += 2.0 * PI;
         }
+        trace!("delta yaw norm: {delta_yaw}");
 
         let delta_deg = delta_yaw.abs().to_degrees();
         let mut weight = (delta_deg / MAX_GYRO_DELTA).clamp(0.0, 1.0);
@@ -354,7 +363,12 @@ impl SqPnP {
         let cos_dt = applied_delta_yaw.cos();
         let sin_dt = applied_delta_yaw.sin();
 
-        let rot_z = Mat3::new(cos_dt, -sin_dt, 0.0, sin_dt, cos_dt, 0.0, 0.0, 0.0, 1.0);
+        #[rustfmt::skip]
+        let rot_z = Mat3::new(
+            cos_dt, -sin_dt, 0.0,
+            sin_dt,  cos_dt, 0.0,
+               0.0,     0.0, 1.0,
+        );
         let rot_z_rot3 = Rotation3::from_matrix(&rot_z);
 
         let pos_relative_to_tag = robot_pos - tag_centroid;
@@ -433,8 +447,11 @@ impl SqPnP {
 
         let robot_pose_of_cam_nwu = Isometry3::from_parts(nwu_translation, nwu_rotation);
 
+        #[rustfmt::skip]
         let nwu_to_cv_rot = Rotation3::from_matrix_unchecked(Matrix3::new(
-            0.0, 0.0, 1.0, -1.0, 0.0, 0.0, 0.0, -1.0, 0.0,
+             0.0,  0.0, 1.0,
+            -1.0,  0.0, 0.0,
+             0.0, -1.0, 0.0,
         ));
 
         let nwu_to_cv = Isometry3::from_parts(

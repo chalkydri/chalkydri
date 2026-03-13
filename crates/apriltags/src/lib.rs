@@ -333,7 +333,7 @@ impl CuSinkTask for AprilTags {
                             &world_pts,
                             &camera_pts,
                             &self.robot_to_cam.unwrap_or_else(|| Default::default()),
-                            gyro_angle + self.yaw.to_radians(),
+                            gyro_angle,
                             SIGN_FLIP_CONST,
                         )
                     {
