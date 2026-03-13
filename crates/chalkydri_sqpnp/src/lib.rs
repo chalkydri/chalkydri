@@ -345,20 +345,22 @@ impl SqPnP {
         let vision_fwd_y = robot_rot_mat[(1, 0)];
         let vision_yaw = vision_fwd_y.simd_atan2(vision_fwd_x);
 
-        let mut delta_yaw = (gyro - vision_yaw) % (2.0 * PI);
-        trace!("delta yaw:      {delta_yaw}");
+        trace!("vision yaw:      {vision_yaw}");
+        let mut delta_yaw = (gyro.max(vision_yaw) - gyro.min(vision_yaw));
+        trace!("delta yaw:       {delta_yaw}");
         if delta_yaw > PI {
             delta_yaw -= 2.0 * PI;
         } else if delta_yaw < -PI {
             delta_yaw += 2.0 * PI;
         }
-        trace!("delta yaw norm: {delta_yaw}");
+        trace!("delta yaw norm:  {delta_yaw}");
 
         let delta_deg = delta_yaw.abs().to_degrees();
         let mut weight = (delta_deg / MAX_GYRO_DELTA).clamp(0.0, 1.0);
         weight = weight * weight * (3.0 - 2.0 * weight);
 
         let applied_delta_yaw = delta_yaw * weight;
+        trace!("apply delta yaw: {applied_delta_yaw}");
 
         let cos_dt = applied_delta_yaw.cos();
         let sin_dt = applied_delta_yaw.sin();
