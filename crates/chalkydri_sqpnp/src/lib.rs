@@ -346,13 +346,9 @@ impl SqPnP {
         let vision_yaw = vision_fwd_y.simd_atan2(vision_fwd_x);
 
         trace!("vision yaw:      {vision_yaw}");
-        let mut delta_yaw = (gyro.max(vision_yaw) - gyro.min(vision_yaw));
-        trace!("delta yaw:       {delta_yaw}");
-        if delta_yaw > PI {
-            delta_yaw -= 2.0 * PI;
-        } else if delta_yaw < -PI {
-            delta_yaw += 2.0 * PI;
-        }
+        let mut delta_yaw = gyro - vision_yaw;
+
+        delta_yaw = (delta_yaw + PI).rem_euclid(2.0 * PI) - PI;
         trace!("delta yaw norm:  {delta_yaw}");
 
         let delta_deg = delta_yaw.abs().to_degrees();
